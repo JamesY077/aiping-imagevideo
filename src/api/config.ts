@@ -4,7 +4,21 @@ const API_KEY_STORAGE_KEY = 'aiping_api_key'
 const API_BASE_URL_STORAGE_KEY = 'aiping_api_base_url'
 
 export function normalizeApiBaseUrl(baseUrl: string): string {
-  return baseUrl.trim().replace(/\/+$/, '')
+  const normalized = baseUrl.trim().replace(/\/+$/, '')
+
+  try {
+    const url = new URL(normalized)
+    if (url.hostname === 'aiping.cn' && url.pathname.replace(/\/+$/, '') === '/api/v1') {
+      return '/api/v1'
+    }
+    if (url.hostname === 'api.aiping.cn' && url.pathname.replace(/\/+$/, '') === '/v1') {
+      return '/api/v1'
+    }
+  } catch {
+    // Relative URLs such as /api/v1 are expected in local development.
+  }
+
+  return normalized
 }
 
 export function getApiKey(): string | null {
@@ -20,7 +34,7 @@ export function clearApiKey(): void {
 }
 
 export function getApiBaseUrl(): string {
-  return localStorage.getItem(API_BASE_URL_STORAGE_KEY) || DEFAULT_API_BASE_URL
+  return normalizeApiBaseUrl(localStorage.getItem(API_BASE_URL_STORAGE_KEY) || DEFAULT_API_BASE_URL)
 }
 
 export function saveApiBaseUrl(baseUrl: string): void {

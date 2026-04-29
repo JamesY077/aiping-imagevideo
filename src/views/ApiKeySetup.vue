@@ -35,6 +35,7 @@
           <div class="tips">
             <p class="tip-title">获取方式</p>
             <ol>
+              <li>Base URL 默认使用 <code>/api/v1</code>，本地启动时推荐保持不变</li>
               <li>访问 <a href="https://aiping.cn" target="_blank">aiping.cn</a> 注册账号</li>
               <li>进入「控制台 → API 密钥」页面</li>
               <li>创建并复制新的 API Key</li>
@@ -256,6 +257,12 @@ label {
   padding-left: 18px;
   color: var(--color-text-secondary);
   line-height: 1.8;
+}
+
+.tips code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  color: var(--color-text);
 }
 
 .submit-btn {
