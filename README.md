@@ -62,11 +62,12 @@ cp .env.example .env
 ```env
 VITE_APP_NAME=AIDRAW
 VITE_APP_VERSION=1.0.0
-VITE_API_BASE_URL=https://api.aiping.cn/v1   # API 基础地址，一般无需修改
+VITE_API_BASE_URL=/api/v1                    # API 代理地址，开发环境一般无需修改
 VITE_API_DOCS_URL=https://aiping.cn/docs     # 文档链接
 ```
 
 > **API Key 不写在 `.env` 里**，首次打开页面会引导你在界面中输入，保存在浏览器 localStorage。
+> 开发服务器会把 `/api` 请求代理到 `https://aiping.cn`，避免浏览器直接请求 `api.aiping.cn` 时遇到 DNS 或跨域问题。
 
 ### 4. 启动开发服务器
 
