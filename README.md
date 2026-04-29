@@ -177,6 +177,8 @@ ai-workshop/
 | Doubao-Seedance-1.0-Pro-Fast | 豆包视频 |
 | 即梦视频生成 3.0 Pro | 即梦视频 |
 
+更多模型正在支持中！
+
 ---
 
 ## 🤝 贡献
