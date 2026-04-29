@@ -28,7 +28,7 @@
 | 路由 | Vue Router 4 |
 | HTTP | Axios |
 | UI 组件 | Vant 4（部分） |
-| API | 爱萍 AI OpenAI 兼容接口 |
+| API | APING-OpenAI 兼容接口 |
 
 ---
 
@@ -177,6 +177,8 @@ ai-workshop/
 | Wan2.6-T2V / I2V | Wan 视频，I2V 需上传参考图 |
 | Doubao-Seedance-1.0-Pro-Fast | 豆包视频 |
 | 即梦视频生成 3.0 Pro | 即梦视频 |
+
+更多模型正在支持中！
 
 ---
 
