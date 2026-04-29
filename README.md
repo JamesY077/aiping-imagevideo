@@ -49,9 +49,9 @@ npm install
 pnpm install
 ```
 
-### 3. 配置环境变量
+### 3. 配置默认服务地址
 
-复制示例文件并填写配置：
+复制示例文件：
 
 ```bash
 cp .env.example .env
@@ -66,7 +66,7 @@ VITE_API_BASE_URL=/api/v1                    # API 代理地址，开发环境�
 VITE_API_DOCS_URL=https://aiping.cn/docs     # 文档链接
 ```
 
-> **API Key 不写在 `.env` 里**，首次打开页面会引导你在界面中输入，保存在浏览器 localStorage。
+> **Base URL 和 API Key 都可以在页面里填写和修改**，并保存在浏览器 localStorage。`.env` 里的 `VITE_API_BASE_URL` 只是首次打开页面时的默认值。
 > 开发服务器会把 `/api` 请求代理到 `https://aiping.cn`，避免浏览器直接请求 `api.aiping.cn` 时遇到 DNS 或跨域问题。
 
 ### 4. 启动开发服务器
@@ -75,7 +75,7 @@ VITE_API_DOCS_URL=https://aiping.cn/docs     # 文档链接
 npm run dev
 ```
 
-浏览器访问 `http://localhost:5173`，按提示输入爱萍 AI 的 API Key 即可开始使用。
+浏览器访问 `http://localhost:5173`，按提示输入 Base URL 和爱萍 AI 的 API Key 即可开始使用。默认 Base URL 是 `/api/v1`；如果你有自己的兼容接口地址，也可以填写完整地址，例如 `https://example.com/v1`。
 
 也可以直接使用一键启动脚本：
 

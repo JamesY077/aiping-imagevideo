@@ -1,22 +1,33 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { getApiKey, saveApiKey, clearApiKey } from '@/api/config'
+import {
+  clearApiBaseUrl,
+  clearApiKey,
+  getApiBaseUrl,
+  getApiKey,
+  saveApiBaseUrl,
+  saveApiKey,
+} from '@/api/config'
 import { testConnection } from '@/api/aiping'
 
 export const useApiStore = defineStore('api', () => {
   const apiKey = ref<string | null>(getApiKey())
+  const apiBaseUrl = ref(getApiBaseUrl())
   const isConnected = ref(false)
   const isTesting = ref(false)
 
   const hasApiKey = computed(() => !!apiKey.value)
+  const hasApiConfig = computed(() => !!apiKey.value && !!apiBaseUrl.value)
 
-  async function testAndSave(key: string): Promise<boolean> {
+  async function testAndSave(key: string, baseUrl = apiBaseUrl.value): Promise<boolean> {
     isTesting.value = true
     try {
-      const valid = await testConnection(key)
+      const valid = await testConnection(key, baseUrl)
       if (valid) {
         saveApiKey(key)
+        saveApiBaseUrl(baseUrl)
         apiKey.value = key
+        apiBaseUrl.value = getApiBaseUrl()
         isConnected.value = true
         return true
       } else {
@@ -31,9 +42,11 @@ export const useApiStore = defineStore('api', () => {
 
   function clear() {
     clearApiKey()
+    clearApiBaseUrl()
     apiKey.value = null
+    apiBaseUrl.value = getApiBaseUrl()
     isConnected.value = false
   }
 
-  return { apiKey, isConnected, isTesting, hasApiKey, testAndSave, clear }
+  return { apiKey, apiBaseUrl, isConnected, isTesting, hasApiKey, hasApiConfig, testAndSave, clear }
 })

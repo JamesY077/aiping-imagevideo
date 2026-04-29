@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { getApiKey } from '@/api/config'
+import { hasApiConfig } from '@/api/config'
 
 const routes = [
   {
@@ -28,10 +28,10 @@ const router = createRouter({
 })
 
 router.beforeEach((to, _from, next) => {
-  const hasApiKey = !!getApiKey()
-  if (to.meta.requiresAuth && !hasApiKey) {
+  const configured = hasApiConfig()
+  if (to.meta.requiresAuth && !configured) {
     next('/setup')
-  } else if (to.meta.requiresNoAuth && hasApiKey) {
+  } else if (to.meta.requiresNoAuth && configured) {
     next('/')
   } else {
     next()

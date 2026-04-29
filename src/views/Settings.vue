@@ -26,7 +26,7 @@
         <div class="info-list">
           <div class="row">
             <span class="label">服务地址</span>
-            <span class="value fixed">https://api.aiping.cn/v1</span>
+            <span class="value fixed">{{ apiStore.apiBaseUrl }}</span>
           </div>
           <div class="row">
             <span class="label">API Key</span>
@@ -40,7 +40,7 @@
           </div>
         </div>
         <div class="btn-row">
-          <button class="ghost-btn" @click="showEditKey = true">修改 Key</button>
+          <button class="ghost-btn" @click="openEditConfig">修改配置</button>
           <button class="primary-btn" :disabled="testing" @click="handleTest">
             {{ testing ? '测试中...' : '测试连接' }}
           </button>
@@ -75,15 +75,24 @@
       </section>
     </main>
 
-    <div v-if="showEditKey" class="modal-overlay" @click.self="showEditKey = false">
+    <div v-if="showEditConfig" class="modal-overlay" @click.self="showEditConfig = false">
       <div class="modal">
-        <span class="kicker">Edit Key</span>
-        <h3>修改 API Key</h3>
+        <span class="kicker">Edit Config</span>
+        <h3>修改 API 配置</h3>
+        <div class="input-group">
+          <label for="edit-base-url">Base URL</label>
+          <input
+            id="edit-base-url"
+            v-model="newApiBaseUrl"
+            class="text-input"
+            placeholder="/api/v1 或 https://example.com/v1"
+          />
+        </div>
         <ApiKeyInput v-model="newApiKey" />
         <div v-if="editStatus" :class="['status-msg', editStatusType]">{{ editStatus }}</div>
         <div class="btn-row">
-          <button class="ghost-btn" @click="showEditKey = false">取消</button>
-          <button class="primary-btn" :disabled="!newApiKey || saving" @click="handleSaveKey">
+          <button class="ghost-btn" @click="showEditConfig = false">取消</button>
+          <button class="primary-btn" :disabled="!newApiBaseUrl || !newApiKey || saving" @click="handleSaveConfig">
             {{ saving ? '保存中...' : '确认保存' }}
           </button>
         </div>
@@ -105,8 +114,9 @@ const router = useRouter()
 const apiStore = useApiStore()
 const chatStore = useChatStore()
 
-const showEditKey = ref(false)
+const showEditConfig = ref(false)
 const newApiKey = ref('')
+const newApiBaseUrl = ref('')
 const saving = ref(false)
 const editStatus = ref('')
 const editStatusType = ref<'success' | 'error'>('success')
@@ -116,6 +126,13 @@ const testStatus = ref('')
 const testStatusType = ref<'success' | 'error'>('success')
 
 const maskedKey = computed(() => (apiStore.apiKey ? maskApiKey(apiStore.apiKey) : '未设置'))
+
+function openEditConfig() {
+  newApiBaseUrl.value = apiStore.apiBaseUrl
+  newApiKey.value = apiStore.apiKey || ''
+  editStatus.value = ''
+  showEditConfig.value = true
+}
 
 async function handleTest() {
   testing.value = true
@@ -127,27 +144,27 @@ async function handleTest() {
     testStatusType.value = 'success'
     apiStore.isConnected = true
   } else {
-    testStatus.value = 'API 连接失败，请检查 API Key。'
+    testStatus.value = 'API 连接失败，请检查 Base URL 和 API Key。'
     testStatusType.value = 'error'
     apiStore.isConnected = false
   }
 }
 
-async function handleSaveKey() {
-  if (!newApiKey.value) return
+async function handleSaveConfig() {
+  if (!newApiBaseUrl.value || !newApiKey.value) return
   saving.value = true
   editStatus.value = ''
-  const ok = await apiStore.testAndSave(newApiKey.value)
+  const ok = await apiStore.testAndSave(newApiKey.value, newApiBaseUrl.value)
   saving.value = false
   if (ok) {
     editStatus.value = '保存成功。'
     editStatusType.value = 'success'
     setTimeout(() => {
-      showEditKey.value = false
+      showEditConfig.value = false
       editStatus.value = ''
     }, 900)
   } else {
-    editStatus.value = 'API Key 无效，请重新检查。'
+    editStatus.value = '连接验证失败，请检查 Base URL 和 API Key。'
     editStatusType.value = 'error'
   }
 }
@@ -473,6 +490,40 @@ h1 {
 .modal h3 {
   margin-bottom: 18px;
   font-size: 28px;
+}
+
+.input-group {
+  margin-bottom: 18px;
+}
+
+label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.text-input {
+  width: 100%;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--color-text);
+  transition:
+    border-color var(--transition-base),
+    box-shadow var(--transition-base),
+    background var(--transition-base);
+}
+
+.text-input:focus {
+  outline: none;
+  border-color: rgba(0, 113, 227, 0.35);
+  box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.12);
+  background: #fff;
 }
 
 @media (max-width: 1023px) {

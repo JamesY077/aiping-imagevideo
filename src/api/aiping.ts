@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { API_BASE_URL, getApiKey } from './config'
+import { getApiBaseUrl, getApiKey, normalizeApiBaseUrl } from './config'
 import type {
   ModelsResponse,
   ImageGenerateRequest,
@@ -14,7 +14,7 @@ const client = axios.create({
 })
 
 client.interceptors.request.use((config) => {
-  config.baseURL = API_BASE_URL
+  config.baseURL = config.baseURL || getApiBaseUrl()
   if (!config.headers.Authorization) {
     const apiKey = getApiKey()
     if (apiKey) {
@@ -130,11 +130,13 @@ export async function getVideoStatus(taskId: string): Promise<VideoStatusRespons
   return response.data
 }
 
-export async function testConnection(testKey?: string): Promise<boolean> {
+export async function testConnection(testKey?: string, testBaseUrl?: string): Promise<boolean> {
   try {
     const keyToUse = testKey || getApiKey()
+    const baseURL = testBaseUrl ? normalizeApiBaseUrl(testBaseUrl) : getApiBaseUrl()
     // 用 /models 接口验证 API Key 是否有效（AIPing 支持此接口）
     const res = await client.get('/models', {
+      baseURL,
       headers: {
         Authorization: `Bearer ${keyToUse}`
       }

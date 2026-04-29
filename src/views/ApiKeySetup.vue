@@ -7,7 +7,7 @@
         <div class="hero-notes">
           <div class="note-card">
             <span class="note-label">接入方式</span>
-            <strong>填写 API Key 后立即开始</strong>
+            <strong>填写 Base URL 和 API Key 后立即开始</strong>
           </div>
         </div>
       </section>
@@ -16,9 +16,19 @@
         <div class="form-card">
           <span class="eyebrow">Connect</span>
           <h2>连接你的 AI 能力</h2>
-          <p class="form-hint">输入 API Key 完成验证，进入创作工作台。</p>
+          <p class="form-hint">输入服务地址和 API Key 完成验证，进入创作工作台。</p>
 
           <div class="input-group">
+            <label for="api-base-url">Base URL</label>
+            <input
+              id="api-base-url"
+              v-model="apiBaseUrl"
+              class="text-input"
+              placeholder="/api/v1 或 https://example.com/v1"
+            />
+          </div>
+
+          <div class="input-group compact">
             <ApiKeyInput v-model="apiKey" />
           </div>
 
@@ -33,7 +43,7 @@
 
           <button
             class="submit-btn"
-            :disabled="!apiKey.trim() || isLoading"
+            :disabled="!apiBaseUrl.trim() || !apiKey.trim() || isLoading"
             @click="handleSubmit"
           >
             {{ isLoading ? '验证中...' : '进入工作台' }}
@@ -51,26 +61,28 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import ApiKeyInput from '@/components/ApiKeyInput.vue'
 import { useApiStore } from '@/stores/apiStore'
+import { getApiBaseUrl } from '@/api/config'
 
 const router = useRouter()
 const apiStore = useApiStore()
 
 const apiKey = ref('')
+const apiBaseUrl = ref(getApiBaseUrl())
 const isLoading = ref(false)
 const error = ref('')
 
 async function handleSubmit() {
-  if (!apiKey.value.trim()) return
+  if (!apiBaseUrl.value.trim() || !apiKey.value.trim()) return
   isLoading.value = true
   error.value = ''
 
-  const ok = await apiStore.testAndSave(apiKey.value.trim())
+  const ok = await apiStore.testAndSave(apiKey.value.trim(), apiBaseUrl.value.trim())
   isLoading.value = false
 
   if (ok) {
     router.push('/')
   } else {
-    error.value = 'API Key 验证失败，请检查后重试。'
+    error.value = '连接验证失败，请检查 Base URL 和 API Key。'
   }
 }
 </script>
@@ -189,6 +201,40 @@ h2 {
 
 .input-group {
   margin-top: 28px;
+}
+
+.input-group.compact {
+  margin-top: 18px;
+}
+
+label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.text-input {
+  width: 100%;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--color-text);
+  transition:
+    border-color var(--transition-base),
+    box-shadow var(--transition-base),
+    background var(--transition-base);
+}
+
+.text-input:focus {
+  outline: none;
+  border-color: rgba(0, 113, 227, 0.35);
+  box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.12);
+  background: #fff;
 }
 
 .tips {
