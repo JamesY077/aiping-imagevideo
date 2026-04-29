@@ -186,11 +186,23 @@ install_dependencies() {
   fi
 }
 
+find_available_port() {
+  local port="${AIDRAW_PORT:-5173}"
+
+  while lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; do
+    echo "Port $port is in use, trying $((port + 1))..." >&2
+    port=$((port + 1))
+  done
+
+  printf '%s\n' "$port"
+}
+
 echo "Starting AIDRAW..."
 ensure_node
 ensure_env_file
 install_dependencies
+APP_PORT="$(find_available_port)"
 
 echo
-echo "Opening http://localhost:5173"
-npm run dev -- --host 0.0.0.0 --open
+echo "Opening http://localhost:$APP_PORT"
+npm run dev -- --host 0.0.0.0 --port "$APP_PORT" --strictPort --open

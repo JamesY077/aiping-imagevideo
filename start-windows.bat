@@ -19,9 +19,12 @@ if errorlevel 1 goto Fail
 call :InstallDependencies
 if errorlevel 1 goto Fail
 
+call :FindAvailablePort
+if errorlevel 1 goto Fail
+
 echo.
-echo Opening http://localhost:5173
-call npm run dev -- --host 0.0.0.0 --open
+echo Opening http://localhost:%APP_PORT%
+call npm run dev -- --host 0.0.0.0 --port %APP_PORT% --strictPort --open
 if errorlevel 1 goto Fail
 
 exit /b 0
@@ -126,6 +129,23 @@ if exist "package-lock.json" (
 
 call npm install
 exit /b %ERRORLEVEL%
+
+:FindAvailablePort
+if "%AIDRAW_PORT%"=="" (
+  set "APP_PORT=5173"
+) else (
+  set "APP_PORT=%AIDRAW_PORT%"
+)
+
+:FindAvailablePortLoop
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$listener=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Any, %APP_PORT%); try { $listener.Start(); $listener.Stop(); exit 0 } catch { exit 1 }"
+if errorlevel 1 (
+  echo Port %APP_PORT% is in use, trying next port...
+  set /a APP_PORT+=1
+  goto FindAvailablePortLoop
+)
+
+exit /b 0
 
 :Fail
 echo.
