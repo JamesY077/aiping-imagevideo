@@ -28,7 +28,7 @@
 | 路由 | Vue Router 4 |
 | HTTP | Axios |
 | UI 组件 | Vant 4（部分） |
-| API | 爱萍 AI OpenAI 兼容接口 |
+| API | APING-OpenAI 兼容接口 |
 
 ---
 
