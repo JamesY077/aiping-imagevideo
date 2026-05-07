@@ -1,3 +1,4 @@
+export const AIPING_PUBLIC_API_BASE_URL = 'https://aiping.cn/api/v1'
 export const DEFAULT_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 
 const API_KEY_STORAGE_KEY = 'aiping_api_key'
@@ -22,6 +23,10 @@ export function normalizeApiBaseUrl(baseUrl: string): string {
   return normalized
 }
 
+export function isAipingBaseUrl(baseUrl: string): boolean {
+  return normalizeApiBaseUrl(baseUrl) === '/api/v1'
+}
+
 export function getApiKey(): string | null {
   return localStorage.getItem(API_KEY_STORAGE_KEY)
 }
@@ -38,8 +43,13 @@ export function getApiBaseUrl(): string {
   return normalizeApiBaseUrl(localStorage.getItem(API_BASE_URL_STORAGE_KEY) || DEFAULT_API_BASE_URL)
 }
 
+export function getApiBaseUrlInputValue(): string {
+  const value = localStorage.getItem(API_BASE_URL_STORAGE_KEY) || AIPING_PUBLIC_API_BASE_URL
+  return isAipingBaseUrl(value) ? AIPING_PUBLIC_API_BASE_URL : value.trim().replace(/\/+$/, '')
+}
+
 export function saveApiBaseUrl(baseUrl: string): void {
-  localStorage.setItem(API_BASE_URL_STORAGE_KEY, normalizeApiBaseUrl(baseUrl))
+  localStorage.setItem(API_BASE_URL_STORAGE_KEY, baseUrl.trim().replace(/\/+$/, ''))
 }
 
 export function clearApiBaseUrl(): void {

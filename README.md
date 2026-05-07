@@ -66,7 +66,7 @@ VITE_API_BASE_URL=/api/v1                    # API 代理地址，开发环境�
 VITE_API_DOCS_URL=https://aiping.cn/docs     # 文档链接
 ```
 
-> **Base URL 和 API Key 都可以在页面里填写和修改**，并保存在浏览器 localStorage。`.env` 里的 `VITE_API_BASE_URL` 只是首次打开页面时的默认值。
+> **Base URL 和 API Key 都可以在页面里填写和修改**，并保存在浏览器 localStorage。页面默认展示 AIPing 地址 `https://aiping.cn/api/v1`；`.env` 里的 `VITE_API_BASE_URL` 是开发代理默认值。
 > 开发服务器会把 `/api` 请求代理到 `https://aiping.cn`，避免浏览器直接请求 `aiping.cn` 或 `api.aiping.cn` 时遇到 CORS/DNS 问题。
 
 ### 4. 启动开发服务器
@@ -75,7 +75,7 @@ VITE_API_DOCS_URL=https://aiping.cn/docs     # 文档链接
 npm run dev
 ```
 
-浏览器访问 `http://localhost:5173`，按提示输入 Base URL 和爱萍 AI 的 API Key 即可开始使用。默认 Base URL 是 `/api/v1`，本地启动时推荐保持不变。若误填 `https://aiping.cn/api/v1` 或 `https://api.aiping.cn/v1`，应用会自动转换为 `/api/v1` 走本地代理；如果你有自己的兼容接口地址，也可以填写完整地址，例如 `https://example.com/v1`。
+浏览器访问 `http://localhost:5173`，按提示输入 Base URL 和爱萍 AI 的 API Key 即可开始使用。默认选择 AIPing，页面显示 `https://aiping.cn/api/v1`，应用会自动转换为 `/api/v1` 走本地代理；如果你有自己的兼容接口地址，切换到「自定义」并填写完整地址，例如 `https://example.com/v1`。
 
 也可以直接使用一键启动脚本：
 

@@ -20,11 +20,28 @@
 
           <div class="input-group">
             <label for="api-base-url">Base URL</label>
+            <div class="base-url-switch" aria-label="选择 Base URL 类型">
+              <button
+                type="button"
+                :class="{ active: baseUrlMode === 'aiping' }"
+                @click="selectBaseUrlMode('aiping')"
+              >
+                AIPing
+              </button>
+              <button
+                type="button"
+                :class="{ active: baseUrlMode === 'custom' }"
+                @click="selectBaseUrlMode('custom')"
+              >
+                自定义
+              </button>
+            </div>
             <input
               id="api-base-url"
               v-model="apiBaseUrl"
               class="text-input"
-              placeholder="/api/v1 或 https://example.com/v1"
+              :readonly="baseUrlMode === 'aiping'"
+              :placeholder="baseUrlMode === 'aiping' ? 'https://aiping.cn/api/v1' : 'https://example.com/v1'"
             />
           </div>
 
@@ -35,10 +52,9 @@
           <div class="tips">
             <p class="tip-title">获取方式</p>
             <ol>
-              <li>Base URL 默认使用 <code>/api/v1</code>，本地启动时推荐保持不变</li>
-              <li>访问 <a href="https://aiping.cn" target="_blank">aiping.cn</a> 注册账号</li>
-              <li>进入「控制台 → API 密钥」页面</li>
-              <li>创建并复制新的 API Key</li>
+              <li>使用 AIPing 时保持默认 Base URL：<code>https://aiping.cn/api/v1</code></li>
+              <li>访问 <a href="https://aiping.cn" target="_blank">aiping.cn</a> 注册账号，并在控制台创建 API Key</li>
+              <li>使用其他 OpenAI 兼容服务时，切换到「自定义」并填写对应 Base URL</li>
             </ol>
           </div>
 
@@ -62,15 +78,28 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import ApiKeyInput from '@/components/ApiKeyInput.vue'
 import { useApiStore } from '@/stores/apiStore'
-import { getApiBaseUrl } from '@/api/config'
+import { AIPING_PUBLIC_API_BASE_URL, getApiBaseUrlInputValue, isAipingBaseUrl } from '@/api/config'
 
 const router = useRouter()
 const apiStore = useApiStore()
 
+type BaseUrlMode = 'aiping' | 'custom'
+
 const apiKey = ref('')
-const apiBaseUrl = ref(getApiBaseUrl())
+const initialBaseUrl = getApiBaseUrlInputValue()
+const baseUrlMode = ref<BaseUrlMode>(isAipingBaseUrl(initialBaseUrl) ? 'aiping' : 'custom')
+const apiBaseUrl = ref(initialBaseUrl)
 const isLoading = ref(false)
 const error = ref('')
+
+function selectBaseUrlMode(mode: BaseUrlMode) {
+  baseUrlMode.value = mode
+  if (mode === 'aiping') {
+    apiBaseUrl.value = AIPING_PUBLIC_API_BASE_URL
+  } else if (isAipingBaseUrl(apiBaseUrl.value)) {
+    apiBaseUrl.value = ''
+  }
+}
 
 async function handleSubmit() {
   if (!apiBaseUrl.value.trim() || !apiKey.value.trim()) return
@@ -217,6 +246,36 @@ label {
   letter-spacing: 0.02em;
 }
 
+.base-url-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.base-url-switch button {
+  min-height: 38px;
+  border: none;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-weight: 700;
+  transition:
+    background var(--transition-base),
+    color var(--transition-base),
+    box-shadow var(--transition-base);
+}
+
+.base-url-switch button.active {
+  background: #fff;
+  color: var(--color-text);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
 .text-input {
   width: 100%;
   min-width: 0;
@@ -229,6 +288,10 @@ label {
     border-color var(--transition-base),
     box-shadow var(--transition-base),
     background var(--transition-base);
+}
+
+.text-input:read-only {
+  color: var(--color-text-secondary);
 }
 
 .text-input:focus {

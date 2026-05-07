@@ -81,11 +81,28 @@
         <h3>修改 API 配置</h3>
         <div class="input-group">
           <label for="edit-base-url">Base URL</label>
+          <div class="base-url-switch" aria-label="选择 Base URL 类型">
+            <button
+              type="button"
+              :class="{ active: editBaseUrlMode === 'aiping' }"
+              @click="selectEditBaseUrlMode('aiping')"
+            >
+              AIPing
+            </button>
+            <button
+              type="button"
+              :class="{ active: editBaseUrlMode === 'custom' }"
+              @click="selectEditBaseUrlMode('custom')"
+            >
+              自定义
+            </button>
+          </div>
           <input
             id="edit-base-url"
             v-model="newApiBaseUrl"
             class="text-input"
-            placeholder="/api/v1 或 https://example.com/v1"
+            :readonly="editBaseUrlMode === 'aiping'"
+            :placeholder="editBaseUrlMode === 'aiping' ? 'https://aiping.cn/api/v1' : 'https://example.com/v1'"
           />
         </div>
         <ApiKeyInput v-model="newApiKey" />
@@ -109,14 +126,18 @@ import { useApiStore } from '@/stores/apiStore'
 import { useChatStore } from '@/stores/chatStore'
 import { maskApiKey } from '@/utils/format'
 import { testConnection } from '@/api/aiping'
+import { AIPING_PUBLIC_API_BASE_URL, isAipingBaseUrl } from '@/api/config'
 
 const router = useRouter()
 const apiStore = useApiStore()
 const chatStore = useChatStore()
 
+type BaseUrlMode = 'aiping' | 'custom'
+
 const showEditConfig = ref(false)
 const newApiKey = ref('')
 const newApiBaseUrl = ref('')
+const editBaseUrlMode = ref<BaseUrlMode>('aiping')
 const saving = ref(false)
 const editStatus = ref('')
 const editStatusType = ref<'success' | 'error'>('success')
@@ -129,9 +150,19 @@ const maskedKey = computed(() => (apiStore.apiKey ? maskApiKey(apiStore.apiKey) 
 
 function openEditConfig() {
   newApiBaseUrl.value = apiStore.apiBaseUrl
+  editBaseUrlMode.value = isAipingBaseUrl(newApiBaseUrl.value) ? 'aiping' : 'custom'
   newApiKey.value = apiStore.apiKey || ''
   editStatus.value = ''
   showEditConfig.value = true
+}
+
+function selectEditBaseUrlMode(mode: BaseUrlMode) {
+  editBaseUrlMode.value = mode
+  if (mode === 'aiping') {
+    newApiBaseUrl.value = AIPING_PUBLIC_API_BASE_URL
+  } else if (isAipingBaseUrl(newApiBaseUrl.value)) {
+    newApiBaseUrl.value = ''
+  }
 }
 
 async function handleTest() {
@@ -505,6 +536,36 @@ label {
   letter-spacing: 0.02em;
 }
 
+.base-url-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.base-url-switch button {
+  min-height: 38px;
+  border: none;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-weight: 700;
+  transition:
+    background var(--transition-base),
+    color var(--transition-base),
+    box-shadow var(--transition-base);
+}
+
+.base-url-switch button.active {
+  background: #fff;
+  color: var(--color-text);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
 .text-input {
   width: 100%;
   min-width: 0;
@@ -517,6 +578,10 @@ label {
     border-color var(--transition-base),
     box-shadow var(--transition-base),
     background var(--transition-base);
+}
+
+.text-input:read-only {
+  color: var(--color-text-secondary);
 }
 
 .text-input:focus {

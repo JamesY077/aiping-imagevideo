@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import {
   clearApiBaseUrl,
   clearApiKey,
-  getApiBaseUrl,
+  getApiBaseUrlInputValue,
   getApiKey,
   markApiSessionReady,
   clearApiSessionReady,
@@ -14,7 +14,7 @@ import { testConnection } from '@/api/aiping'
 
 export const useApiStore = defineStore('api', () => {
   const apiKey = ref<string | null>(getApiKey())
-  const apiBaseUrl = ref(getApiBaseUrl())
+  const apiBaseUrl = ref(getApiBaseUrlInputValue())
   const isConnected = ref(false)
   const isTesting = ref(false)
 
@@ -29,7 +29,7 @@ export const useApiStore = defineStore('api', () => {
         saveApiKey(key)
         saveApiBaseUrl(baseUrl)
         apiKey.value = key
-        apiBaseUrl.value = getApiBaseUrl()
+        apiBaseUrl.value = getApiBaseUrlInputValue()
         markApiSessionReady()
         isConnected.value = true
         return true
@@ -48,7 +48,7 @@ export const useApiStore = defineStore('api', () => {
     clearApiBaseUrl()
     clearApiSessionReady()
     apiKey.value = null
-    apiBaseUrl.value = getApiBaseUrl()
+    apiBaseUrl.value = getApiBaseUrlInputValue()
     isConnected.value = false
   }
 
