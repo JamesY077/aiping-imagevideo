@@ -5,6 +5,8 @@ import {
   clearApiKey,
   getApiBaseUrl,
   getApiKey,
+  markApiSessionReady,
+  clearApiSessionReady,
   saveApiBaseUrl,
   saveApiKey,
 } from '@/api/config'
@@ -28,6 +30,7 @@ export const useApiStore = defineStore('api', () => {
         saveApiBaseUrl(baseUrl)
         apiKey.value = key
         apiBaseUrl.value = getApiBaseUrl()
+        markApiSessionReady()
         isConnected.value = true
         return true
       } else {
@@ -43,6 +46,7 @@ export const useApiStore = defineStore('api', () => {
   function clear() {
     clearApiKey()
     clearApiBaseUrl()
+    clearApiSessionReady()
     apiKey.value = null
     apiBaseUrl.value = getApiBaseUrl()
     isConnected.value = false

@@ -2,6 +2,7 @@ export const DEFAULT_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v
 
 const API_KEY_STORAGE_KEY = 'aiping_api_key'
 const API_BASE_URL_STORAGE_KEY = 'aiping_api_base_url'
+const API_SESSION_READY_STORAGE_KEY = 'aiping_api_session_ready'
 
 export function normalizeApiBaseUrl(baseUrl: string): string {
   const normalized = baseUrl.trim().replace(/\/+$/, '')
@@ -47,4 +48,16 @@ export function clearApiBaseUrl(): void {
 
 export function hasApiConfig(): boolean {
   return !!getApiKey() && !!getApiBaseUrl()
+}
+
+export function markApiSessionReady(): void {
+  sessionStorage.setItem(API_SESSION_READY_STORAGE_KEY, '1')
+}
+
+export function clearApiSessionReady(): void {
+  sessionStorage.removeItem(API_SESSION_READY_STORAGE_KEY)
+}
+
+export function hasActiveApiSession(): boolean {
+  return hasApiConfig() && sessionStorage.getItem(API_SESSION_READY_STORAGE_KEY) === '1'
 }
