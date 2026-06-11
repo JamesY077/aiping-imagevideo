@@ -258,7 +258,7 @@ import { formatCost } from '@/utils/format'
 import { showErrorMessage } from '@/utils/errors'
 import { getReadableErrorMessage, validatePromptOrThrow } from '@/utils/errorHandling'
 import type { Message, UploadedFile } from '@/types/chat'
-import type { ModelIOType } from '@/types/model'
+import { resolveGenerateIoType } from '@/features/generate/media'
 
 const router = useRouter()
 const chatStore = useChatStore()
@@ -338,14 +338,6 @@ const callRecords = computed(() => {
 
 const totalCalls = computed(() => callRecords.value.length)
 const totalCost = computed(() => callRecords.value.reduce((sum, r) => sum + r.cost, 0))
-
-function resolveIoType(file?: UploadedFile | null): ModelIOType {
-  const hasReference = !!file
-  if (settingsStore.mediaType === 'image') {
-    return hasReference ? 'image2image' : 'text2image'
-  }
-  return hasReference ? 'image2video' : 'text2video'
-}
 
 function handleMediaTypeChange(nextType: MediaType) {
   settingsStore.setMediaType(nextType)
@@ -512,7 +504,7 @@ async function handleSend() {
 
   uploadedFile.value = null
   referenceUrl.value = ''
-  const ioType = resolveIoType(file)
+  const ioType = resolveGenerateIoType(settingsStore.mediaType, file)
 
   await generate(prompt, ioType, settingsStore.selectedModel, file, settingsStore.aspectRatio)
   settingsStore.saveToStorage()
@@ -529,7 +521,7 @@ async function handleRegenerate(message: Message) {
     const aspectRatio = userMsg.aspectRatio || settingsStore.aspectRatio
     await generate(
       userMsg.content,
-      resolveIoType(userMsg.uploadedFile),
+      resolveGenerateIoType(settingsStore.mediaType, userMsg.uploadedFile),
       model,
       userMsg.uploadedFile,
       aspectRatio
