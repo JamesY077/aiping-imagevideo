@@ -2,9 +2,13 @@ import { generateImage, generateVideo, getVideoStatus } from '@/api/aiping'
 import { useChatStore } from '@/stores/chatStore'
 import type { GenerateType } from '@/types/chat'
 import { getModelCapability } from '@/types/model'
-import type { ModelIOType } from '@/types/model'
+import type { ModelCapability, ModelIOType } from '@/types/model'
 import type { UploadedFile } from '@/types/chat'
 import type { ImageGenerateRequest, VideoGenerateRequest, VideoStatusResponse } from '@/types/api'
+import { validatePromptOrThrow } from '@/utils/errorHandling'
+import { normalizeErrorMessage, showErrorMessage } from '@/utils/errors'
+
+type ImageRequestMode = NonNullable<ModelCapability['imageRequestMode']>
 
 async function pollVideoStatus(
   taskId: string,
@@ -14,11 +18,14 @@ async function pollVideoStatus(
 ): Promise<VideoStatusResponse> {
   for (let i = 0; i < maxAttempts; i++) {
     const status = await getVideoStatus(taskId)
+    const normalizedStatus = status.status?.toLowerCase()
     if (status.progress && onProgress) {
       onProgress(status.progress)
     }
-    if (status.status === 'completed') return status
-    if (status.status === 'failed') {
+    if (normalizedStatus === 'completed' || normalizedStatus === 'succeed' || normalizedStatus === 'success') {
+      return status
+    }
+    if (normalizedStatus === 'failed' || normalizedStatus === 'error') {
       console.log('pollVideoStatus failed, full status:', JSON.stringify(status))
       throw new Error(status.error || `视频生成失败 (task: ${taskId})`)
     }
@@ -42,8 +49,8 @@ const ASPECT_RATIO_SIZE_MAP: Record<string, { width: number; height: number }> =
   '9:16': { width: 720,  height: 1280 },
 }
 
-// 即梦系列高清尺寸
-const HQ_IMAGE_SIZE_MAP: Record<string, { width: number; height: number }> = {
+// 火山 2K 推荐宽高：即梦 4.0 / Seedream 4.5 用这组可以稳定表达比例。
+const VOLC_2K_SIZE_MAP: Record<string, { width: number; height: number }> = {
   '16:9': { width: 2560, height: 1440 },
   '3:2':  { width: 2496, height: 1664 },
   '4:3':  { width: 2304, height: 1728 },
@@ -53,8 +60,8 @@ const HQ_IMAGE_SIZE_MAP: Record<string, { width: number; height: number }> = {
   '9:16': { width: 1440, height: 2560 },
 }
 
-// Doubao-Seedream 系列尺寸（通过 width/height 传递）
-const SEEDREAM_SIZE_MAP: Record<string, { width: number; height: number }> = {
+// Seedream 5.0 lite 的 2K 16:9 最低推荐是 2848x1600，1920x1080 会低于文档总像素下限。
+const SEEDREAM_5_LITE_SIZE_MAP: Record<string, { width: number; height: number }> = {
   '16:9': { width: 2848, height: 1600 },
   '3:2':  { width: 2496, height: 1664 },
   '4:3':  { width: 2304, height: 1728 },
@@ -66,34 +73,40 @@ const SEEDREAM_SIZE_MAP: Record<string, { width: number; height: number }> = {
 
 function aspectRatioToDimensions(
   aspectRatio: string,
-  mode: 'default' | 'jimeng-width-height' | 'seedream' = 'default'
+  mode: ImageRequestMode = 'default'
 ): { width: number; height: number } {
-  if (mode === 'seedream') {
-    return SEEDREAM_SIZE_MAP[aspectRatio] || SEEDREAM_SIZE_MAP['1:1']
+  if (mode === 'seedream-5-lite') {
+    return SEEDREAM_5_LITE_SIZE_MAP[aspectRatio] || SEEDREAM_5_LITE_SIZE_MAP['1:1']
   }
-  if (mode === 'jimeng-width-height') {
-    return HQ_IMAGE_SIZE_MAP[aspectRatio] || HQ_IMAGE_SIZE_MAP['1:1']
+  if (mode === 'jimeng-4') {
+    return VOLC_2K_SIZE_MAP[aspectRatio] || VOLC_2K_SIZE_MAP['1:1']
   }
   return ASPECT_RATIO_SIZE_MAP[aspectRatio] || { width: 1024, height: 1024 }
 }
 
 function aspectRatioToImageSize(
   aspectRatio: string,
-  mode: 'default' | 'jimeng-width-height' | 'seedream' = 'default'
+  mode: ImageRequestMode = 'default',
+  separator: '*' | 'x' = '*'
 ): string {
   const { width, height } = aspectRatioToDimensions(aspectRatio, mode)
-  return `${width}x${height}`
+  return `${width}${separator}${height}`
 }
 
-function aspectRatioToVideoSize(aspectRatio: string): string {
-  // 视频 size 格式用 * 分隔
-  const { width, height } = aspectRatioToDimensions(aspectRatio)
-  return `${width}*${height}`
+// 可灵系列只支持 16:9 / 9:16 / 1:1，不能静默降级，否则返回尺寸会和用户选择不一致。
+function getKlingAspectRatio(aspectRatio: string): string {
+  if (['16:9', '9:16', '1:1'].includes(aspectRatio)) return aspectRatio
+  throw new Error('当前可灵视频模型仅支持 16:9、9:16、1:1，请切换比例或模型后重试。')
 }
 
-// 可灵系列只支持 16:9 / 9:16 / 1:1，其他比例降级为 16:9
-function normalizeKlingAspectRatio(aspectRatio: string): string {
-  return ['16:9', '9:16', '1:1'].includes(aspectRatio) ? aspectRatio : '16:9'
+function setVideoRatio(params: VideoGenerateRequest, aspectRatio: string) {
+  params.aspect_ratio = aspectRatio
+  params.ratio = aspectRatio
+}
+
+function deleteVideoRatio(params: VideoGenerateRequest) {
+  delete params.aspect_ratio
+  delete params.ratio
 }
 
 function fileToBase64(file: File): Promise<string> {
@@ -103,6 +116,11 @@ function fileToBase64(file: File): Promise<string> {
     reader.onload = () => resolve(reader.result as string)
     reader.onerror = (error) => reject(error)
   })
+}
+
+function toRawBase64(value: string): string {
+  const match = value.match(/^data:[^;]+;base64,(.*)$/)
+  return match ? match[1] : value
 }
 
 export function useGenerate() {
@@ -115,6 +133,8 @@ export function useGenerate() {
     uploadedFile?: UploadedFile | null,
     aspectRatio = '1:1'
   ) {
+    validatePromptOrThrow(prompt)
+
     chatStore.isGenerating = true
     const generateType = ioTypeToGenerateType(ioType)
 
@@ -152,18 +172,18 @@ export function useGenerate() {
           size: aspectRatioToImageSize(aspectRatio),
         }
 
-        if (capability?.imageRequestMode === 'seedream') {
-          // Doubao-Seedream: 通过 AIPing 代理使用 width/height 分开传，不支持 size 字符串
-          const { width, height } = aspectRatioToDimensions(aspectRatio, 'seedream')
-          imageParams.size = undefined
-          imageParams.width = width
-          imageParams.height = height
-        } else if (capability?.imageRequestMode === 'jimeng-width-height') {
-          // 即梦系列使用 width/height 分开传
-          const { width, height } = aspectRatioToDimensions(aspectRatio, 'jimeng-width-height')
-          imageParams.size = undefined
-          imageParams.width = width
-          imageParams.height = height
+        if (capability?.imageRequestMode && capability.imageRequestMode !== 'default') {
+          const { width, height } = aspectRatioToDimensions(aspectRatio, capability.imageRequestMode)
+          imageParams.output_format = 'png'
+          imageParams.watermark = false
+
+          if (capability.imageRequestMode === 'seedream-5-lite') {
+            imageParams.size = aspectRatioToImageSize(aspectRatio, capability.imageRequestMode, 'x')
+          } else {
+            imageParams.size = undefined
+            imageParams.width = width
+            imageParams.height = height
+          }
         }
 
         const result = await generateImage(imageParams)
@@ -175,7 +195,7 @@ export function useGenerate() {
           generateResult: {
             type: 'image' as const,
             url,
-            model: result.model || model || 'Kolors',
+            model: result.model || model || 'Qwen-Image-2.0-Pro',
             provider: result.provider,
             cost: 0.05,
           },
@@ -192,8 +212,8 @@ export function useGenerate() {
         const videoParams: VideoGenerateRequest = {
           prompt,
           model: model || undefined,
-          aspect_ratio: aspectRatio,
         }
+        setVideoRatio(videoParams, aspectRatio)
 
         switch (capability?.videoRequestMode) {
           case 'kling-v26':
@@ -201,9 +221,9 @@ export function useGenerate() {
             // 图生视频传 image，不传 aspect_ratio（文档规定图生视频不支持 aspect_ratio）
             if (uploadValue) {
               videoParams.image = uploadValue
-              delete videoParams.aspect_ratio
+              deleteVideoRatio(videoParams)
             } else {
-              videoParams.aspect_ratio = normalizeKlingAspectRatio(aspectRatio)
+              setVideoRatio(videoParams, getKlingAspectRatio(aspectRatio))
             }
             break
 
@@ -212,38 +232,28 @@ export function useGenerate() {
             // 文生视频传 aspect_ratio；图生视频传 image，不传 aspect_ratio
             if (uploadValue) {
               videoParams.image = uploadValue
-              delete videoParams.aspect_ratio
+              deleteVideoRatio(videoParams)
             } else {
-              videoParams.aspect_ratio = normalizeKlingAspectRatio(aspectRatio)
+              setVideoRatio(videoParams, getKlingAspectRatio(aspectRatio))
             }
             break
 
           case 'kling-o1':
             // Kling-Video-O1 (Omni): 图生视频用 first_frame_url，有图时不传 aspect_ratio
             if (uploadedFile?.type === 'image' && uploadValue) {
-              videoParams.first_frame_url = uploadValue
-              delete videoParams.aspect_ratio  // 有首帧时不支持 aspect_ratio
+              videoParams.first_frame_url = uploadedFile.file ? toRawBase64(uploadValue) : uploadValue
+              deleteVideoRatio(videoParams)  // 有首帧时不支持比例参数
             } else if (uploadedFile?.type === 'video' && uploadedFile.url) {
               videoParams.video_list = [uploadedFile.url]
-              delete videoParams.aspect_ratio  // 视频编辑不支持 aspect_ratio
+              deleteVideoRatio(videoParams)  // 视频编辑不支持比例参数
             } else {
               // 文生视频：传 aspect_ratio（仅支持 16:9/9:16/1:1）
-              videoParams.aspect_ratio = normalizeKlingAspectRatio(aspectRatio)
+              setVideoRatio(videoParams, getKlingAspectRatio(aspectRatio))
             }
-            break
-
-          case 'wan-i2v':
-            if (uploadValue) videoParams.img_url = uploadValue
-            delete videoParams.aspect_ratio
-            videoParams.size = aspectRatioToVideoSize(aspectRatio)
             break
 
           default:
             if (uploadValue) videoParams.img_url = uploadValue
-            if (model?.startsWith('Wan2.6-')) {
-              delete videoParams.aspect_ratio
-              videoParams.size = aspectRatioToVideoSize(aspectRatio)
-            }
             break
         }
 
@@ -271,10 +281,12 @@ export function useGenerate() {
     } catch (e: unknown) {
       console.error('generate error:', e)
       const isTimeout = e instanceof Error && (e.message.includes('timeout') || e.message.includes('超时'))
+      const errorMessage = isTimeout ? '生成超时，请更换模型或重试' : normalizeErrorMessage(e, '生成失败，请重试')
       chatStore.updateMessage(assistantId, {
         generateStatus: 'failed',
-        error: isTimeout ? '生成超时，请更换模型或重试' : (e instanceof Error ? e.message : '生成失败，请重试'),
+        error: errorMessage,
       })
+      showErrorMessage(errorMessage, '生成失败，请重试')
     } finally {
       chatStore.isGenerating = false
     }

@@ -6,6 +6,17 @@
         {{ model.id }}{{ modelSupportsLocalUpload(model.id) ? ' · 支持上传' : '' }}
       </option>
     </select>
+    <span class="select-icon" aria-hidden="true">
+      <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path
+          d="M4 6.5L8 10L12 6.5"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+    </span>
   </div>
 </template>
 
@@ -51,8 +62,8 @@ onMounted(async () => {
     const response = await getModels()
     allModels.value = response.data
     filterModels()
-    if (!selectedModel.value && models.value.length > 0) {
-      selectedModel.value = models.value[0].id
+    if (!models.value.find((m) => m.id === selectedModel.value)) {
+      selectedModel.value = models.value.length > 0 ? models.value[0].id : null
       emit('update:modelValue', selectedModel.value)
     }
   } catch {
@@ -71,25 +82,18 @@ select {
   width: 100%;
 }
 
+.model-selector {
+  position: relative;
+}
+
 select {
   appearance: none;
-  padding: 6px 36px 6px 12px;
+  -webkit-appearance: none;
+  padding: 6px 38px 6px 12px;
   font-size: 12px;
   border: 1px solid var(--color-border);
   border-radius: 12px;
-  background:
-    linear-gradient(45deg, transparent 50%, var(--color-text-secondary) 50%),
-    linear-gradient(135deg, var(--color-text-secondary) 50%, transparent 50%),
-    rgba(255, 255, 255, 0.82);
-  background-position:
-    calc(100% - 22px) calc(50% - 2px),
-    calc(100% - 16px) calc(50% - 2px),
-    0 0;
-  background-size:
-    6px 6px,
-    6px 6px,
-    100% 100%;
-  background-repeat: no-repeat;
+  background: rgba(255, 255, 255, 0.82);
   color: var(--color-text);
   outline: none;
   transition:
@@ -102,5 +106,25 @@ select:focus {
   border-color: rgba(0, 113, 227, 0.35);
   box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.12);
   background-color: #fff;
+}
+
+.select-icon {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.select-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 </style>

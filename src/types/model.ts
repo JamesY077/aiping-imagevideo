@@ -18,8 +18,8 @@ export interface ModelCapability {
   inputs: ModelInputType[]
   localUploadInputs?: ModelInputType[]
   requiresReference?: boolean
-  imageRequestMode?: 'default' | 'jimeng-width-height' | 'seedream'
-  videoRequestMode?: 'default' | 'kling-v26' | 'kling-v3' | 'kling-o1' | 'wan-i2v'
+  imageRequestMode?: 'default' | 'jimeng-4' | 'seedream-5-lite'
+  videoRequestMode?: 'kling-v26' | 'kling-v3' | 'kling-o1'
 }
 
 export interface AspectRatioOption {
@@ -40,55 +40,19 @@ export const ASPECT_RATIO_OPTIONS: AspectRatioOption[] = [
 ]
 
 export const MODEL_CAPABILITIES: Record<string, ModelCapability> = {
-  'Qwen-Image-2.0': { mediaType: 'image', inputs: ['text'], imageRequestMode: 'default' },
-  'Qwen-Image-2.0-Pro': { mediaType: 'image', inputs: ['text'], imageRequestMode: 'default' },
-  'Doubao-Seedream-5.0-lite': {
-    mediaType: 'image',
-    inputs: ['text', 'image'],
-    localUploadInputs: ['image'],
-    imageRequestMode: 'seedream',
-  },
-  'Doubao-Seedream-4.5': {
-    mediaType: 'image',
-    inputs: ['text', 'image'],
-    localUploadInputs: ['image'],
-    imageRequestMode: 'seedream',
-  },
-  'GLM-Image': { mediaType: 'image', inputs: ['text'], imageRequestMode: 'default' },
-  'Kling-V2-New': { mediaType: 'image', inputs: ['text'], imageRequestMode: 'default' },
   '即梦图片生成 4.0': {
     mediaType: 'image',
     inputs: ['text', 'image'],
     localUploadInputs: ['image'],
-    imageRequestMode: 'jimeng-width-height',
+    imageRequestMode: 'jimeng-4',
   },
-  '即梦文生图 3.0': { mediaType: 'image', inputs: ['text'], imageRequestMode: 'jimeng-width-height' },
-  '即梦文生图 3.1': { mediaType: 'image', inputs: ['text'], imageRequestMode: 'jimeng-width-height' },
-  'Qwen-Image': { mediaType: 'image', inputs: ['text'], imageRequestMode: 'default' },
-  'Kolors': { mediaType: 'image', inputs: ['text'], imageRequestMode: 'default' },
-  'Wan2.5-T2I-Preview': { mediaType: 'image', inputs: ['text'], imageRequestMode: 'default' },
-  'Doubao-Seedream-4.0': {
+  'Doubao-Seedream-5.0-lite': {
     mediaType: 'image',
     inputs: ['text', 'image'],
     localUploadInputs: ['image'],
-    imageRequestMode: 'seedream',
+    imageRequestMode: 'seedream-5-lite',
   },
-  'Qwen-Image-Plus': { mediaType: 'image', inputs: ['text'], imageRequestMode: 'default' },
-  'HunyuanImage-3.0': { mediaType: 'image', inputs: ['text'], imageRequestMode: 'default' },
-  'Wan2.5-I2I-Preview': {
-    mediaType: 'image',
-    inputs: ['text', 'image'],
-    localUploadInputs: ['image'],
-    requiresReference: true,
-    imageRequestMode: 'default',
-  },
-  'Qwen-Image-Edit': {
-    mediaType: 'image',
-    inputs: ['text', 'image'],
-    localUploadInputs: ['image'],
-    requiresReference: true,
-    imageRequestMode: 'default',
-  },
+  'Qwen-Image-2.0-Pro': { mediaType: 'image', inputs: ['text'], imageRequestMode: 'default' },
   'Qwen-Image-Edit-Plus': {
     mediaType: 'image',
     inputs: ['text', 'image'],
@@ -121,16 +85,6 @@ export const MODEL_CAPABILITIES: Record<string, ModelCapability> = {
     videoRequestMode: 'kling-v26',
   },
   'MiniMax-Hailuo-2.3': { mediaType: 'video', inputs: ['text'] },
-  'Wan2.6-T2V': { mediaType: 'video', inputs: ['text'], videoRequestMode: 'default' },
-  'Doubao-Seedance-1.0-Pro-Fast': { mediaType: 'video', inputs: ['text'] },
-  '即梦视频生成 3.0 Pro': { mediaType: 'video', inputs: ['text'] },
-  'Wan2.6-I2V': {
-    mediaType: 'video',
-    inputs: ['text', 'image'],
-    requiresReference: true,
-    videoRequestMode: 'wan-i2v',
-  },
-  'MiniMax-Hailuo-02': { mediaType: 'video', inputs: ['text'] },
 }
 
 export function getModelCapability(modelId: string | null | undefined): ModelCapability | null {
@@ -165,6 +119,14 @@ export function getLocalUploadAccept(modelId: string | null | undefined): string
     return 'image/*'
   }
   return ''
+}
+
+export function getSupportedAspectRatios(modelId: string | null | undefined): string[] | null {
+  const mode = getModelCapability(modelId)?.videoRequestMode
+  if (mode === 'kling-v26' || mode === 'kling-v3' || mode === 'kling-o1') {
+    return ['16:9', '9:16', '1:1']
+  }
+  return null
 }
 
 export function getModelsByMediaType(mediaType: MediaType, ids: string[]): string[] {

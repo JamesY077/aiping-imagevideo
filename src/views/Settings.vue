@@ -13,9 +13,9 @@
 
     <main class="content">
       <section class="card hero-card">
-        <span class="kicker">Overview</span>
-        <h2>保持配置清晰，也让数据更容易浏览。</h2>
-        <p>这里延续新的简约风格，重点展示连接状态、调用记录和账号配置。</p>
+        <span class="kicker">Settings</span>
+        <h2>设置中心</h2>
+        <p>在这里可以进行连接状态查询、调用记录和账号配置。</p>
       </section>
 
       <section class="card">
@@ -24,9 +24,11 @@
           <h3>API 配置</h3>
         </div>
         <div class="info-list">
-          <div class="row">
-            <span class="label">服务地址</span>
-            <span class="value fixed">{{ apiStore.apiBaseUrl }}</span>
+          <div class="row row-service-url">
+            <div class="service-url-block">
+              <span class="label">服务地址</span>
+              <span class="service-url-value">{{ apiStore.apiBaseUrl }}</span>
+            </div>
           </div>
           <div class="row">
             <span class="label">API Key</span>
@@ -50,13 +52,49 @@
 
       <section class="card">
         <div class="section-head">
+          <span class="kicker">Prompt Model</span>
+          <h3>AI 润色</h3>
+        </div>
+        <div class="input-group">
+          <label for="polish-model">润色模型 ID</label>
+          <input
+            id="polish-model"
+            v-model.trim="settingsStore.promptPolishModel"
+            class="text-input"
+            placeholder="填写用于润色提示词的模型 ID"
+            @blur="settingsStore.saveToStorage()"
+          />
+          <a href="https://www.aiping.cn/modelList" target="_blank" rel="noopener" class="helper-link">
+            查看 AIPing 模型列表
+          </a>
+        </div>
+        <div class="input-group">
+          <label for="polish-system-prompt">System Prompt</label>
+          <textarea
+            id="polish-system-prompt"
+            v-model.trim="settingsStore.promptPolishSystemPrompt"
+            class="text-area"
+            :placeholder="defaultPolishSystemPrompt"
+            @blur="settingsStore.saveToStorage()"
+          />
+          <p class="field-hint">留空时会使用默认润色模板。</p>
+        </div>
+        <div class="btn-row">
+          <button class="ghost-btn" @click="resetPolishPrompt">恢复默认模板</button>
+          <button class="primary-btn" @click="savePolishSettings">保存润色设置</button>
+        </div>
+        <div v-if="polishStatus" class="status-msg success">{{ polishStatus }}</div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
           <span class="kicker">About</span>
           <h3>项目信息</h3>
         </div>
         <div class="info-list">
           <div class="row">
             <span class="label">版本</span>
-            <span class="value">v1.0.0</span>
+            <span class="value">v1.2.0</span>
           </div>
           <div class="row">
             <span class="label">API 文档</span>
@@ -119,11 +157,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import ApiKeyInput from '@/components/ApiKeyInput.vue'
 import { useApiStore } from '@/stores/apiStore'
 import { useChatStore } from '@/stores/chatStore'
+import { DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT, useSettingsStore } from '@/stores/settingsStore'
 import { maskApiKey } from '@/utils/format'
 import { testConnection } from '@/api/aiping'
 import { AIPING_PUBLIC_API_BASE_URL, isAipingBaseUrl } from '@/api/config'
@@ -131,6 +170,7 @@ import { AIPING_PUBLIC_API_BASE_URL, isAipingBaseUrl } from '@/api/config'
 const router = useRouter()
 const apiStore = useApiStore()
 const chatStore = useChatStore()
+const settingsStore = useSettingsStore()
 
 type BaseUrlMode = 'aiping' | 'custom'
 
@@ -145,8 +185,14 @@ const editStatusType = ref<'success' | 'error'>('success')
 const testing = ref(false)
 const testStatus = ref('')
 const testStatusType = ref<'success' | 'error'>('success')
+const polishStatus = ref('')
+const defaultPolishSystemPrompt = DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT
 
 const maskedKey = computed(() => (apiStore.apiKey ? maskApiKey(apiStore.apiKey) : '未设置'))
+
+onMounted(() => {
+  settingsStore.loadFromStorage()
+})
 
 function openEditConfig() {
   newApiBaseUrl.value = apiStore.apiBaseUrl
@@ -207,12 +253,29 @@ function handleClear() {
     router.push('/setup')
   }
 }
+
+function savePolishSettings() {
+  settingsStore.saveToStorage()
+  polishStatus.value = '润色设置已保存。'
+  setTimeout(() => {
+    polishStatus.value = ''
+  }, 1200)
+}
+
+function resetPolishPrompt() {
+  settingsStore.promptPolishSystemPrompt = ''
+  savePolishSettings()
+}
 </script>
 
 <style scoped>
 .settings-page {
   min-height: 100vh;
+  min-height: 100dvh;
   padding: 20px;
+  background:
+    linear-gradient(180deg, #f7f9fc 0%, #eef4fb 48%, #f7f9fc 100%);
+  color: var(--color-text);
 }
 
 .topbar-inner,
@@ -227,6 +290,7 @@ function handleClear() {
   top: 0;
   z-index: 20;
   padding-bottom: 16px;
+  background: linear-gradient(180deg, rgba(247, 249, 252, 0.96), rgba(247, 249, 252, 0.72));
   backdrop-filter: blur(14px);
 }
 
@@ -236,10 +300,10 @@ function handleClear() {
   align-items: center;
   gap: 16px;
   padding: 18px 22px;
-  border-radius: 28px;
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-elevated);
-  box-shadow: var(--color-shadow);
+  border-radius: 22px;
+  border: 1px solid rgba(176, 190, 207, 0.58);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 32px rgba(31, 41, 55, 0.08);
 }
 
 .title-block {
@@ -269,22 +333,23 @@ h1 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 22px;
+  padding-bottom: 28px;
 }
 
 .card {
   padding: 28px;
-  border-radius: 32px;
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-elevated);
-  box-shadow: var(--color-shadow);
-  backdrop-filter: blur(22px);
+  border-radius: 24px;
+  border: 1px solid rgba(176, 190, 207, 0.58);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 14px 34px rgba(31, 41, 55, 0.08);
+  backdrop-filter: blur(16px);
 }
 
 .hero-card {
   grid-column: 1 / -1;
   background:
-    radial-gradient(circle at top left, rgba(0, 113, 227, 0.12), transparent 26%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.82));
+    linear-gradient(135deg, rgba(0, 113, 227, 0.12), transparent 34%),
+    linear-gradient(180deg, #fff, rgba(247, 250, 253, 0.94));
 }
 
 .hero-card h2 {
@@ -317,9 +382,9 @@ h1 {
 
 .summary-item {
   padding: 20px;
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: #f8fafc;
+  border: 1px solid rgba(176, 190, 207, 0.5);
 }
 
 .summary-label,
@@ -339,9 +404,9 @@ h1 {
 
 .records-list {
   overflow: hidden;
-  border-radius: 24px;
-  border: 1px solid var(--color-border);
-  background: rgba(255, 255, 255, 0.68);
+  border-radius: 18px;
+  border: 1px solid rgba(176, 190, 207, 0.5);
+  background: #f8fafc;
 }
 
 .record-header,
@@ -381,21 +446,47 @@ h1 {
 
 .empty-state {
   padding: 20px;
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: #f8fafc;
+  border: 1px solid rgba(176, 190, 207, 0.5);
   line-height: 1.8;
 }
 
 .info-list {
   overflow: hidden;
-  border-radius: 24px;
-  border: 1px solid var(--color-border);
-  background: rgba(255, 255, 255, 0.72);
+  border-radius: 18px;
+  border: 1px solid rgba(176, 190, 207, 0.5);
+  background: #f8fafc;
 }
 
 .row {
   padding: 16px 18px;
+}
+
+.row-service-url {
+  align-items: stretch;
+}
+
+.service-url-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+}
+
+.service-url-value {
+  display: block;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(176, 190, 207, 0.5);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 .fixed {
@@ -441,7 +532,7 @@ h1 {
 }
 
 .ghost-btn {
-  background: rgba(255, 255, 255, 0.78);
+  background: #fff;
   color: var(--color-text);
 }
 
@@ -512,10 +603,10 @@ h1 {
 
 .modal {
   padding: 28px;
-  border-radius: 32px;
-  border: 1px solid var(--color-border);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: var(--color-shadow);
+  border-radius: 24px;
+  border: 1px solid rgba(176, 190, 207, 0.58);
+  background: #fff;
+  box-shadow: 0 20px 52px rgba(15, 23, 42, 0.18);
 }
 
 .modal h3 {
@@ -542,9 +633,9 @@ label {
   gap: 8px;
   margin-bottom: 12px;
   padding: 4px;
-  border: 1px solid var(--color-border);
+  border: 1px solid rgba(176, 190, 207, 0.5);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.68);
+  background: #f8fafc;
 }
 
 .base-url-switch button {
@@ -570,9 +661,9 @@ label {
   width: 100%;
   min-width: 0;
   padding: 16px 18px;
-  border: 1px solid var(--color-border);
+  border: 1px solid rgba(176, 190, 207, 0.62);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.9);
+  background: #fff;
   color: var(--color-text);
   transition:
     border-color var(--transition-base),
@@ -589,6 +680,37 @@ label {
   border-color: rgba(0, 113, 227, 0.35);
   box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.12);
   background: #fff;
+}
+
+.text-area {
+  width: 100%;
+  min-height: 132px;
+  padding: 16px 18px;
+  border: 1px solid rgba(176, 190, 207, 0.62);
+  border-radius: 18px;
+  background: #fff;
+  color: var(--color-text);
+  line-height: 1.7;
+  resize: vertical;
+  outline: none;
+}
+
+.text-area:focus {
+  border-color: rgba(0, 113, 227, 0.35);
+  box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.12);
+  background: #fff;
+}
+
+.helper-link,
+.field-hint {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.helper-link {
+  color: var(--color-primary);
 }
 
 @media (max-width: 1023px) {
@@ -611,10 +733,78 @@ label {
 
   .topbar-inner {
     grid-template-columns: 1fr;
+    justify-items: start;
   }
 
   .title-block {
     text-align: left;
+  }
+
+  h1 {
+    font-size: 20px;
+  }
+
+  .content {
+    gap: 14px;
+  }
+
+  .section-head h3 {
+    font-size: 20px;
+  }
+
+  .hero-card h2 {
+    max-width: 100%;
+    font-size: clamp(28px, 8vw, 36px);
+  }
+
+  .row,
+  .btn-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .row {
+    padding: 14px 16px;
+  }
+
+  .service-url-block {
+    gap: 8px;
+  }
+
+  .service-url-value {
+    padding: 12px 14px;
+    font-size: 12px;
+    line-height: 1.55;
+    border-radius: 12px;
+  }
+
+  .value,
+  .link,
+  .fixed {
+    width: 100%;
+    word-break: break-word;
+  }
+
+  .ghost-btn,
+  .primary-btn,
+  .danger-btn {
+    width: 100%;
+  }
+
+  .modal-overlay {
+    padding: 12px;
+    align-items: flex-end;
+  }
+
+  .modal {
+    width: 100%;
+    max-height: min(88dvh, 720px);
+    overflow-y: auto;
+    border-radius: 24px 24px 0 0;
+  }
+
+  .modal h3 {
+    font-size: 24px;
   }
 
   .placeholder {
