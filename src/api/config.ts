@@ -1,9 +1,92 @@
 export const AIPING_PUBLIC_API_BASE_URL = 'https://aiping.cn/api/v1'
 export const DEFAULT_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 
-const API_KEY_STORAGE_KEY = 'aiping_api_key'
-const API_BASE_URL_STORAGE_KEY = 'aiping_api_base_url'
+const API_AUTH_STORAGE_KEY = 'aiping_api_auth'
 const API_SESSION_READY_STORAGE_KEY = 'aiping_api_session_ready'
+
+type StoredApiAuth = {
+  apiKey: string
+  apiBaseUrl: string
+  sessionId: string
+  verifiedAtEpochMs: number
+  verifiedDateCN: string
+}
+
+function getCurrentChinaDateParts(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+
+  const parts = formatter.formatToParts(date)
+  const valueOf = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || ''
+
+  return {
+    year: valueOf('year'),
+    month: valueOf('month'),
+    day: valueOf('day'),
+    hour: valueOf('hour'),
+    minute: valueOf('minute'),
+    second: valueOf('second'),
+  }
+}
+
+export function getCurrentChinaDateKey(date = new Date()): string {
+  const { year, month, day } = getCurrentChinaDateParts(date)
+  return `${year}-${month}-${day}`
+}
+
+export function getMillisecondsUntilNextChinaMidnight(date = new Date()): number {
+  const { year, month, day } = getCurrentChinaDateParts(date)
+  const currentChinaDate = new Date(`${year}-${month}-${day}T00:00:00+08:00`)
+  const nextChinaMidnight = new Date(currentChinaDate.getTime() + 24 * 60 * 60 * 1000)
+  return Math.max(nextChinaMidnight.getTime() - date.getTime(), 0)
+}
+
+function createSessionId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+
+  return `session_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+}
+
+function parseStoredApiAuth(): StoredApiAuth | null {
+  const raw = localStorage.getItem(API_AUTH_STORAGE_KEY)
+
+  if (!raw) return null
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<StoredApiAuth>
+    if (!parsed.apiKey || !parsed.apiBaseUrl || !parsed.sessionId || !parsed.verifiedDateCN) {
+      return null
+    }
+
+    return {
+      apiKey: parsed.apiKey,
+      apiBaseUrl: parsed.apiBaseUrl,
+      sessionId: parsed.sessionId,
+      verifiedAtEpochMs: Number(parsed.verifiedAtEpochMs) || Date.now(),
+      verifiedDateCN: parsed.verifiedDateCN,
+    }
+  } catch {
+    return null
+  }
+}
+
+function getSessionReadyToken(): string | null {
+  return sessionStorage.getItem(API_SESSION_READY_STORAGE_KEY)
+}
+
+function clearStoredAuthData(): void {
+  localStorage.removeItem(API_AUTH_STORAGE_KEY)
+}
 
 export function normalizeApiBaseUrl(baseUrl: string): string {
   const normalized = baseUrl.trim().replace(/\/+$/, '')
@@ -28,32 +111,57 @@ export function isAipingBaseUrl(baseUrl: string): boolean {
 }
 
 export function getApiKey(): string | null {
-  return localStorage.getItem(API_KEY_STORAGE_KEY)
+  return parseStoredApiAuth()?.apiKey || null
 }
 
 export function saveApiKey(apiKey: string): void {
-  localStorage.setItem(API_KEY_STORAGE_KEY, apiKey)
+  const current = parseStoredApiAuth()
+  const normalizedBaseUrl = current?.apiBaseUrl || DEFAULT_API_BASE_URL
+  const sessionId = createSessionId()
+
+  localStorage.setItem(
+    API_AUTH_STORAGE_KEY,
+    JSON.stringify({
+      apiKey,
+      apiBaseUrl: normalizedBaseUrl,
+      sessionId,
+      verifiedAtEpochMs: Date.now(),
+      verifiedDateCN: getCurrentChinaDateKey(),
+    } satisfies StoredApiAuth),
+  )
 }
 
 export function clearApiKey(): void {
-  localStorage.removeItem(API_KEY_STORAGE_KEY)
+  clearStoredAuthData()
 }
 
 export function getApiBaseUrl(): string {
-  return normalizeApiBaseUrl(localStorage.getItem(API_BASE_URL_STORAGE_KEY) || DEFAULT_API_BASE_URL)
+  return normalizeApiBaseUrl(parseStoredApiAuth()?.apiBaseUrl || DEFAULT_API_BASE_URL)
 }
 
 export function getApiBaseUrlInputValue(): string {
-  const value = localStorage.getItem(API_BASE_URL_STORAGE_KEY) || AIPING_PUBLIC_API_BASE_URL
+  const value = parseStoredApiAuth()?.apiBaseUrl || AIPING_PUBLIC_API_BASE_URL
   return isAipingBaseUrl(value) ? AIPING_PUBLIC_API_BASE_URL : value.trim().replace(/\/+$/, '')
 }
 
 export function saveApiBaseUrl(baseUrl: string): void {
-  localStorage.setItem(API_BASE_URL_STORAGE_KEY, baseUrl.trim().replace(/\/+$/, ''))
+  const current = parseStoredApiAuth()
+  const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, '')
+
+  localStorage.setItem(
+    API_AUTH_STORAGE_KEY,
+    JSON.stringify({
+      apiKey: current?.apiKey || '',
+      apiBaseUrl: normalizedBaseUrl,
+      sessionId: current?.sessionId || createSessionId(),
+      verifiedAtEpochMs: current?.verifiedAtEpochMs || 0,
+      verifiedDateCN: current?.verifiedDateCN || '',
+    } satisfies StoredApiAuth),
+  )
 }
 
 export function clearApiBaseUrl(): void {
-  localStorage.removeItem(API_BASE_URL_STORAGE_KEY)
+  clearStoredAuthData()
 }
 
 export function hasApiConfig(): boolean {
@@ -61,7 +169,9 @@ export function hasApiConfig(): boolean {
 }
 
 export function markApiSessionReady(): void {
-  sessionStorage.setItem(API_SESSION_READY_STORAGE_KEY, '1')
+  const auth = parseStoredApiAuth()
+  if (!auth) return
+  sessionStorage.setItem(API_SESSION_READY_STORAGE_KEY, auth.sessionId)
 }
 
 export function clearApiSessionReady(): void {
@@ -69,5 +179,25 @@ export function clearApiSessionReady(): void {
 }
 
 export function hasActiveApiSession(): boolean {
-  return hasApiConfig() && sessionStorage.getItem(API_SESSION_READY_STORAGE_KEY) === '1'
+  const auth = parseStoredApiAuth()
+  if (!auth?.apiKey || !auth.apiBaseUrl) return false
+
+  if (auth.verifiedDateCN !== getCurrentChinaDateKey()) {
+    clearApiSessionReady()
+    return false
+  }
+
+  return getSessionReadyToken() === auth.sessionId
+}
+
+export function invalidateExpiredApiSession(): boolean {
+  const auth = parseStoredApiAuth()
+  if (!auth) return false
+
+  if (auth.verifiedDateCN === getCurrentChinaDateKey()) {
+    return false
+  }
+
+  clearApiSessionReady()
+  return true
 }

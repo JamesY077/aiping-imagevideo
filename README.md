@@ -1,6 +1,6 @@
-# AIDRAW — AI 创作工作台
+# ArtRealm AI — AI 创作工作台
 
-> 基于 [AI PING（aiping.cn）](https://aiping.cn) API 构建的 AI 图片 & 视频生成工作台，支持多模型切换、本地素材上传、生成记录查看与费用统计。
+> 基于 ArtRealm AI 官方服务 API 构建的 AI 图片 & 视频生成工作台，支持多模型切换、本地素材上传、生成记录查看与费用统计。
 
 ---
 
@@ -37,8 +37,8 @@
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/your-username/aiping-aidraw.git
-cd aiping-aidraw/ai-workshop
+git clone https://github.com/your-username/artrealm-ai.git
+cd artrealm-ai
 ```
 
 ### 2. 安装依赖
@@ -60,13 +60,13 @@ cp .env.example .env
 `.env` 内容说明：
 
 ```env
-VITE_APP_NAME=AIDRAW
+VITE_APP_NAME=ArtRealm AI
 VITE_APP_VERSION=1.0.0
 VITE_API_BASE_URL=/api/v1                    # API 代理地址，开发环境一般无需修改
 VITE_API_DOCS_URL=https://aiping.cn/docs     # 文档链接
 ```
 
-> **Base URL 和 API Key 都可以在页面里填写和修改**，并保存在浏览器 localStorage。页面默认展示 AIPing 地址 `https://aiping.cn/api/v1`；`.env` 里的 `VITE_API_BASE_URL` 是开发代理默认值。
+> **Base URL 和 API Key 都可以在页面里填写和修改**，并保存在浏览器 localStorage。页面默认展示 ArtRealm AI 地址 `https://aiping.cn/api/v1`；`.env` 里的 `VITE_API_BASE_URL` 是开发代理默认值。
 > 开发服务器会把 `/api` 请求代理到 `https://aiping.cn`，避免浏览器直接请求 `aiping.cn` 或 `api.aiping.cn` 时遇到 CORS/DNS 问题。
 
 ### 4. 启动开发服务器
@@ -75,7 +75,7 @@ VITE_API_DOCS_URL=https://aiping.cn/docs     # 文档链接
 npm run dev
 ```
 
-浏览器访问 `http://localhost:5173`，按提示输入 Base URL 和爱萍 AI 的 API Key 即可开始使用。默认选择 AIPing，页面显示 `https://aiping.cn/api/v1`，应用会自动转换为 `/api/v1` 走本地代理；如果你有自己的兼容接口地址，切换到「自定义」并填写完整地址，例如 `https://example.com/v1`。
+浏览器访问 `http://localhost:5173`，按提示输入 Base URL 和 ArtRealm AI 的 API Key 即可开始使用。默认选择 ArtRealm AI，页面显示 `https://aiping.cn/api/v1`，应用会自动转换为 `/api/v1` 走本地代理；如果你有自己的兼容接口地址，切换到「自定义」并填写完整地址，例如 `https://example.com/v1`。
 
 也可以直接使用一键启动脚本：
 
@@ -98,11 +98,11 @@ npm run build
 ## 📁 项目结构
 
 ```
-ai-workshop/
+artrealm-ai/
 ├── public/                  # 静态资源
 ├── src/
 │   ├── api/
-│   │   ├── aiping.ts        # 爱萍 AI API 封装（图片/视频生成、模型列表）
+│   │   ├── aiping.ts        # ArtRealm AI API 封装（图片/视频生成、模型列表）
 │   │   ├── config.ts        # Axios 实例与拦截器
 │   │   └── index.ts         # API 统一导出
 │   ├── assets/styles/
@@ -148,7 +148,7 @@ ai-workshop/
 
 ## 🔑 获取 API Key
 
-1. 访问 [aiping.cn](https://aiping.cn) 注册账号
+1. 访问 [ArtRealm AI 官方平台](https://aiping.cn) 注册账号
 2. 进入控制台 → API Keys → 创建新 Key
 3. 将 Key 粘贴到工作台首次启动时的配置页，或在「设置」页修改
 

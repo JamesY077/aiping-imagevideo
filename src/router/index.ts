@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { hasActiveApiSession } from '@/api/config'
+import { hasActiveApiSession, invalidateExpiredApiSession } from '@/api/config'
 
 const routes = [
   {
@@ -28,8 +28,12 @@ const router = createRouter({
 })
 
 router.beforeEach((to, _from, next) => {
+  invalidateExpiredApiSession()
+
   if (to.meta.requiresAuth && !hasActiveApiSession()) {
     next('/setup')
+  } else if (to.meta.requiresNoAuth && hasActiveApiSession()) {
+    next('/')
   } else {
     next()
   }

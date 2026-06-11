@@ -2,7 +2,7 @@
   <div class="setup-page">
     <div class="setup-shell">
       <section class="hero-panel">
-        <span class="eyebrow">AI Drawing Workspace</span>
+        <span class="eyebrow">ArtRealm Workspace</span>
         <h1>更安静、更专注的创作入口。</h1>
         <div class="hero-notes">
           <div class="note-card">
@@ -23,10 +23,10 @@
             <div class="base-url-switch" aria-label="选择 Base URL 类型">
               <button
                 type="button"
-                :class="{ active: baseUrlMode === 'aiping' }"
-                @click="selectBaseUrlMode('aiping')"
+                :class="{ active: baseUrlMode === 'official' }"
+                @click="selectBaseUrlMode('official')"
               >
-                AIPing
+                aiping
               </button>
               <button
                 type="button"
@@ -40,8 +40,8 @@
               id="api-base-url"
               v-model="apiBaseUrl"
               class="text-input"
-              :readonly="baseUrlMode === 'aiping'"
-              :placeholder="baseUrlMode === 'aiping' ? 'https://aiping.cn/api/v1' : 'https://example.com/v1'"
+              :readonly="baseUrlMode === 'official'"
+              :placeholder="baseUrlMode === 'official' ? 'https://aiping.cn/api/v1' : 'https://example.com/v1'"
             />
           </div>
 
@@ -52,8 +52,8 @@
           <div class="tips">
             <p class="tip-title">获取方式</p>
             <ol>
-              <li>推荐使用 AIPing, 保持默认 Base URL：<code>https://aiping.cn/api/v1</code></li>
-              <li>访问 <a href="https://aiping.cn" target="_blank">aiping.cn</a> 注册账号，并在控制台创建 API Key</li>
+              <li>推荐使用 AI Ping，保持默认 Base URL：<code>https://aiping.cn/api/v1</code></li>
+              <li>访问 <a href="https://aiping.cn" target="_blank">AI Ping 官方平台</a> 注册账号，并在控制台创建 API Key</li>
               <li>使用其他 OpenAI 兼容服务时，切换到「自定义」并填写对应 Base URL</li>
             </ol>
           </div>
@@ -83,18 +83,18 @@ import { AIPING_PUBLIC_API_BASE_URL, getApiBaseUrlInputValue, isAipingBaseUrl } 
 const router = useRouter()
 const apiStore = useApiStore()
 
-type BaseUrlMode = 'aiping' | 'custom'
+type BaseUrlMode = 'official' | 'custom'
 
 const apiKey = ref('')
 const initialBaseUrl = getApiBaseUrlInputValue()
-const baseUrlMode = ref<BaseUrlMode>(isAipingBaseUrl(initialBaseUrl) ? 'aiping' : 'custom')
+const baseUrlMode = ref<BaseUrlMode>(isAipingBaseUrl(initialBaseUrl) ? 'official' : 'custom')
 const apiBaseUrl = ref(initialBaseUrl)
 const isLoading = ref(false)
 const error = ref('')
 
 function selectBaseUrlMode(mode: BaseUrlMode) {
   baseUrlMode.value = mode
-  if (mode === 'aiping') {
+  if (mode === 'official') {
     apiBaseUrl.value = AIPING_PUBLIC_API_BASE_URL
   } else if (isAipingBaseUrl(apiBaseUrl.value)) {
     apiBaseUrl.value = ''
@@ -121,17 +121,17 @@ async function handleSubmit() {
 .setup-page {
   min-height: 100vh;
   min-height: 100dvh;
-  padding: 28px;
+  padding: 20px;
 }
 
 .setup-shell {
   width: min(100%, var(--content-width));
   margin: 0 auto;
-  min-height: calc(100vh - 56px);
-  min-height: calc(100dvh - 56px);
+  min-height: calc(100vh - 40px);
+  min-height: calc(100dvh - 40px);
   display: grid;
   grid-template-columns: 1.2fr 0.9fr;
-  gap: 24px;
+  gap: 18px;
 }
 
 .hero-panel,
@@ -143,7 +143,7 @@ async function handleSubmit() {
 }
 
 .hero-panel {
-  padding: 56px;
+  padding: 40px;
   border-radius: var(--radius-xl);
   display: flex;
   flex-direction: column;
@@ -156,12 +156,12 @@ async function handleSubmit() {
 .eyebrow {
   display: inline-flex;
   width: fit-content;
-  padding: 8px 14px;
-  margin-bottom: 20px;
+  padding: 6px 12px;
+  margin-bottom: 14px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.78);
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -169,7 +169,7 @@ async function handleSubmit() {
 
 h1 {
   max-width: 12ch;
-  font-size: clamp(40px, 6vw, 72px);
+  font-size: clamp(32px, 5vw, 56px);
   line-height: 1.02;
   letter-spacing: -0.05em;
 }
@@ -185,13 +185,13 @@ h1 {
 .hero-notes {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-  margin-top: 56px;
+  gap: 12px;
+  margin-top: 28px;
 }
 
 .note-card {
-  padding: 22px;
-  border-radius: 24px;
+  padding: 18px;
+  border-radius: 20px;
   background: rgba(255, 255, 255, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.6);
 }
@@ -204,7 +204,7 @@ h1 {
 }
 
 .note-card strong {
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1.5;
 }
 
@@ -215,34 +215,35 @@ h1 {
 
 .form-card {
   width: 100%;
-  padding: 40px;
-  border-radius: 32px;
+  padding: 28px;
+  border-radius: 28px;
 }
 
 h2 {
-  font-size: 32px;
+  font-size: 28px;
   line-height: 1.15;
   letter-spacing: -0.03em;
 }
 
 .form-hint {
-  margin-top: 12px;
+  margin-top: 8px;
   color: var(--color-text-secondary);
-  line-height: 1.7;
+  line-height: 1.6;
+  font-size: 14px;
 }
 
 .input-group {
-  margin-top: 28px;
+  margin-top: 20px;
 }
 
 .input-group.compact {
-  margin-top: 18px;
+  margin-top: 14px;
 }
 
 label {
   display: block;
-  margin-bottom: 12px;
-  font-size: 13px;
+  margin-bottom: 10px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--color-text-secondary);
   letter-spacing: 0.02em;
@@ -251,20 +252,21 @@ label {
 .base-url-switch {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 6px;
+  margin-bottom: 10px;
   padding: 4px;
   border: 1px solid var(--color-border);
-  border-radius: 18px;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.68);
 }
 
 .base-url-switch button {
-  min-height: 38px;
+  min-height: 34px;
   border: none;
-  border-radius: 14px;
+  border-radius: 12px;
   background: transparent;
   color: var(--color-text-secondary);
+  font-size: 13px;
   font-weight: 700;
   transition:
     background var(--transition-base),
@@ -281,11 +283,12 @@ label {
 .text-input {
   width: 100%;
   min-width: 0;
-  padding: 16px 18px;
+  padding: 14px 16px;
   border: 1px solid var(--color-border);
-  border-radius: 18px;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.9);
   color: var(--color-text);
+  font-size: 14px;
   transition:
     border-color var(--transition-base),
     box-shadow var(--transition-base),
@@ -304,41 +307,36 @@ label {
 }
 
 .tips {
-  margin-top: 22px;
-  padding: 20px;
-  border-radius: 24px;
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 20px;
   background: rgba(255, 255, 255, 0.72);
   border: 1px solid var(--color-border);
 }
 
 .tip-title {
-  margin-bottom: 10px;
-  font-size: 13px;
+  margin-bottom: 8px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--color-text-secondary);
 }
 
 .tips ol {
-  padding-left: 18px;
+  padding-left: 16px;
   color: var(--color-text-secondary);
-  line-height: 1.8;
-}
-
-.tips code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.92em;
-  color: var(--color-text);
+  line-height: 1.65;
+  font-size: 13px;
 }
 
 .submit-btn {
   width: 100%;
-  min-height: 54px;
-  margin-top: 24px;
+  min-height: 48px;
+  margin-top: 18px;
   border: none;
   border-radius: 999px;
   background: var(--color-primary);
   color: #fff;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   transition:
     transform var(--transition-base),
@@ -357,12 +355,13 @@ label {
 }
 
 .error-msg {
-  margin-top: 16px;
-  padding: 14px 16px;
+  margin-top: 12px;
+  padding: 12px 14px;
   border-radius: 18px;
   background: var(--color-danger-soft);
   color: var(--color-danger);
   text-align: center;
+  font-size: 13px;
 }
 
 @media (max-width: 1023px) {
@@ -373,7 +372,7 @@ label {
 
   .hero-panel,
   .form-card {
-    padding: 32px 24px;
+    padding: 24px 20px;
   }
 
   .hero-notes {
@@ -383,71 +382,22 @@ label {
 
 @media (max-width: 767px) {
   .setup-page {
-    padding: 16px;
-  }
-
-   .setup-shell {
-    gap: 16px;
-    min-height: auto;
-  }
-
-  .hero-panel,
-  .form-card {
-    padding: 24px 18px;
-    border-radius: 24px;
+    padding: 14px;
   }
 
   h1 {
     max-width: 100%;
-    font-size: clamp(30px, 10vw, 42px);
+    font-size: clamp(28px, 9vw, 38px);
   }
 
   h2 {
     font-size: 24px;
   }
 
-  .eyebrow {
-    margin-bottom: 16px;
-    padding: 6px 12px;
-    font-size: 11px;
-  }
-
-  .hero-notes {
-    margin-top: 28px;
-    gap: 12px;
-  }
-
-  .note-card {
-    padding: 16px;
-    border-radius: 18px;
-  }
-
-  .note-card strong {
-    font-size: 16px;
-  }
-
-  .input-group {
-    margin-top: 20px;
-  }
-
-  .text-input {
-    padding: 14px 16px;
-    border-radius: 16px;
-  }
-
-  .tips {
-    padding: 16px;
-    border-radius: 18px;
-  }
-
-  .tips ol {
-    padding-left: 16px;
-    word-break: break-word;
-  }
-
-  .submit-btn {
-    min-height: 50px;
-    margin-top: 20px;
+  .hero-panel,
+  .form-card {
+    padding: 20px 16px;
+    border-radius: 22px;
   }
 }
 </style>

@@ -65,7 +65,7 @@
             @blur="settingsStore.saveToStorage()"
           />
           <a href="https://www.aiping.cn/modelList" target="_blank" rel="noopener" class="helper-link">
-            查看 AIPing 模型列表
+            查看 ArtRealm AI 官方模型列表
           </a>
         </div>
         <div class="input-group">
@@ -122,10 +122,10 @@
           <div class="base-url-switch" aria-label="选择 Base URL 类型">
             <button
               type="button"
-              :class="{ active: editBaseUrlMode === 'aiping' }"
-              @click="selectEditBaseUrlMode('aiping')"
+              :class="{ active: editBaseUrlMode === 'official' }"
+              @click="selectEditBaseUrlMode('official')"
             >
-              AIPing
+              ArtRealm AI
             </button>
             <button
               type="button"
@@ -139,8 +139,8 @@
             id="edit-base-url"
             v-model="newApiBaseUrl"
             class="text-input"
-            :readonly="editBaseUrlMode === 'aiping'"
-            :placeholder="editBaseUrlMode === 'aiping' ? 'https://aiping.cn/api/v1' : 'https://example.com/v1'"
+            :readonly="editBaseUrlMode === 'official'"
+            :placeholder="editBaseUrlMode === 'official' ? 'https://aiping.cn/api/v1' : 'https://example.com/v1'"
           />
         </div>
         <ApiKeyInput v-model="newApiKey" />
@@ -172,12 +172,12 @@ const apiStore = useApiStore()
 const chatStore = useChatStore()
 const settingsStore = useSettingsStore()
 
-type BaseUrlMode = 'aiping' | 'custom'
+type BaseUrlMode = 'official' | 'custom'
 
 const showEditConfig = ref(false)
 const newApiKey = ref('')
 const newApiBaseUrl = ref('')
-const editBaseUrlMode = ref<BaseUrlMode>('aiping')
+const editBaseUrlMode = ref<BaseUrlMode>('official')
 const saving = ref(false)
 const editStatus = ref('')
 const editStatusType = ref<'success' | 'error'>('success')
@@ -196,7 +196,7 @@ onMounted(() => {
 
 function openEditConfig() {
   newApiBaseUrl.value = apiStore.apiBaseUrl
-  editBaseUrlMode.value = isAipingBaseUrl(newApiBaseUrl.value) ? 'aiping' : 'custom'
+  editBaseUrlMode.value = isAipingBaseUrl(newApiBaseUrl.value) ? 'official' : 'custom'
   newApiKey.value = apiStore.apiKey || ''
   editStatus.value = ''
   showEditConfig.value = true
@@ -204,7 +204,7 @@ function openEditConfig() {
 
 function selectEditBaseUrlMode(mode: BaseUrlMode) {
   editBaseUrlMode.value = mode
-  if (mode === 'aiping') {
+  if (mode === 'official') {
     newApiBaseUrl.value = AIPING_PUBLIC_API_BASE_URL
   } else if (isAipingBaseUrl(newApiBaseUrl.value)) {
     newApiBaseUrl.value = ''

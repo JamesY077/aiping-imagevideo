@@ -11,6 +11,7 @@ import {
   saveApiKey,
 } from '@/api/config'
 import { testConnectionWithDetail } from '@/api/aiping'
+import { restartApiSessionGuard, stopApiSessionGuard } from '@/utils/sessionGuard'
 
 export const useApiStore = defineStore('api', () => {
   const apiKey = ref<string | null>(getApiKey())
@@ -28,11 +29,12 @@ export const useApiStore = defineStore('api', () => {
     try {
       const result = await testConnectionWithDetail(key, baseUrl)
       if (result.ok) {
-        saveApiKey(key)
         saveApiBaseUrl(baseUrl)
+        saveApiKey(key)
         apiKey.value = key
         apiBaseUrl.value = getApiBaseUrlInputValue()
         markApiSessionReady()
+        restartApiSessionGuard()
         isConnected.value = true
         return true
       } else {
@@ -51,6 +53,7 @@ export const useApiStore = defineStore('api', () => {
     clearApiKey()
     clearApiBaseUrl()
     clearApiSessionReady()
+    stopApiSessionGuard()
     apiKey.value = null
     apiBaseUrl.value = getApiBaseUrlInputValue()
     isConnected.value = false

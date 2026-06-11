@@ -3,7 +3,7 @@
     <div class="main-shell">
       <header class="topbar">
         <div class="title-block">
-          <span class="brand-kicker">AIDRAW</span>
+          <span class="brand-kicker">ArtRealm AI</span>
           <h1>创作台</h1>
         </div>
 
