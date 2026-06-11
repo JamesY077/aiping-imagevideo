@@ -36,16 +36,25 @@ function download() {
   border: 1px solid var(--color-border);
   border-radius: 14px;
   background: var(--color-surface-strong);
+  width: fit-content;
+  max-width: 100%;
 }
 
 .image-wrapper {
   position: relative;
   background: #f1f3f5;
+  width: fit-content;
+  max-width: min(100%, 420px);
+  margin: 0 auto;
 }
 
 .image-wrapper img {
   display: block;
-  width: 100%;
+  width: auto;
+  max-width: min(100%, 420px);
+  max-height: 420px;
+  height: auto;
+  object-fit: contain;
 }
 
 .image-badge {
@@ -101,6 +110,22 @@ function download() {
 .actions {
   border-top: 1px solid var(--color-border);
   flex-wrap: wrap;
+}
+
+@media (max-width: 767px) {
+  .image-result {
+    width: 100%;
+  }
+
+  .image-wrapper,
+  .image-wrapper img {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .image-wrapper img {
+    max-height: 320px;
+  }
 }
 
 .info-item.cost {

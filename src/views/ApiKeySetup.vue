@@ -52,7 +52,7 @@
           <div class="tips">
             <p class="tip-title">获取方式</p>
             <ol>
-              <li>使用 AIPing 时保持默认 Base URL：<code>https://aiping.cn/api/v1</code></li>
+              <li>推荐使用 AIPing, 保持默认 Base URL：<code>https://aiping.cn/api/v1</code></li>
               <li>访问 <a href="https://aiping.cn" target="_blank">aiping.cn</a> 注册账号，并在控制台创建 API Key</li>
               <li>使用其他 OpenAI 兼容服务时，切换到「自定义」并填写对应 Base URL</li>
             </ol>
@@ -112,7 +112,7 @@ async function handleSubmit() {
   if (ok) {
     router.push('/')
   } else {
-    error.value = '连接验证失败，请检查 Base URL 和 API Key。'
+    error.value = apiStore.connectionError || '连接验证失败，请检查 Base URL 和 API Key。'
   }
 }
 </script>
@@ -120,6 +120,7 @@ async function handleSubmit() {
 <style scoped>
 .setup-page {
   min-height: 100vh;
+  min-height: 100dvh;
   padding: 28px;
 }
 
@@ -127,6 +128,7 @@ async function handleSubmit() {
   width: min(100%, var(--content-width));
   margin: 0 auto;
   min-height: calc(100vh - 56px);
+  min-height: calc(100dvh - 56px);
   display: grid;
   grid-template-columns: 1.2fr 0.9fr;
   gap: 24px;
@@ -384,13 +386,68 @@ label {
     padding: 16px;
   }
 
+   .setup-shell {
+    gap: 16px;
+    min-height: auto;
+  }
+
+  .hero-panel,
+  .form-card {
+    padding: 24px 18px;
+    border-radius: 24px;
+  }
+
   h1 {
     max-width: 100%;
-    font-size: 42px;
+    font-size: clamp(30px, 10vw, 42px);
   }
 
   h2 {
-    font-size: 28px;
+    font-size: 24px;
+  }
+
+  .eyebrow {
+    margin-bottom: 16px;
+    padding: 6px 12px;
+    font-size: 11px;
+  }
+
+  .hero-notes {
+    margin-top: 28px;
+    gap: 12px;
+  }
+
+  .note-card {
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .note-card strong {
+    font-size: 16px;
+  }
+
+  .input-group {
+    margin-top: 20px;
+  }
+
+  .text-input {
+    padding: 14px 16px;
+    border-radius: 16px;
+  }
+
+  .tips {
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .tips ol {
+    padding-left: 16px;
+    word-break: break-word;
+  }
+
+  .submit-btn {
+    min-height: 50px;
+    margin-top: 20px;
   }
 }
 </style>

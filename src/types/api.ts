@@ -34,6 +34,25 @@ export interface ModelsResponse {
   data: Model[]
 }
 
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant'
+  content: string
+}
+
+export interface ChatCompletionRequest {
+  model: string
+  messages: ChatMessage[]
+  temperature?: number
+}
+
+export interface ChatCompletionResponse {
+  choices?: Array<{
+    message?: {
+      content?: string
+    }
+  }>
+}
+
 export interface ImageGenerateRequest {
   model?: string
   prompt: string
@@ -41,6 +60,9 @@ export interface ImageGenerateRequest {
   size?: string
   width?: number
   height?: number
+  output_format?: 'png' | 'jpeg'
+  watermark?: boolean
+  extra_body?: Record<string, unknown>
   n?: number
   response_format?: 'url' | 'b64_json'
 }
@@ -66,6 +88,7 @@ export interface VideoGenerateRequest {
   video_list?: string[]
   duration?: number
   aspect_ratio?: string
+  ratio?: string
   size?: string
 }
 
@@ -81,7 +104,7 @@ export interface VideoStatusResponse {
   id: string
   object?: string
   created?: number
-  status: 'pending' | 'queued' | 'processing' | 'completed' | 'failed'
+  status: string
   model: string
   progress?: number
   video_url?: string

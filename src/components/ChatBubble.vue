@@ -40,7 +40,18 @@
       </div>
       <div class="meta">
         <span class="time">{{ formatTime(message.timestamp) }}</span>
-        <CostDisplay v-if="message.generateResult" :cost="message.generateResult.cost" />
+        <div class="meta-actions">
+          <button
+            v-if="message.type === 'user' && message.content"
+            class="icon-btn"
+            title="复制到输入框"
+            aria-label="复制提示词到输入框"
+            @click="$emit('copyPrompt', message.content)"
+          >
+            ⧉
+          </button>
+          <CostDisplay v-if="message.generateResult" :cost="message.generateResult.cost" />
+        </div>
       </div>
     </div>
   </div>
@@ -54,7 +65,10 @@ import { formatTime } from '@/utils/format'
 import type { Message } from '@/types/chat'
 
 defineProps<{ message: Message }>()
-defineEmits<{ (e: 'regenerate', message: Message): void }>()
+defineEmits<{
+  (e: 'regenerate', message: Message): void
+  (e: 'copyPrompt', prompt: string): void
+}>()
 </script>
 
 <style scoped>
@@ -201,6 +215,39 @@ defineEmits<{ (e: 'regenerate', message: Message): void }>()
   gap: 6px;
   margin-top: 4px;
   flex-wrap: wrap;
+}
+
+.meta-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  color: inherit;
+  font-size: 12px;
+}
+
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.message.user .icon-btn {
+  border-color: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.message.user .icon-btn:hover {
+  background: rgba(255, 255, 255, 0.32);
 }
 
 .error {
