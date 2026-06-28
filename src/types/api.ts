@@ -71,6 +71,11 @@ export interface ImageGenerateResponse {
   created: number
   model?: string
   provider?: string
+  usage?: {
+    total_cost?: number | string
+  }
+  total_cost?: number | string
+  cost?: number | string
   data: Array<{
     url?: string
     b64_json?: string
@@ -81,6 +86,7 @@ export interface VideoGenerateRequest {
   model?: string
   prompt: string
   image?: string
+  images?: string[]
   img_url?: string
   first_frame_url?: string
   last_frame_url?: string
@@ -90,6 +96,12 @@ export interface VideoGenerateRequest {
   aspect_ratio?: string
   ratio?: string
   size?: string
+  resolution?: string
+  audio?: boolean
+  movement_amplitude?: string
+  off_peak?: boolean
+  watermark?: boolean
+  extra_body?: Record<string, unknown>
 }
 
 export interface VideoGenerateResponse {
@@ -111,6 +123,11 @@ export interface VideoStatusResponse {
   seconds?: number
   size?: string
   provider?: string
+  usage?: {
+    total_cost?: number | string
+  }
+  total_cost?: number | string
+  cost?: number | string
   data?: Array<{
     url: string
     thumbnail?: string

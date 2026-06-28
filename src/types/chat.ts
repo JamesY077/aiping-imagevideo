@@ -10,6 +10,9 @@ export interface GenerateResult {
   model: string
   provider?: string
   cost: number
+  costText?: string
+  aspectRatio?: string
+  createdAt?: number
   thumbnail?: string
   duration?: number
   size?: {
@@ -29,6 +32,7 @@ export interface Message {
   error?: string
   progress?: number
   uploadedFile?: UploadedFile
+  duration?: number
   aspectRatio?: string
   model?: string
 }

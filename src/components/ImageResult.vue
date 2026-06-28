@@ -1,166 +1,299 @@
 <template>
-  <div class="image-result">
-    <div class="image-wrapper">
+  <article class="result-card image-result">
+    <button class="media-frame" type="button" :style="thumbnailStyle" @click="openPreview">
       <img :src="result.url" alt="Generated image" referrerpolicy="no-referrer" />
-      <div class="image-badge">Image</div>
+      <span class="media-chip">图片</span>
+      <span class="media-overlay">点击查看原图</span>
+    </button>
+
+    <div class="result-body">
+      <div class="title-stack">
+        <span v-if="result.provider" class="provider-pill">{{ result.provider }}</span>
+        <h3 class="result-title">{{ result.model }}</h3>
+      </div>
+
+      <dl class="meta-list">
+        <div class="meta-pair">
+          <dt>比例</dt>
+          <dd>{{ ratioLabel }}</dd>
+        </div>
+        <div v-if="result.size" class="meta-pair">
+          <dt>尺寸</dt>
+          <dd>{{ result.size.width }} × {{ result.size.height }}</dd>
+        </div>
+        <div v-if="createdTimeLabel" class="meta-pair">
+          <dt>生成时间</dt>
+          <dd>{{ createdTimeLabel }}</dd>
+        </div>
+      </dl>
     </div>
-    <div class="info-bar">
-      <span class="info-item model-info">
-        <span v-if="result.provider" class="provider-tag">{{ result.provider }}</span>
-        <span class="model-name">{{ result.model }}</span>
-      </span>
-      <span class="info-item cost">¥{{ result.cost.toFixed(4) }}</span>
-    </div>
-    <div class="actions">
-      <button class="btn btn-primary" @click="download">下载图片</button>
-      <button class="btn btn-secondary" @click="$emit('regenerate')">重新生成</button>
-    </div>
-  </div>
+
+    <footer class="result-actions">
+      <button class="action-btn action-btn-primary" type="button" @click="download">下载图片</button>
+      <button class="action-btn" type="button" @click="openPreview">查看原图</button>
+      <button class="action-btn action-btn-subtle" type="button" @click="$emit('regenerate')">重新生成</button>
+    </footer>
+  </article>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { GenerateResult } from '@/types/chat'
 
 const props = defineProps<{ result: GenerateResult }>()
 defineEmits<{ (e: 'regenerate'): void }>()
 
+const ratioLabel = computed(() => {
+  if (props.result.aspectRatio) return props.result.aspectRatio
+  const width = props.result.size?.width
+  const height = props.result.size?.height
+  if (width && height) return `${width}:${height}`
+  return '未知'
+})
+
+const createdTimeLabel = computed(() => {
+  if (!props.result.createdAt) return ''
+  return new Date(props.result.createdAt).toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+})
+
+const thumbnailStyle = computed(() => {
+  const width = props.result.size?.width
+  const height = props.result.size?.height
+  if (!width || !height) {
+    return {
+      aspectRatio: '1 / 1',
+    }
+  }
+
+  return {
+    aspectRatio: `${width} / ${height}`,
+  }
+})
+
 function download() {
-  // 直接在新标签页打开图片（跨域 CDN 链接无法 fetch，右键另存为即可保存）
+  const link = document.createElement('a')
+  link.href = props.result.url
+  link.download = `aiping-image-${Date.now()}.png`
+  link.target = '_blank'
+  link.rel = 'noopener noreferrer'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+}
+
+function openPreview() {
   window.open(props.result.url, '_blank', 'noopener,noreferrer')
 }
 </script>
 
 <style scoped>
-.image-result {
-  overflow: hidden;
-  border: 1px solid var(--color-border);
-  border-radius: 14px;
-  background: var(--color-surface-strong);
-  width: fit-content;
-  max-width: 100%;
+.result-card {
+  display: grid;
+  grid-template-columns: minmax(112px, 192px) minmax(0, 1fr);
+  gap: 16px;
+  width: min(100%, 560px);
+  padding: 16px;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.72));
+  border: 1px solid rgba(30, 41, 59, 0.08);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(18px);
 }
 
-.image-wrapper {
+.media-frame {
   position: relative;
-  background: #f1f3f5;
-  width: fit-content;
-  max-width: min(100%, 420px);
-  margin: 0 auto;
+  width: 100%;
+  overflow: hidden;
+  border: 0;
+  border-radius: 20px;
+  padding: 0;
+  background: linear-gradient(180deg, rgba(245, 247, 251, 0.96), rgba(237, 241, 247, 0.92));
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.18);
+  cursor: zoom-in;
 }
 
-.image-wrapper img {
+.media-frame img {
   display: block;
-  width: auto;
-  max-width: min(100%, 420px);
-  max-height: 420px;
-  height: auto;
-  object-fit: contain;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.image-badge {
+.media-chip,
+.media-overlay {
   position: absolute;
-  top: 10px;
-  left: 10px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.88);
-  color: var(--color-text);
-  font-size: 10px;
-  font-weight: 700;
-  backdrop-filter: blur(12px);
-}
-
-.info-bar,
-.actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 12px;
-}
-
-.info-bar {
-  border-top: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  font-size: 11px;
-}
-
-.model-info {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-}
-
-.provider-tag {
-  display: inline-block;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: rgba(0, 113, 227, 0.08);
-  color: var(--color-primary);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.model-name {
-  color: var(--color-text-secondary);
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
   font-size: 11px;
 }
 
-.actions {
-  border-top: 1px solid var(--color-border);
-  flex-wrap: wrap;
-}
-
-@media (max-width: 767px) {
-  .image-result {
-    width: 100%;
-  }
-
-  .image-wrapper,
-  .image-wrapper img {
-    max-width: 100%;
-    width: 100%;
-  }
-
-  .image-wrapper img {
-    max-height: 320px;
-  }
-}
-
-.info-item.cost {
-  color: var(--color-danger);
+.media-chip {
+  top: 10px;
+  left: 10px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--color-text);
   font-weight: 700;
 }
 
-.btn {
-  min-height: 30px;
-  padding: 0 12px;
-  font-size: 12px;
+.media-overlay {
+  right: 10px;
+  bottom: 10px;
+  background: rgba(18, 24, 38, 0.62);
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.result-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.title-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.provider-pill {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 24px;
+  padding: 0 10px;
   border-radius: 999px;
-  border: 1px solid var(--color-border);
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.result-title {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+.meta-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.meta-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.66);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.14);
+}
+
+.meta-pair dt {
+  font-size: 11px;
+  color: var(--color-text-hint);
+}
+
+.meta-pair dd {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+.result-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(30, 41, 59, 0.1);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 600;
   transition:
     transform var(--transition-base),
     background var(--transition-base),
-    border-color var(--transition-base);
+    border-color var(--transition-base),
+    box-shadow var(--transition-base);
 }
 
-.btn:hover {
+.action-btn:hover {
   transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.94);
 }
 
-.btn-primary {
-  background: var(--color-primary);
+.action-btn-primary {
+  background: var(--color-theme-gradient);
   border-color: transparent;
-  color: #fff;
+  color: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 24px rgba(95, 75, 139, 0.22);
 }
 
-.btn-primary:hover {
-  background: var(--color-primary-hover);
+.action-btn-primary:hover {
+  background: var(--color-theme-gradient-hover);
+  border-color: transparent;
+  box-shadow: 0 14px 28px rgba(95, 75, 139, 0.26);
 }
 
-.btn-secondary {
-  background: rgba(255, 255, 255, 0.78);
-  color: var(--color-text);
+.action-btn-primary:active {
+  background: var(--color-theme-gradient-active);
+  border-color: transparent;
+  transform: translateY(0);
+  box-shadow: 0 8px 18px rgba(95, 75, 139, 0.2);
+}
+
+.action-btn-primary:focus-visible {
+  background: var(--color-theme-gradient-hover);
+  border-color: transparent;
+}
+
+.action-btn-subtle {
+  margin-left: auto;
+}
+
+@media (max-width: 767px) {
+  .result-card {
+    grid-template-columns: 1fr;
+  }
+
+  .media-frame {
+    width: min(100%, 220px);
+  }
+
+  .meta-list {
+    grid-template-columns: 1fr;
+  }
+
+  .result-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .action-btn,
+  .action-btn-subtle {
+    width: 100%;
+    margin-left: 0;
+  }
 }
 </style>

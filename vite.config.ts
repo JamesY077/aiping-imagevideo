@@ -11,6 +11,9 @@ export default defineConfig({
     },
   },
   server: {
+    host: '127.0.0.1',
+    port: 5500,
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'https://aiping.cn',
@@ -18,5 +21,10 @@ export default defineConfig({
         secure: false,
       },
     },
+  },
+  preview: {
+    host: '127.0.0.1',
+    port: 5500,
+    strictPort: true,
   },
 })

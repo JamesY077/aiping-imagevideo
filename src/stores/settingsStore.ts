@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { MediaType } from '@/types/model'
+import { getDefaultVideoDuration, type MediaType } from '@/types/model'
 
 export const DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT = `你是一名专业的 AI 图像与视频提示词优化助手。
 请在保留用户原意的前提下，补全主体、场景、构图、镜头、光线、风格、材质、色彩、细节和质量描述。
@@ -10,6 +10,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const mediaType = ref<MediaType>('image')
   const selectedModel = ref<string | null>(null)
   const aspectRatio = ref('1:1')
+  const videoDuration = ref(6)
   const promptPolishModel = ref('')
   const promptPolishSystemPrompt = ref('')
 
@@ -20,6 +21,7 @@ export const useSettingsStore = defineStore('settings', () => {
       mediaType.value = settings.mediaType || 'image'
       selectedModel.value = settings.selectedModel || null
       aspectRatio.value = settings.aspectRatio || (mediaType.value === 'video' ? '16:9' : '1:1')
+      videoDuration.value = settings.videoDuration || getDefaultVideoDuration(selectedModel.value)
       promptPolishModel.value = settings.promptPolishModel || ''
       promptPolishSystemPrompt.value = settings.promptPolishSystemPrompt || ''
     }
@@ -32,6 +34,7 @@ export const useSettingsStore = defineStore('settings', () => {
         mediaType: mediaType.value,
         selectedModel: selectedModel.value,
         aspectRatio: aspectRatio.value,
+        videoDuration: videoDuration.value,
         promptPolishModel: promptPolishModel.value,
         promptPolishSystemPrompt: promptPolishSystemPrompt.value,
       })
@@ -43,6 +46,9 @@ export const useSettingsStore = defineStore('settings', () => {
     if (nextType === 'video' && aspectRatio.value === '1:1') {
       aspectRatio.value = '16:9'
     }
+    if (nextType === 'video') {
+      videoDuration.value = getDefaultVideoDuration(selectedModel.value)
+    }
     saveToStorage()
   }
 
@@ -50,6 +56,7 @@ export const useSettingsStore = defineStore('settings', () => {
     mediaType,
     selectedModel,
     aspectRatio,
+    videoDuration,
     promptPolishModel,
     promptPolishSystemPrompt,
     loadFromStorage,

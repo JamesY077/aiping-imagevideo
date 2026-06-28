@@ -4,23 +4,24 @@
       <div class="topbar-inner">
         <button class="ghost-btn" @click="router.back()">返回工作台</button>
         <div class="title-block">
-          <span class="kicker">Settings</span>
-          <h1>设置与概览</h1>
+          <span class="kicker">系统</span>
+          <h1>工作台设置</h1>
         </div>
-        <span class="placeholder" />
       </div>
     </header>
 
     <main class="content">
-      <section class="card hero-card">
-        <span class="kicker">Settings</span>
-        <h2>设置中心</h2>
-        <p>在这里可以进行连接状态查询、调用记录和账号配置。</p>
+      <section class="hero-card">
+        <div>
+          <span class="kicker">控制中心</span>
+          <h2>统一管理你的生成环境，保持清晰、稳定、随时可用。</h2>
+        </div>
+        <p>在一个简洁的设置界面中管理 API 访问、提示词优化与项目级配置。</p>
       </section>
 
       <section class="card">
         <div class="section-head">
-          <span class="kicker">Connection</span>
+          <span class="kicker">连接</span>
           <h3>API 配置</h3>
         </div>
         <div class="info-list">
@@ -31,20 +32,20 @@
             </div>
           </div>
           <div class="row">
-            <span class="label">API Key</span>
-            <span class="value">{{ maskedKey }}</span>
+            <span class="label">API 密钥</span>
+            <span class="value">{{ maskedKeyText }}</span>
           </div>
           <div class="row">
-            <span class="label">连接状态</span>
+            <span class="label">状态</span>
             <span :class="['status', apiStore.isConnected ? 'connected' : 'unknown']">
               {{ apiStore.isConnected ? '已连接' : '未验证' }}
             </span>
           </div>
         </div>
         <div class="btn-row">
-          <button class="ghost-btn" @click="openEditConfig">修改配置</button>
+          <button class="ghost-btn" @click="openEditConfig">编辑配置</button>
           <button class="primary-btn" :disabled="testing" @click="handleTest">
-            {{ testing ? '测试中...' : '测试连接' }}
+            {{ testing ? '正在测试...' : '测试连接' }}
           </button>
         </div>
         <div v-if="testStatus" :class="['status-msg', testStatusType]">{{ testStatus }}</div>
@@ -52,24 +53,24 @@
 
       <section class="card">
         <div class="section-head">
-          <span class="kicker">Prompt Model</span>
-          <h3>AI 润色</h3>
+          <span class="kicker">提示词优化</span>
+          <h3>提示词增强</h3>
         </div>
         <div class="input-group">
-          <label for="polish-model">润色模型 ID</label>
+          <label for="polish-model">优化模型 ID</label>
           <input
             id="polish-model"
             v-model.trim="settingsStore.promptPolishModel"
             class="text-input"
-            placeholder="填写用于润色提示词的模型 ID"
+            placeholder="请输入用于提示词优化的模型 ID"
             @blur="settingsStore.saveToStorage()"
           />
           <a href="https://www.aiping.cn/modelList" target="_blank" rel="noopener" class="helper-link">
-            查看 ArtRealm AI 官方模型列表
+            查看官方模型列表
           </a>
         </div>
         <div class="input-group">
-          <label for="polish-system-prompt">System Prompt</label>
+          <label for="polish-system-prompt">系统提示词</label>
           <textarea
             id="polish-system-prompt"
             v-model.trim="settingsStore.promptPolishSystemPrompt"
@@ -77,18 +78,18 @@
             :placeholder="defaultPolishSystemPrompt"
             @blur="settingsStore.saveToStorage()"
           />
-          <p class="field-hint">留空时会使用默认润色模板。</p>
+          <p class="field-hint">留空时将使用默认优化提示词。</p>
         </div>
         <div class="btn-row">
-          <button class="ghost-btn" @click="resetPolishPrompt">恢复默认模板</button>
-          <button class="primary-btn" @click="savePolishSettings">保存润色设置</button>
+          <button class="ghost-btn" @click="resetPolishPrompt">恢复默认</button>
+          <button class="primary-btn" @click="savePolishSettings">保存提示词设置</button>
         </div>
         <div v-if="polishStatus" class="status-msg success">{{ polishStatus }}</div>
       </section>
 
-      <section class="card">
+      <section class="card about-card">
         <div class="section-head">
-          <span class="kicker">About</span>
+          <span class="kicker">关于</span>
           <h3>项目信息</h3>
         </div>
         <div class="info-list">
@@ -97,50 +98,34 @@
             <span class="value">v1.2.0</span>
           </div>
           <div class="row">
-            <span class="label">API 文档</span>
-            <a href="https://aiping.cn/docs" target="_blank" class="link">aiping.cn/docs</a>
+            <span class="label">文档</span>
+            <a href="https://aiping.cn/docs" target="_blank" rel="noopener" class="link">aiping.cn/docs</a>
           </div>
         </div>
       </section>
 
       <section class="card danger-card">
         <div class="section-head">
-          <span class="kicker">Danger Zone</span>
-          <h3>账号操作</h3>
+          <span class="kicker">重置</span>
+          <h3>退出登录并清除本地会话</h3>
         </div>
-        <p class="danger-copy">清除本地配置后将退出当前登录状态，并移除当前会话记录。</p>
-        <button class="danger-btn" @click="handleClear">清除配置并退出</button>
+        <p class="danger-copy">这会从当前浏览器中移除 API 配置以及本地会话记录。</p>
+        <button class="danger-btn" @click="handleClear">清除并退出登录</button>
       </section>
     </main>
 
     <div v-if="showEditConfig" class="modal-overlay" @click.self="showEditConfig = false">
       <div class="modal">
-        <span class="kicker">Edit Config</span>
-        <h3>修改 API 配置</h3>
+        <span class="kicker">编辑配置</span>
+        <h3>更新 API 访问信息</h3>
         <div class="input-group">
-          <label for="edit-base-url">Base URL</label>
-          <div class="base-url-switch" aria-label="选择 Base URL 类型">
-            <button
-              type="button"
-              :class="{ active: editBaseUrlMode === 'official' }"
-              @click="selectEditBaseUrlMode('official')"
-            >
-              ArtRealm AI
-            </button>
-            <button
-              type="button"
-              :class="{ active: editBaseUrlMode === 'custom' }"
-              @click="selectEditBaseUrlMode('custom')"
-            >
-              自定义
-            </button>
-          </div>
+          <label for="edit-base-url">服务地址</label>
           <input
             id="edit-base-url"
             v-model="newApiBaseUrl"
             class="text-input"
-            :readonly="editBaseUrlMode === 'official'"
-            :placeholder="editBaseUrlMode === 'official' ? 'https://aiping.cn/api/v1' : 'https://example.com/v1'"
+            readonly
+            placeholder="https://aiping.cn/api/v1"
           />
         </div>
         <ApiKeyInput v-model="newApiKey" />
@@ -148,7 +133,7 @@
         <div class="btn-row">
           <button class="ghost-btn" @click="showEditConfig = false">取消</button>
           <button class="primary-btn" :disabled="!newApiBaseUrl || !newApiKey || saving" @click="handleSaveConfig">
-            {{ saving ? '保存中...' : '确认保存' }}
+            {{ saving ? '正在保存...' : '保存修改' }}
           </button>
         </div>
       </div>
@@ -165,19 +150,16 @@ import { useChatStore } from '@/stores/chatStore'
 import { DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT, useSettingsStore } from '@/stores/settingsStore'
 import { maskApiKey } from '@/utils/format'
 import { testConnection } from '@/api/aiping'
-import { AIPING_PUBLIC_API_BASE_URL, isAipingBaseUrl } from '@/api/config'
+import { AIPING_PUBLIC_API_BASE_URL } from '@/api/config'
 
 const router = useRouter()
 const apiStore = useApiStore()
 const chatStore = useChatStore()
 const settingsStore = useSettingsStore()
 
-type BaseUrlMode = 'official' | 'custom'
-
 const showEditConfig = ref(false)
 const newApiKey = ref('')
 const newApiBaseUrl = ref('')
-const editBaseUrlMode = ref<BaseUrlMode>('official')
 const saving = ref(false)
 const editStatus = ref('')
 const editStatusType = ref<'success' | 'error'>('success')
@@ -188,27 +170,17 @@ const testStatusType = ref<'success' | 'error'>('success')
 const polishStatus = ref('')
 const defaultPolishSystemPrompt = DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT
 
-const maskedKey = computed(() => (apiStore.apiKey ? maskApiKey(apiStore.apiKey) : '未设置'))
+const maskedKeyText = computed(() => (apiStore.apiKey ? maskApiKey(apiStore.apiKey) : '未设置'))
 
 onMounted(() => {
   settingsStore.loadFromStorage()
 })
 
 function openEditConfig() {
-  newApiBaseUrl.value = apiStore.apiBaseUrl
-  editBaseUrlMode.value = isAipingBaseUrl(newApiBaseUrl.value) ? 'official' : 'custom'
+  newApiBaseUrl.value = AIPING_PUBLIC_API_BASE_URL
   newApiKey.value = apiStore.apiKey || ''
   editStatus.value = ''
   showEditConfig.value = true
-}
-
-function selectEditBaseUrlMode(mode: BaseUrlMode) {
-  editBaseUrlMode.value = mode
-  if (mode === 'official') {
-    newApiBaseUrl.value = AIPING_PUBLIC_API_BASE_URL
-  } else if (isAipingBaseUrl(newApiBaseUrl.value)) {
-    newApiBaseUrl.value = ''
-  }
 }
 
 async function handleTest() {
@@ -221,7 +193,7 @@ async function handleTest() {
     testStatusType.value = 'success'
     apiStore.isConnected = true
   } else {
-    testStatus.value = 'API 连接失败，请检查 Base URL 和 API Key。'
+    testStatus.value = '连接失败，请检查 API Key 是否正确。'
     testStatusType.value = 'error'
     apiStore.isConnected = false
   }
@@ -241,7 +213,7 @@ async function handleSaveConfig() {
       editStatus.value = ''
     }, 900)
   } else {
-    editStatus.value = '连接验证失败，请检查 Base URL 和 API Key。'
+    editStatus.value = '连接验证失败，请检查 API Key 是否正确。'
     editStatusType.value = 'error'
   }
 }
@@ -250,13 +222,13 @@ function handleClear() {
   if (confirm('确定要清除配置并退出吗？')) {
     apiStore.clear()
     chatStore.clearMessages()
-    router.push('/setup')
+    router.push('/landing')
   }
 }
 
 function savePolishSettings() {
   settingsStore.saveToStorage()
-  polishStatus.value = '润色设置已保存。'
+  polishStatus.value = '提示词设置已保存。'
   setTimeout(() => {
     polishStatus.value = ''
   }, 1200)
@@ -270,12 +242,8 @@ function resetPolishPrompt() {
 
 <style scoped>
 .settings-page {
-  min-height: 100vh;
   min-height: 100dvh;
   padding: 20px;
-  background:
-    linear-gradient(180deg, #f7f9fc 0%, #eef4fb 48%, #f7f9fc 100%);
-  color: var(--color-text);
 }
 
 .topbar-inner,
@@ -286,83 +254,90 @@ function resetPolishPrompt() {
 }
 
 .topbar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  padding-bottom: 16px;
-  background: linear-gradient(180deg, rgba(247, 249, 252, 0.96), rgba(247, 249, 252, 0.72));
-  backdrop-filter: blur(14px);
+  padding-bottom: 18px;
 }
 
 .topbar-inner {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 18px 22px;
-  border-radius: 22px;
-  border: 1px solid rgba(176, 190, 207, 0.58);
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 12px 32px rgba(31, 41, 55, 0.08);
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px 24px;
+  border: 1px solid var(--color-border);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: var(--color-shadow-soft);
+  backdrop-filter: blur(24px);
 }
 
 .title-block {
-  text-align: center;
+  flex: 1;
 }
 
 .kicker {
   display: block;
   margin-bottom: 6px;
-  font-size: 12px;
-  color: var(--color-text-hint);
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
+  color: var(--color-text-hint);
 }
 
 h1,
 h2,
 h3 {
-  letter-spacing: -0.03em;
+  color: var(--color-text);
+  letter-spacing: -0.04em;
 }
 
 h1 {
-  font-size: 24px;
+  font-size: 28px;
 }
 
 .content {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 22px;
-  padding-bottom: 28px;
+  gap: 18px;
+  padding-bottom: 24px;
 }
 
+.hero-card,
 .card {
-  padding: 28px;
-  border-radius: 24px;
-  border: 1px solid rgba(176, 190, 207, 0.58);
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 14px 34px rgba(31, 41, 55, 0.08);
-  backdrop-filter: blur(16px);
+  border: 1px solid var(--color-border);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: var(--color-shadow-soft);
+  backdrop-filter: blur(24px);
 }
 
 .hero-card {
   grid-column: 1 / -1;
+  padding: 34px 32px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 18px;
+  align-items: end;
   background:
-    linear-gradient(135deg, rgba(0, 113, 227, 0.12), transparent 34%),
-    linear-gradient(180deg, #fff, rgba(247, 250, 253, 0.94));
+    linear-gradient(135deg, rgba(37, 99, 235, 0.12), transparent 26%),
+    rgba(255, 255, 255, 0.82);
 }
 
 .hero-card h2 {
   max-width: 12ch;
-  font-size: clamp(32px, 4vw, 48px);
-  line-height: 1.05;
+  margin-top: 10px;
+  font-size: clamp(34px, 4.4vw, 56px);
+  line-height: 0.98;
 }
 
 .hero-card p,
 .danger-copy {
-  margin-top: 12px;
   color: var(--color-text-secondary);
   line-height: 1.8;
+}
+
+.card {
+  padding: 28px;
 }
 
 .section-head {
@@ -370,47 +345,17 @@ h1 {
 }
 
 .section-head h3 {
-  font-size: 22px;
-}
-
-.dashboard-summary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  margin-bottom: 18px;
-}
-
-.summary-item {
-  padding: 20px;
-  border-radius: 18px;
-  background: #f8fafc;
-  border: 1px solid rgba(176, 190, 207, 0.5);
-}
-
-.summary-label,
-.label,
-.record-header,
-.empty-state {
-  color: var(--color-text-secondary);
-  font-size: 13px;
-}
-
-.summary-value {
-  display: block;
   margin-top: 8px;
-  font-size: 28px;
-  line-height: 1.1;
+  font-size: 24px;
 }
 
-.records-list {
+.info-list {
   overflow: hidden;
-  border-radius: 18px;
-  border: 1px solid rgba(176, 190, 207, 0.5);
-  background: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 22px;
+  background: rgba(244, 247, 251, 0.7);
 }
 
-.record-header,
-.record-row,
 .row,
 .btn-row {
   display: flex;
@@ -419,48 +364,12 @@ h1 {
   gap: 12px;
 }
 
-.record-header,
-.record-row {
-  padding: 14px 18px;
-}
-
-.record-header {
-  border-bottom: 1px solid var(--color-border);
-}
-
-.record-row + .record-row,
-.row + .row {
-  border-top: 1px solid var(--color-border);
-}
-
-.record-model,
-.value,
-.link {
-  color: var(--color-text);
-}
-
-.record-cost {
-  color: var(--color-danger);
-  font-weight: 700;
-}
-
-.empty-state {
-  padding: 20px;
-  border-radius: 18px;
-  background: #f8fafc;
-  border: 1px solid rgba(176, 190, 207, 0.5);
-  line-height: 1.8;
-}
-
-.info-list {
-  overflow: hidden;
-  border-radius: 18px;
-  border: 1px solid rgba(176, 190, 207, 0.5);
-  background: #f8fafc;
-}
-
 .row {
   padding: 16px 18px;
+}
+
+.row + .row {
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
 }
 
 .row-service-url {
@@ -470,27 +379,33 @@ h1 {
 .service-url-block {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
   gap: 10px;
   width: 100%;
+}
+
+.label,
+.field-hint,
+.helper-link {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.value,
+.link {
+  color: var(--color-text);
 }
 
 .service-url-value {
   display: block;
   width: 100%;
   padding: 14px 16px;
-  border-radius: 14px;
-  border: 1px solid rgba(176, 190, 207, 0.5);
-  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.82);
   color: var(--color-text-secondary);
   font-size: 13px;
   line-height: 1.6;
   word-break: break-all;
-  overflow-wrap: anywhere;
-}
-
-.fixed {
-  color: var(--color-text-secondary);
 }
 
 .status {
@@ -498,7 +413,7 @@ h1 {
   align-items: center;
   min-height: 32px;
   padding: 0 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 12px;
   font-weight: 700;
 }
@@ -509,7 +424,7 @@ h1 {
 }
 
 .status.unknown {
-  background: rgba(29, 29, 31, 0.06);
+  background: rgba(148, 163, 184, 0.14);
   color: var(--color-text-secondary);
 }
 
@@ -518,7 +433,9 @@ h1 {
 .danger-btn {
   min-height: 44px;
   padding: 0 18px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 700;
   transition:
     transform var(--transition-base),
     background var(--transition-base),
@@ -526,26 +443,22 @@ h1 {
     opacity var(--transition-base);
 }
 
-.ghost-btn,
-.primary-btn {
-  border: 1px solid var(--color-border);
-}
-
 .ghost-btn {
-  background: #fff;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.72);
   color: var(--color-text);
 }
 
 .primary-btn {
-  border-color: transparent;
-  background: var(--color-primary);
+  border: none;
+  background: linear-gradient(135deg, #0f172a, #2563eb);
   color: #fff;
 }
 
 .danger-btn {
   margin-top: 18px;
   border: none;
-  background: var(--color-danger);
+  background: #dc2626;
   color: #fff;
 }
 
@@ -553,10 +466,6 @@ h1 {
 .primary-btn:hover,
 .danger-btn:hover {
   transform: translateY(-1px);
-}
-
-.primary-btn:hover {
-  background: var(--color-primary-hover);
 }
 
 .btn-row {
@@ -581,12 +490,67 @@ h1 {
   color: var(--color-danger);
 }
 
-.danger-card {
-  grid-column: 1 / -1;
+.input-group {
+  margin-bottom: 18px;
 }
 
-.placeholder {
-  width: 96px;
+label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.text-input,
+.text-area {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--color-text);
+  transition:
+    border-color var(--transition-base),
+    box-shadow var(--transition-base),
+    background var(--transition-base);
+}
+
+.text-input {
+  min-width: 0;
+  padding: 14px 16px;
+}
+
+.text-area {
+  min-height: 132px;
+  padding: 16px 18px;
+  line-height: 1.72;
+  resize: vertical;
+  outline: none;
+}
+
+.text-input:read-only {
+  color: var(--color-text-secondary);
+}
+
+.text-input:focus,
+.text-area:focus {
+  outline: none;
+  border-color: rgba(37, 99, 235, 0.34);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.helper-link {
+  display: inline-block;
+  margin-top: 10px;
+  color: var(--color-accent);
+}
+
+.about-card,
+.danger-card {
+  grid-column: span 1;
 }
 
 .modal-overlay {
@@ -597,124 +561,36 @@ h1 {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(8, 8, 10, 0.18);
+  background: rgba(15, 23, 42, 0.14);
   backdrop-filter: blur(10px);
 }
 
 .modal {
   padding: 28px;
-  border-radius: 24px;
-  border: 1px solid rgba(176, 190, 207, 0.58);
-  background: #fff;
-  box-shadow: 0 20px 52px rgba(15, 23, 42, 0.18);
+  border: 1px solid var(--color-border);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.14);
 }
 
 .modal h3 {
+  margin-top: 8px;
   margin-bottom: 18px;
-  font-size: 28px;
-}
-
-.input-group {
-  margin-bottom: 18px;
-}
-
-label {
-  display: block;
-  margin-bottom: 12px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--color-text-secondary);
-  letter-spacing: 0.02em;
-}
-
-.base-url-switch {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 12px;
-  padding: 4px;
-  border: 1px solid rgba(176, 190, 207, 0.5);
-  border-radius: 18px;
-  background: #f8fafc;
-}
-
-.base-url-switch button {
-  min-height: 38px;
-  border: none;
-  border-radius: 14px;
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-weight: 700;
-  transition:
-    background var(--transition-base),
-    color var(--transition-base),
-    box-shadow var(--transition-base);
-}
-
-.base-url-switch button.active {
-  background: #fff;
-  color: var(--color-text);
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
-}
-
-.text-input {
-  width: 100%;
-  min-width: 0;
-  padding: 16px 18px;
-  border: 1px solid rgba(176, 190, 207, 0.62);
-  border-radius: 18px;
-  background: #fff;
-  color: var(--color-text);
-  transition:
-    border-color var(--transition-base),
-    box-shadow var(--transition-base),
-    background var(--transition-base);
-}
-
-.text-input:read-only {
-  color: var(--color-text-secondary);
-}
-
-.text-input:focus {
-  outline: none;
-  border-color: rgba(0, 113, 227, 0.35);
-  box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.12);
-  background: #fff;
-}
-
-.text-area {
-  width: 100%;
-  min-height: 132px;
-  padding: 16px 18px;
-  border: 1px solid rgba(176, 190, 207, 0.62);
-  border-radius: 18px;
-  background: #fff;
-  color: var(--color-text);
-  line-height: 1.7;
-  resize: vertical;
-  outline: none;
-}
-
-.text-area:focus {
-  border-color: rgba(0, 113, 227, 0.35);
-  box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.12);
-  background: #fff;
-}
-
-.helper-link,
-.field-hint {
-  display: inline-block;
-  margin-top: 10px;
-  font-size: 13px;
-  color: var(--color-text-secondary);
-}
-
-.helper-link {
-  color: var(--color-primary);
+  font-size: 30px;
 }
 
 @media (max-width: 1023px) {
   .content {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-card,
+  .about-card,
+  .danger-card {
+    grid-column: 1 / -1;
+  }
+
+  .hero-card {
     grid-template-columns: 1fr;
   }
 }
@@ -725,64 +601,27 @@ label {
   }
 
   .topbar-inner,
+  .hero-card,
   .card,
   .modal {
-    padding: 20px;
-    border-radius: 24px;
+    padding: 20px 16px;
+    border-radius: 22px;
   }
 
-  .topbar-inner {
-    grid-template-columns: 1fr;
-    justify-items: start;
-  }
-
-  .title-block {
-    text-align: left;
-  }
-
-  h1 {
-    font-size: 20px;
-  }
-
-  .content {
-    gap: 14px;
-  }
-
-  .section-head h3 {
-    font-size: 20px;
+  .topbar-inner,
+  .row,
+  .btn-row {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .hero-card h2 {
     max-width: 100%;
-    font-size: clamp(28px, 8vw, 36px);
+    font-size: clamp(30px, 9vw, 42px);
   }
 
-  .row,
-  .btn-row {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .row {
-    padding: 14px 16px;
-  }
-
-  .service-url-block {
-    gap: 8px;
-  }
-
-  .service-url-value {
-    padding: 12px 14px;
-    font-size: 12px;
-    line-height: 1.55;
-    border-radius: 12px;
-  }
-
-  .value,
-  .link,
-  .fixed {
-    width: 100%;
-    word-break: break-word;
+  h1 {
+    font-size: 24px;
   }
 
   .ghost-btn,
@@ -800,19 +639,6 @@ label {
     width: 100%;
     max-height: min(88dvh, 720px);
     overflow-y: auto;
-    border-radius: 24px 24px 0 0;
-  }
-
-  .modal h3 {
-    font-size: 24px;
-  }
-
-  .placeholder {
-    display: none;
-  }
-
-  .dashboard-summary {
-    grid-template-columns: 1fr;
   }
 }
 </style>

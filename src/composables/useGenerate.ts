@@ -9,6 +9,7 @@ import { normalizeErrorMessage, showErrorMessage } from '@/utils/errors'
 import { aspectRatioToDimensions, aspectRatioToImageSize } from '@/features/generate/aspectRatio'
 import { fileToBase64, toRawBase64 } from '@/features/generate/files'
 import { pollVideoStatus, setVideoRatio, deleteVideoRatio } from '@/features/generate/video'
+import { resolveRealCost } from '@/utils/format'
 
 type ImageRequestMode = NonNullable<ModelCapability['imageRequestMode']>
 
@@ -53,6 +54,7 @@ function buildImageParams(
         imageParams.width = width
         imageParams.height = height
       }
+
     }
 
     return imageParams
@@ -66,6 +68,7 @@ async function buildVideoParams(
   model: string | null,
   uploadedFile: UploadedFile | null | undefined,
   aspectRatio: string,
+  duration: number,
   videoRequestMode: ModelCapability['videoRequestMode']
 ): Promise<VideoGenerateRequest> {
   let uploadValue = uploadedFile?.url
@@ -76,6 +79,7 @@ async function buildVideoParams(
   const videoParams: VideoGenerateRequest = {
     prompt,
     model: model || undefined,
+    duration,
   }
   setVideoRatio(videoParams, aspectRatio)
 
@@ -100,6 +104,26 @@ async function buildVideoParams(
         setVideoRatio(videoParams, getKlingAspectRatio(aspectRatio))
       }
       break
+    case 'viduq3-fast':
+      if (uploadValue) {
+        videoParams.image = uploadValue
+        videoParams.resolution = '720p'
+      }
+      delete videoParams.images
+      delete videoParams.img_url
+      delete videoParams.first_frame_url
+      delete videoParams.last_frame_url
+      delete videoParams.reference_images
+      delete videoParams.video_list
+      delete videoParams.aspect_ratio
+      delete videoParams.ratio
+      delete videoParams.size
+      delete videoParams.audio
+      delete videoParams.off_peak
+      delete videoParams.watermark
+      videoParams.movement_amplitude = 'auto'
+      delete videoParams.extra_body
+      break
     default:
       if (uploadValue) videoParams.img_url = uploadValue
       break
@@ -116,7 +140,8 @@ export function useGenerate() {
     ioType: ModelIOType,
     model: string | null,
     uploadedFile?: UploadedFile | null,
-    aspectRatio = '1:1'
+    aspectRatio = '1:1',
+    duration = 6
   ) {
     validatePromptOrThrow(prompt)
 
@@ -129,6 +154,7 @@ export function useGenerate() {
       uploadedFile: uploadedFile || undefined,
       aspectRatio,
       model: model || undefined,
+        duration,
     })
 
     const assistantId = chatStore.addMessage({
@@ -159,7 +185,10 @@ export function useGenerate() {
             url,
             model: result.model || model || 'Qwen-Image-2.0-Pro',
             provider: result.provider,
-            cost: 0.05,
+            cost: resolveRealCost(result),
+            aspectRatio,
+            createdAt: Date.now(),
+            size: aspectRatioToDimensions(aspectRatio, capability?.imageRequestMode),
           },
         })
         return
@@ -170,6 +199,7 @@ export function useGenerate() {
         model,
         uploadedFile,
         aspectRatio,
+        duration,
         capability?.videoRequestMode
       )
 
@@ -188,7 +218,10 @@ export function useGenerate() {
           url: videoUrl,
           model: finalStatus.model,
           provider: finalStatus.provider,
-          cost: 0.5,
+          cost: resolveRealCost(finalStatus),
+          aspectRatio,
+          createdAt: Date.now(),
+          size: aspectRatioToDimensions(aspectRatio),
           thumbnail: finalStatus.data?.[0]?.thumbnail,
           duration: finalStatus.seconds || finalStatus.data?.[0]?.duration,
         },

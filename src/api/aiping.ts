@@ -202,6 +202,7 @@ export async function generateVideo(params: VideoGenerateRequest): Promise<Video
     prompt: params.prompt,
   }
   if (params.image) fullBody.image = params.image
+  if (params.images?.length) fullBody.images = params.images
   if (params.img_url) fullBody.img_url = params.img_url
   if (params.first_frame_url) fullBody.first_frame_url = params.first_frame_url
   if (params.last_frame_url) fullBody.last_frame_url = params.last_frame_url
@@ -211,25 +212,59 @@ export async function generateVideo(params: VideoGenerateRequest): Promise<Video
   if (params.aspect_ratio) fullBody.aspect_ratio = params.aspect_ratio
   if (params.ratio) fullBody.ratio = params.ratio
   if (params.size) fullBody.size = params.size
+  if (params.resolution) fullBody.resolution = params.resolution
+  if (typeof params.audio === 'boolean') fullBody.audio = params.audio
+  if (params.movement_amplitude) fullBody.movement_amplitude = params.movement_amplitude
+  if (typeof params.off_peak === 'boolean') fullBody.off_peak = params.off_peak
+  if (typeof params.watermark === 'boolean') fullBody.watermark = params.watermark
+  if (params.extra_body) fullBody.extra_body = params.extra_body
+
+  const isViduModel = params.model === 'ViduQ3-Pro-Fast' || params.model === 'ViduQ3-Pro'
+  const hasViduImageInput = !!(fullBody.images || fullBody.image || fullBody.img_url)
+  const videoEndpoint = isViduModel && hasViduImageInput ? '/videos/vidu/img2video' : '/videos'
+
+  if (isViduModel && videoEndpoint === '/videos/vidu/img2video') {
+    if (fullBody.images && !fullBody.image) {
+      fullBody.image = Array.isArray(fullBody.images) ? fullBody.images[0] : fullBody.images
+    }
+    delete fullBody.images
+  }
 
   console.log('generateVideo trying full body:', fullBody)
   try {
-    const response = await client.post('/videos', fullBody)
+    const response = await client.post(videoEndpoint, fullBody)
     return response.data
   } catch (error: any) {
     console.log('generateVideo error:', error.response?.status, JSON.stringify(error.response?.data))
     if (error.response?.status === 400 || error.response?.status === 422) {
       const minimalBody: Record<string, unknown> = { model: fullBody.model, prompt: fullBody.prompt }
       if (fullBody.image) minimalBody.image = fullBody.image
+      if (fullBody.images) minimalBody.images = fullBody.images
       if (fullBody.img_url) minimalBody.img_url = fullBody.img_url
       if (fullBody.first_frame_url) minimalBody.first_frame_url = fullBody.first_frame_url
       if (fullBody.video_list) minimalBody.video_list = fullBody.video_list
       if (fullBody.aspect_ratio) minimalBody.aspect_ratio = fullBody.aspect_ratio
       if (fullBody.ratio) minimalBody.ratio = fullBody.ratio
       if (fullBody.size) minimalBody.size = fullBody.size
+      if (fullBody.resolution) minimalBody.resolution = fullBody.resolution
+      if (typeof fullBody.audio === 'boolean') minimalBody.audio = fullBody.audio
+      if (fullBody.movement_amplitude) minimalBody.movement_amplitude = fullBody.movement_amplitude
+      if (typeof fullBody.off_peak === 'boolean') minimalBody.off_peak = fullBody.off_peak
+      if (typeof fullBody.watermark === 'boolean') minimalBody.watermark = fullBody.watermark
+      if (fullBody.extra_body) minimalBody.extra_body = fullBody.extra_body
 
       const fallbackBodies: Record<string, unknown>[] = []
       pushUniqueBody(fallbackBodies, minimalBody)
+
+      if (isViduModel && minimalBody.images && !minimalBody.image) {
+        const viduImages = minimalBody.images
+        const viduImageBody: Record<string, unknown> = {
+          ...minimalBody,
+          image: Array.isArray(viduImages) ? viduImages[0] : viduImages,
+        }
+        delete viduImageBody.images
+        pushUniqueBody(fallbackBodies, viduImageBody)
+      }
 
       if (minimalBody.aspect_ratio && minimalBody.ratio) {
         const aspectRatioOnly = { ...minimalBody }
@@ -245,7 +280,8 @@ export async function generateVideo(params: VideoGenerateRequest): Promise<Video
       for (const body of fallbackBodies) {
         console.log('generateVideo fallback body:', body)
         try {
-          const response = await client.post('/videos', body)
+          const fallbackEndpoint = isViduModel && (body.images || body.image || body.img_url) ? '/videos/vidu/img2video' : '/videos'
+          const response = await client.post(fallbackEndpoint, body)
           return response.data
         } catch (fallbackError: any) {
           lastError = fallbackError

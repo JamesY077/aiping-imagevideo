@@ -1,12 +1,8 @@
 <template>
   <div class="api-key-input">
-    <label>API Key</label>
+    <label>API 密钥</label>
     <div class="input-wrapper">
-      <input
-        :type="showKey ? 'text' : 'password'"
-        v-model="localKey"
-        placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
-      />
+      <input :type="showKey ? 'text' : 'password'" v-model="localKey" placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx" />
       <button type="button" class="toggle-visibility" @click="showKey = !showKey">
         {{ showKey ? '隐藏' : '显示' }}
       </button>
@@ -36,37 +32,32 @@ watch(() => props.modelValue, (value) => {
 
 label {
   display: block;
-  margin-bottom: 12px;
-  font-size: 13px;
+  margin-bottom: 10px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--color-text-secondary);
-  letter-spacing: 0.02em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .input-wrapper {
   display: flex;
-  gap: 12px;
+  gap: 10px;
 }
 
 input {
   flex: 1;
   min-width: 0;
-  padding: 16px 18px;
+  padding: 15px 16px;
   border: 1px solid var(--color-border);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.9);
+  background: #fff;
   color: var(--color-text);
-  transition:
-    border-color var(--transition-base),
-    box-shadow var(--transition-base),
-    background var(--transition-base);
+  outline: none;
 }
 
 input:focus {
-  outline: none;
-  border-color: rgba(0, 113, 227, 0.35);
-  box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.12);
-  background: #fff;
+  border-color: var(--color-border-strong);
 }
 
 input::placeholder {
@@ -75,20 +66,13 @@ input::placeholder {
 
 .toggle-visibility {
   flex-shrink: 0;
+  min-height: 50px;
   padding: 0 18px;
   border: 1px solid var(--color-border);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.75);
-  color: var(--color-text);
-  transition:
-    transform var(--transition-base),
-    background var(--transition-base),
-    border-color var(--transition-base);
-}
-
-.toggle-visibility:hover {
-  transform: translateY(-1px);
+  border-radius: 999px;
   background: #fff;
-  border-color: var(--color-border-strong);
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 600;
 }
 </style>

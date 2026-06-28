@@ -50,7 +50,6 @@
           >
             ⧉
           </button>
-          <CostDisplay v-if="message.generateResult" :cost="message.generateResult.cost" />
         </div>
       </div>
     </div>
@@ -60,7 +59,6 @@
 <script setup lang="ts">
 import ImageResult from './ImageResult.vue'
 import VideoResult from './VideoResult.vue'
-import CostDisplay from './CostDisplay.vue'
 import { formatTime } from '@/utils/format'
 import type { Message } from '@/types/chat'
 
