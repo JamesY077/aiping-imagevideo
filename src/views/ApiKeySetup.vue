@@ -21,8 +21,7 @@
             id="api-base-url"
             v-model="apiBaseUrl"
             class="text-input"
-            readonly
-            placeholder="https://aiping.cn/api/v1"
+            placeholder="https://api.openai.com/v1"
           />
         </div>
 
@@ -31,15 +30,11 @@
         </div>
 
         <div class="tips">
-          <p>
-            目前仅支持使用
-            <a href="https://www.aiping.cn/" target="_blank" rel="noopener">aiping</a>
-            官方服务地址。
-          </p>
+          <p>服务地址可自由填写，仅支持 OpenAI baseURL 格式，例如：https://api.openai.com/v1。</p>
         </div>
 
         <button class="submit-btn" :disabled="!apiBaseUrl.trim() || !apiKey.trim() || isLoading" @click="handleSubmit">
-          {{ isLoading ? '正在验证访问权限...' : '进入工作台' }}
+          {{ isLoading ? '正在验证连通性...' : '点击登录' }}
         </button>
 
         <div v-if="error" class="error-msg">{{ error }}</div>
@@ -62,8 +57,26 @@ const apiBaseUrl = ref(AIPING_PUBLIC_API_BASE_URL)
 const isLoading = ref(false)
 const error = ref('')
 
+function isOpenAiBaseUrl(value: string): boolean {
+  const trimmed = value.trim()
+  if (!trimmed) return false
+
+  try {
+    const url = new URL(trimmed)
+    if (!['http:', 'https:'].includes(url.protocol)) return false
+    return url.pathname.replace(/\/+$/, '').endsWith('/v1')
+  } catch {
+    return false
+  }
+}
+
 async function handleSubmit() {
   if (!apiBaseUrl.value.trim() || !apiKey.value.trim()) return
+  if (!isOpenAiBaseUrl(apiBaseUrl.value)) {
+    error.value = '服务地址格式不正确，请填写 OpenAI baseURL 格式，例如：https://api.openai.com/v1。'
+    return
+  }
+
   isLoading.value = true
   error.value = ''
   const ok = await apiStore.testAndSave(apiKey.value.trim(), apiBaseUrl.value.trim())
