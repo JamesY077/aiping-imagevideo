@@ -106,6 +106,19 @@ export function normalizeApiBaseUrl(baseUrl: string): string {
   return normalized
 }
 
+export function isOpenAiBaseUrlFormat(baseUrl: string): boolean {
+  const trimmed = baseUrl.trim()
+  if (!trimmed) return false
+
+  try {
+    const url = new URL(trimmed)
+    if (!['http:', 'https:'].includes(url.protocol)) return false
+    return url.pathname.replace(/\/+$/, '').endsWith('/v1')
+  } catch {
+    return false
+  }
+}
+
 export function isAipingBaseUrl(baseUrl: string): boolean {
   return normalizeApiBaseUrl(baseUrl) === '/api/v1'
 }
@@ -117,18 +130,8 @@ export function getApiKey(): string | null {
 export function saveApiKey(apiKey: string): void {
   const current = parseStoredApiAuth()
   const normalizedBaseUrl = current?.apiBaseUrl || DEFAULT_API_BASE_URL
-  const sessionId = createSessionId()
 
-  localStorage.setItem(
-    API_AUTH_STORAGE_KEY,
-    JSON.stringify({
-      apiKey,
-      apiBaseUrl: normalizedBaseUrl,
-      sessionId,
-      verifiedAtEpochMs: Date.now(),
-      verifiedDateCN: getCurrentChinaDateKey(),
-    } satisfies StoredApiAuth),
-  )
+  saveApiAuth(apiKey, normalizedBaseUrl)
 }
 
 export function clearApiKey(): void {
@@ -156,6 +159,21 @@ export function saveApiBaseUrl(baseUrl: string): void {
       sessionId: current?.sessionId || createSessionId(),
       verifiedAtEpochMs: current?.verifiedAtEpochMs || 0,
       verifiedDateCN: current?.verifiedDateCN || '',
+    } satisfies StoredApiAuth),
+  )
+}
+
+export function saveApiAuth(apiKey: string, baseUrl: string): void {
+  const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, '')
+
+  localStorage.setItem(
+    API_AUTH_STORAGE_KEY,
+    JSON.stringify({
+      apiKey: apiKey.trim(),
+      apiBaseUrl: normalizedBaseUrl,
+      sessionId: createSessionId(),
+      verifiedAtEpochMs: Date.now(),
+      verifiedDateCN: getCurrentChinaDateKey(),
     } satisfies StoredApiAuth),
   )
 }

@@ -48,7 +48,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import ApiKeyInput from '@/components/ApiKeyInput.vue'
 import { useApiStore } from '@/stores/apiStore'
-import { AIPING_PUBLIC_API_BASE_URL } from '@/api/config'
+import { AIPING_PUBLIC_API_BASE_URL, isOpenAiBaseUrlFormat } from '@/api/config'
 
 const router = useRouter()
 const apiStore = useApiStore()
@@ -57,22 +57,9 @@ const apiBaseUrl = ref(AIPING_PUBLIC_API_BASE_URL)
 const isLoading = ref(false)
 const error = ref('')
 
-function isOpenAiBaseUrl(value: string): boolean {
-  const trimmed = value.trim()
-  if (!trimmed) return false
-
-  try {
-    const url = new URL(trimmed)
-    if (!['http:', 'https:'].includes(url.protocol)) return false
-    return url.pathname.replace(/\/+$/, '').endsWith('/v1')
-  } catch {
-    return false
-  }
-}
-
 async function handleSubmit() {
   if (!apiBaseUrl.value.trim() || !apiKey.value.trim()) return
-  if (!isOpenAiBaseUrl(apiBaseUrl.value)) {
+  if (!isOpenAiBaseUrlFormat(apiBaseUrl.value)) {
     error.value = '服务地址格式不正确，请填写 OpenAI baseURL 格式，例如：https://api.openai.com/v1。'
     return
   }

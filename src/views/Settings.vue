@@ -28,7 +28,13 @@
           <div class="row row-service-url">
             <div class="service-url-block">
               <span class="label">服务地址</span>
-              <span class="service-url-value">{{ apiStore.apiBaseUrl }}</span>
+              <input
+                v-model="settingsApiBaseUrl"
+                class="text-input service-url-input"
+                placeholder="https://api.openai.com/v1"
+                readonly
+              />
+              <p class="field-hint">如需修改 Base URL 或 API Key，请先点击“编辑配置”。</p>
             </div>
           </div>
           <div class="row">
@@ -124,9 +130,9 @@
             id="edit-base-url"
             v-model="newApiBaseUrl"
             class="text-input"
-            readonly
-            placeholder="https://aiping.cn/api/v1"
+            placeholder="https://api.openai.com/v1"
           />
+          <p class="field-hint">服务地址可自由填写，仅支持 OpenAI baseURL 格式，例如：https://api.openai.com/v1。</p>
         </div>
         <ApiKeyInput v-model="newApiKey" />
         <div v-if="editStatus" :class="['status-msg', editStatusType]">{{ editStatus }}</div>
@@ -149,8 +155,8 @@ import { useApiStore } from '@/stores/apiStore'
 import { useChatStore } from '@/stores/chatStore'
 import { DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT, useSettingsStore } from '@/stores/settingsStore'
 import { maskApiKey } from '@/utils/format'
-import { testConnection } from '@/api/aiping'
-import { AIPING_PUBLIC_API_BASE_URL } from '@/api/config'
+import { testConnectionWithDetail } from '@/api/aiping'
+import { AIPING_PUBLIC_API_BASE_URL, isOpenAiBaseUrlFormat } from '@/api/config'
 
 const router = useRouter()
 const apiStore = useApiStore()
@@ -160,6 +166,7 @@ const settingsStore = useSettingsStore()
 const showEditConfig = ref(false)
 const newApiKey = ref('')
 const newApiBaseUrl = ref('')
+const settingsApiBaseUrl = ref(apiStore.apiBaseUrl || AIPING_PUBLIC_API_BASE_URL)
 const saving = ref(false)
 const editStatus = ref('')
 const editStatusType = ref<'success' | 'error'>('success')
@@ -177,7 +184,7 @@ onMounted(() => {
 })
 
 function openEditConfig() {
-  newApiBaseUrl.value = AIPING_PUBLIC_API_BASE_URL
+  newApiBaseUrl.value = apiStore.apiBaseUrl || AIPING_PUBLIC_API_BASE_URL
   newApiKey.value = apiStore.apiKey || ''
   editStatus.value = ''
   showEditConfig.value = true
@@ -186,34 +193,41 @@ function openEditConfig() {
 async function handleTest() {
   testing.value = true
   testStatus.value = ''
-  const ok = await testConnection()
+  const result = await testConnectionWithDetail()
   testing.value = false
-  if (ok) {
+  if (result.ok) {
     testStatus.value = 'API 连接成功。'
     testStatusType.value = 'success'
     apiStore.isConnected = true
   } else {
-    testStatus.value = '连接失败，请检查 API Key 是否正确。'
+    testStatus.value = result.message || '连接失败，请检查 Base URL 和 API Key。'
     testStatusType.value = 'error'
     apiStore.isConnected = false
   }
 }
 
 async function handleSaveConfig() {
-  if (!newApiBaseUrl.value || !newApiKey.value) return
+  if (!newApiBaseUrl.value.trim() || !newApiKey.value.trim()) return
+  if (!isOpenAiBaseUrlFormat(newApiBaseUrl.value)) {
+    editStatus.value = '服务地址格式不正确，请填写 OpenAI baseURL 格式，例如：https://api.openai.com/v1。'
+    editStatusType.value = 'error'
+    return
+  }
+
   saving.value = true
   editStatus.value = ''
-  const ok = await apiStore.testAndSave(newApiKey.value, newApiBaseUrl.value)
+  const ok = await apiStore.testAndSave(newApiKey.value.trim(), newApiBaseUrl.value.trim())
   saving.value = false
   if (ok) {
-    editStatus.value = '保存成功。'
+    settingsApiBaseUrl.value = apiStore.apiBaseUrl
+    editStatus.value = '保存成功，连接验证通过。'
     editStatusType.value = 'success'
     setTimeout(() => {
       showEditConfig.value = false
       editStatus.value = ''
     }, 900)
   } else {
-    editStatus.value = '连接验证失败，请检查 API Key 是否正确。'
+    editStatus.value = apiStore.connectionError || '连接验证失败，请检查 Base URL 和 API Key。'
     editStatusType.value = 'error'
   }
 }

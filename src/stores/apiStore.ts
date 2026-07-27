@@ -7,8 +7,7 @@ import {
   getApiKey,
   markApiSessionReady,
   clearApiSessionReady,
-  saveApiBaseUrl,
-  saveApiKey,
+  saveApiAuth,
 } from '@/api/config'
 import { testConnectionWithDetail } from '@/api/aiping'
 import { restartApiSessionGuard, stopApiSessionGuard } from '@/utils/sessionGuard'
@@ -26,12 +25,13 @@ export const useApiStore = defineStore('api', () => {
   async function testAndSave(key: string, baseUrl = apiBaseUrl.value): Promise<boolean> {
     isTesting.value = true
     connectionError.value = ''
+    const trimmedKey = key.trim()
+    const trimmedBaseUrl = baseUrl.trim()
     try {
-      const result = await testConnectionWithDetail(key, baseUrl)
+      const result = await testConnectionWithDetail(trimmedKey, trimmedBaseUrl)
       if (result.ok) {
-        saveApiBaseUrl(baseUrl)
-        saveApiKey(key)
-        apiKey.value = key
+        saveApiAuth(trimmedKey, trimmedBaseUrl)
+        apiKey.value = trimmedKey
         apiBaseUrl.value = getApiBaseUrlInputValue()
         markApiSessionReady()
         restartApiSessionGuard()
@@ -49,6 +49,15 @@ export const useApiStore = defineStore('api', () => {
     }
   }
 
+  async function updateBaseUrl(baseUrl: string): Promise<boolean> {
+    if (!apiKey.value) {
+      connectionError.value = '请先填写 API Key。'
+      return false
+    }
+
+    return testAndSave(apiKey.value, baseUrl)
+  }
+
   function clear() {
     clearApiKey()
     clearApiBaseUrl()
@@ -60,5 +69,5 @@ export const useApiStore = defineStore('api', () => {
     connectionError.value = ''
   }
 
-  return { apiKey, apiBaseUrl, isConnected, isTesting, connectionError, hasApiKey, hasApiConfig, testAndSave, clear }
+  return { apiKey, apiBaseUrl, isConnected, isTesting, connectionError, hasApiKey, hasApiConfig, testAndSave, updateBaseUrl, clear }
 })
