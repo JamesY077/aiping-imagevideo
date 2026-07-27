@@ -106,22 +106,26 @@ async function buildVideoParams(
       break
     case 'viduq3-fast':
       if (uploadValue) {
-        videoParams.image = uploadValue
-        videoParams.resolution = '720p'
+        videoParams.images = [uploadValue]
+        videoParams.resolution = '1080p'
+        videoParams.movement_amplitude = 'auto'
+      } else {
+        videoParams.aspect_ratio = aspectRatio || '4:3'
+        videoParams.resolution = '540p'
+        videoParams.style = 'general'
+        videoParams.movement_amplitude = 'auto'
       }
-      delete videoParams.images
+      delete videoParams.image
       delete videoParams.img_url
       delete videoParams.first_frame_url
       delete videoParams.last_frame_url
       delete videoParams.reference_images
       delete videoParams.video_list
-      delete videoParams.aspect_ratio
       delete videoParams.ratio
       delete videoParams.size
       delete videoParams.audio
       delete videoParams.off_peak
       delete videoParams.watermark
-      videoParams.movement_amplitude = 'auto'
       delete videoParams.extra_body
       break
     default:
@@ -178,6 +182,9 @@ export function useGenerate() {
 
         const result = await generateImage(imageParams)
         const url = result.data[0]?.url || ''
+        if (!url) {
+          throw new Error('图片生成完成但未返回有效图片地址，请稍后重试或切换模型。')
+        }
         chatStore.updateMessage(assistantId, {
           generateStatus: 'completed',
           generateResult: {
@@ -204,13 +211,25 @@ export function useGenerate() {
       )
 
       const task = await generateVideo(videoParams)
+      if (!task.id) {
+        throw new Error('视频任务创建成功但未返回任务 ID，请稍后重试或切换模型。')
+      }
       chatStore.updateMessage(assistantId, { generateStatus: 'processing' })
 
-      const finalStatus = await pollVideoStatus(task.id, (progress) => {
-        chatStore.updateMessage(assistantId, { progress })
-      })
+      const finalStatus = await pollVideoStatus(
+        task.id,
+        (progress) => {
+          chatStore.updateMessage(assistantId, { progress })
+        },
+        3000,
+        100,
+        task.provider
+      )
 
       const videoUrl = finalStatus.video_url || finalStatus.data?.[0]?.url || ''
+      if (!videoUrl) {
+        throw new Error('视频生成完成但未返回有效视频地址，请稍后重试或切换模型。')
+      }
       chatStore.updateMessage(assistantId, {
         generateStatus: 'completed',
         generateResult: {

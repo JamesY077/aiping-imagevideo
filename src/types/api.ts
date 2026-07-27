@@ -101,22 +101,42 @@ export interface VideoGenerateRequest {
   movement_amplitude?: string
   off_peak?: boolean
   watermark?: boolean
+  seed?: number
+  style?: string
+  payload?: string
   extra_body?: Record<string, unknown>
 }
 
 export interface VideoGenerateResponse {
   id: string
+  task_id?: string
   object: 'video.generation'
   created: number
-  status: 'pending'
+  status: 'pending' | 'created' | string
+  provider?: string
+  state?: string
   model: string
+  images?: string[]
+  prompt?: string
+  duration?: number
+  seed?: number
+  aspect_ratio?: string
+  resolution?: string
+  movement_amplitude?: string
+  audio?: boolean
+  payload?: string
+  off_peak?: boolean
+  credits?: number
+  created_at?: string
 }
 
 export interface VideoStatusResponse {
   id: string
+  task_id?: string
   object?: string
   created?: number
   status: string
+  state?: string
   model: string
   progress?: number
   video_url?: string

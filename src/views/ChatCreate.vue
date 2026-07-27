@@ -269,7 +269,10 @@ const inputPlaceholder = computed(() => {
   if (settingsStore.mediaType === 'image' && uploadedFile.value) {
     return '描述你希望参考图如何变化：风格、光线、细节、构图。'
   }
-  if (settingsStore.mediaType === 'video' && uploadedFile.value) {
+  if (settingsStore.mediaType === 'video' && uploadedFile.value?.type === 'image') {
+    return '描述你希望参考图如何动起来：主体运动、镜头推进、节奏和氛围。'
+  }
+  if (settingsStore.mediaType === 'video' && uploadedFile.value?.type === 'video') {
     return '描述你希望参考视频如何延展：运动、镜头、节奏、氛围。'
   }
   return settingsStore.mediaType === 'image'

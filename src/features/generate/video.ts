@@ -1,16 +1,17 @@
-import { getVideoStatus } from '@/api/aiping'
+import { getVideoStatusWithProvider } from '@/api/aiping'
 import type { VideoGenerateRequest, VideoStatusResponse } from '@/types/api'
 
 export async function pollVideoStatus(
   taskId: string,
   onProgress?: (progress: number) => void,
   interval = 3000,
-  maxAttempts = 100
+  maxAttempts = 100,
+  provider?: string
 ): Promise<VideoStatusResponse> {
   for (let i = 0; i < maxAttempts; i++) {
-    const status = await getVideoStatus(taskId)
-    const normalizedStatus = status.status?.toLowerCase()
-    if (status.progress && onProgress) {
+    const status = await getVideoStatusWithProvider(taskId, provider)
+    const normalizedStatus = (status.status || status.state)?.toLowerCase()
+    if (typeof status.progress === 'number' && onProgress) {
       onProgress(status.progress)
     }
     if (normalizedStatus === 'completed' || normalizedStatus === 'succeed' || normalizedStatus === 'success') {

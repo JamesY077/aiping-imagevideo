@@ -1,3 +1,5 @@
+import { modelModules } from '@/models'
+
 export type ModelIOType = 'text2image' | 'text2video' | 'image2image' | 'image2video'
 
 export type MediaType = 'image' | 'video'
@@ -50,88 +52,25 @@ export const ASPECT_RATIO_OPTIONS: AspectRatioOption[] = [
   { value: '9:16', label: '9:16', boxWidth: 16, boxHeight: 28 },
 ]
 
-export const MODEL_CAPABILITIES: Record<string, ModelCapability> = {
-  'Doubao-Seedream-5.0-lite': {
-    mediaType: 'image',
-    inputs: ['text', 'image'],
-    localUploadInputs: ['image'],
-    availabilityNote: 'supports-image-upload',
-    imageRequestMode: 'seedream-5-lite',
-  },
-  'GLM-Image': {
-    mediaType: 'image',
-    inputs: ['text'],
-    imageRequestMode: 'default',
-  },
-  'Qwen-Image-2.0-Pro': {
-    mediaType: 'image',
-    inputs: ['text', 'image'],
-    localUploadInputs: ['image'],
-    availabilityNote: 'supports-image-upload',
-    requiresReference: true,
-    imageRequestMode: 'default',
-  },
-  'Qwen-Image-Edit-Plus': {
-    mediaType: 'image',
-    inputs: ['text', 'image'],
-    localUploadInputs: ['image'],
-    availabilityNote: 'requires-image-upload',
-    requiresReference: true,
-    imageRequestMode: 'default',
-  },
-  'Kling-Video-O1': {
-    mediaType: 'video',
-    inputs: ['text', 'image', 'video'],
-    localUploadInputs: ['image', 'video'],
-    availabilityNote: 'supports-image-video-upload',
-    videoRequestMode: 'kling-o1',
-  },
-  'Kling-V3-Omni': {
-    mediaType: 'video',
-    inputs: ['text', 'image'],
-    localUploadInputs: ['image'],
-    availabilityNote: 'supports-image-upload',
-    videoRequestMode: 'kling-v3',
-  },
-  'Kling-V3': {
-    mediaType: 'video',
-    inputs: ['text', 'image'],
-    localUploadInputs: ['image'],
-    availabilityNote: 'supports-image-upload',
-    videoRequestMode: 'kling-v3',
-  },
-  'Kling-V2.6': {
-    mediaType: 'video',
-    inputs: ['text', 'image'],
-    localUploadInputs: ['image'],
-    availabilityNote: 'supports-image-upload',
-    videoRequestMode: 'kling-v26',
-  },
-  'ViduQ3-Pro-Fast': {
-    mediaType: 'video',
-    inputs: ['image'],
-    localUploadInputs: ['image'],
-    availabilityNote: 'requires-image-upload',
-    videoRequestMode: 'viduq3-fast',
-  },
-  'ViduQ3-Pro': {
-    mediaType: 'video',
-    inputs: ['image'],
-    localUploadInputs: ['image'],
-    availabilityNote: 'requires-image-upload',
-    videoRequestMode: 'viduq3-fast',
-  },
-  'MiniMax-Hailuo-2.3': { mediaType: 'video', inputs: ['text'] },
-}
+export const MODEL_CAPABILITIES: Record<string, ModelCapability> = Object.fromEntries(
+  modelModules.flatMap((model) => [
+    [model.id, model.capability],
+    ...model.adapter.models.map((alias) => [alias, model.capability] as const),
+  ])
+)
 
-export const BUILT_IN_MODELS: BuiltInModelDescriptor[] = Object.keys(MODEL_CAPABILITIES).map((id) => ({
+const HIDDEN_MODEL_ALIASES = new Set(['viduq3-pro-fast', 'viduq3-pro', 'viduQ3-pro-fast', 'viduQ3-pro'])
+
+export const BUILT_IN_MODELS: BuiltInModelDescriptor[] = Object.keys(MODEL_CAPABILITIES)
+  .filter((id) => !HIDDEN_MODEL_ALIASES.has(id))
+  .map((id) => ({
   id,
   mediaType: MODEL_CAPABILITIES[id].mediaType,
 }))
 
 export function getModelCapability(modelId: string | null | undefined): ModelCapability | null {
   if (!modelId) return null
-  return MODEL_CAPABILITIES[modelId] || null
+  return MODEL_CAPABILITIES[modelId] || MODEL_CAPABILITIES[Object.keys(MODEL_CAPABILITIES).find((id) => id.toLowerCase() === modelId.toLowerCase()) || ''] || null
 }
 
 export function modelSupportsUpload(modelId: string | null | undefined): boolean {
@@ -145,7 +84,17 @@ export function modelSupportsLocalUpload(modelId: string | null | undefined): bo
 }
 
 export function getModelAvailabilityLabel(modelId: string | null | undefined): string {
-  const note = getModelCapability(modelId)?.availabilityNote
+  const capability = getModelCapability(modelId)
+  const note = capability?.availabilityNote
+
+  if (
+    capability?.mediaType === 'video' &&
+    capability.inputs.includes('text') &&
+    capability.inputs.includes('image') &&
+    note === 'supports-image-upload'
+  ) {
+    return '支持文生/图生视频'
+  }
 
   switch (note) {
     case 'supports-image-upload':
@@ -184,7 +133,10 @@ export function getLocalUploadAccept(modelId: string | null | undefined): string
 
 export function getSupportedAspectRatios(modelId: string | null | undefined): string[] | null {
   const mode = getModelCapability(modelId)?.videoRequestMode
-  if (mode === 'kling-v26' || mode === 'kling-v3' || mode === 'kling-o1' || mode === 'viduq3-fast') {
+  if (mode === 'viduq3-fast') {
+    return ['16:9', '9:16', '1:1', '4:3']
+  }
+  if (mode === 'kling-v26' || mode === 'kling-v3' || mode === 'kling-o1') {
     return ['16:9', '9:16', '1:1']
   }
   return null
@@ -203,8 +155,7 @@ export function getSupportedVideoDurations(modelId: string | null | undefined): 
       ]
     case 'viduq3-fast':
       return [
-        { value: 4, label: '4s' },
-        { value: 8, label: '8s' },
+        { value: 5, label: '5s' },
       ]
     default:
       return [

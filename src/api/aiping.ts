@@ -10,6 +10,8 @@ import type {
   VideoGenerateResponse,
   VideoStatusResponse,
 } from '@/types/api'
+import { getImageProvider } from '@/api/providers/image'
+import { getVideoProvider } from '@/api/providers/video'
 import { AppError } from '@/utils/errors'
 
 const client = axios.create({
@@ -48,8 +50,8 @@ function getConnectionErrorMessage(error: any): string {
 function getApiErrorMessage(error: any, fallback = '请求失败，请稍后重试。'): string {
   const data = error?.response?.data
   const detail = data?.detail
-  const detailMessage = typeof detail === 'string' ? detail : detail?.message
-  const message = detailMessage || data?.message || error?.message
+  const detailMessage = typeof detail === 'string' ? detail : detail?.message || detail?.error
+  const message = detailMessage || data?.message || data?.error || error?.message
 
   if (!message) return fallback
 
@@ -70,7 +72,9 @@ function getApiErrorMessage(error: any, fallback = '请求失败，请稍后重�
   }
 
   if (error?.response?.status >= 500) {
-    return '生成服务暂时不可用，请稍后再试。'
+    return message && message !== error?.message
+      ? `生成服务暂时不可用：${message}`
+      : '生成服务暂时不可用，请稍后再试。'
   }
 
   if (error?.code === 'ECONNABORTED') {
@@ -95,6 +99,33 @@ function pushUniqueBody(bodies: Record<string, unknown>[], body: Record<string, 
   if (!bodies.some((candidate) => JSON.stringify(candidate) === signature)) {
     bodies.push(body)
   }
+}
+
+function maskSensitiveValue(value: unknown): unknown {
+  if (typeof value !== 'string') return value
+  if (value.startsWith('data:') || value.length > 120) return `[string:${value.length}]`
+  if (/^https?:\/\//.test(value)) return '[url]'
+  return value
+}
+
+function sanitizeDebugBody(body: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(body).map(([key, value]) => {
+      if (Array.isArray(value)) {
+        return [key, value.map(maskSensitiveValue)]
+      }
+      return [key, maskSensitiveValue(value)]
+    })
+  )
+}
+
+function debugLog(message: string, payload?: unknown) {
+  if (!import.meta.env.DEV) return
+  if (payload === undefined) {
+    console.debug(message)
+    return
+  }
+  console.debug(message, payload)
 }
 
 client.interceptors.request.use((config) => {
@@ -137,27 +168,16 @@ export async function polishPrompt(params: ChatCompletionRequest): Promise<strin
 }
 
 export async function generateImage(params: ImageGenerateRequest): Promise<ImageGenerateResponse> {
-  const fullBody: Record<string, unknown> = {
-    model: params.model || 'Qwen-Image-2.0-Pro',
-    prompt: params.prompt,
-  }
-  if (params.image) fullBody.image = params.image
-  if (params.size) fullBody.size = params.size
-  if (params.width) fullBody.width = params.width
-  if (params.height) fullBody.height = params.height
-  if (params.output_format) fullBody.output_format = params.output_format
-  if (typeof params.watermark === 'boolean') fullBody.watermark = params.watermark
-  if (params.extra_body) fullBody.extra_body = params.extra_body
-  if (params.n) fullBody.n = params.n
-  if (params.response_format) fullBody.response_format = params.response_format
+  const provider = getImageProvider(params)
+  const fullBody = provider.buildRequestBody(params)
 
-  console.log('generateImage trying full body:', fullBody)
+  debugLog(`generateImage provider=${provider.provider} trying full body:`, sanitizeDebugBody(fullBody))
   try {
-    const response = await client.post('/images/generations', fullBody)
+    const response = await client.post(provider.endpoint, fullBody)
     return response.data
   } catch (error: any) {
     const detail = JSON.stringify(error.response?.data)
-    console.log('generateImage 400 error detail:', detail)
+    debugLog('generateImage 400 error detail:', detail)
     if (error.response?.status === 400) {
       const alternateBody: Record<string, unknown> = { ...fullBody }
 
@@ -167,9 +187,9 @@ export async function generateImage(params: ImageGenerateRequest): Promise<Image
           delete alternateBody.size
           alternateBody.width = size.width
           alternateBody.height = size.height
-          console.log('generateImage retry with width/height:', alternateBody)
+          debugLog('generateImage retry with width/height:', sanitizeDebugBody(alternateBody))
           try {
-            const response = await client.post('/images/generations', alternateBody)
+            const response = await client.post(provider.endpoint, alternateBody)
             return response.data
           } catch (retryError: any) {
             throw new AppError(getApiErrorMessage(retryError, '图片尺寸参数未被当前模型接受，请切换模型或比例后重试。'))
@@ -181,9 +201,9 @@ export async function generateImage(params: ImageGenerateRequest): Promise<Image
         alternateBody.size = `${fullBody.width}x${fullBody.height}`
         delete alternateBody.width
         delete alternateBody.height
-        console.log('generateImage retry with size:', alternateBody)
+        debugLog('generateImage retry with size:', sanitizeDebugBody(alternateBody))
         try {
-          const response = await client.post('/images/generations', alternateBody)
+          const response = await client.post(provider.endpoint, alternateBody)
           return response.data
         } catch (retryError: any) {
           throw new AppError(getApiErrorMessage(retryError, '图片尺寸参数未被当前模型接受，请切换模型或比例后重试。'))
@@ -197,45 +217,20 @@ export async function generateImage(params: ImageGenerateRequest): Promise<Image
 }
 
 export async function generateVideo(params: VideoGenerateRequest): Promise<VideoGenerateResponse> {
-  const fullBody: Record<string, unknown> = {
-    model: params.model || 'Kling-V2.6',
-    prompt: params.prompt,
-  }
-  if (params.image) fullBody.image = params.image
-  if (params.images?.length) fullBody.images = params.images
-  if (params.img_url) fullBody.img_url = params.img_url
-  if (params.first_frame_url) fullBody.first_frame_url = params.first_frame_url
-  if (params.last_frame_url) fullBody.last_frame_url = params.last_frame_url
-  if (params.reference_images?.length) fullBody.reference_images = params.reference_images
-  if (params.video_list?.length) fullBody.video_list = params.video_list
-  if (params.duration) fullBody.duration = params.duration
-  if (params.aspect_ratio) fullBody.aspect_ratio = params.aspect_ratio
-  if (params.ratio) fullBody.ratio = params.ratio
-  if (params.size) fullBody.size = params.size
-  if (params.resolution) fullBody.resolution = params.resolution
-  if (typeof params.audio === 'boolean') fullBody.audio = params.audio
-  if (params.movement_amplitude) fullBody.movement_amplitude = params.movement_amplitude
-  if (typeof params.off_peak === 'boolean') fullBody.off_peak = params.off_peak
-  if (typeof params.watermark === 'boolean') fullBody.watermark = params.watermark
-  if (params.extra_body) fullBody.extra_body = params.extra_body
+  const provider = getVideoProvider(params)
+  const fullBody = provider.buildRequestBody(params)
+  const videoEndpoint = provider.getEndpoint(fullBody)
+  const normalizeResponse = provider.normalizeResponse || ((data: VideoGenerateResponse) => data)
 
-  const isViduModel = params.model === 'ViduQ3-Pro-Fast' || params.model === 'ViduQ3-Pro'
-  const hasViduImageInput = !!(fullBody.images || fullBody.image || fullBody.img_url)
-  const videoEndpoint = isViduModel && hasViduImageInput ? '/videos/vidu/img2video' : '/videos'
-
-  if (isViduModel && videoEndpoint === '/videos/vidu/img2video') {
-    if (fullBody.images && !fullBody.image) {
-      fullBody.image = Array.isArray(fullBody.images) ? fullBody.images[0] : fullBody.images
-    }
-    delete fullBody.images
-  }
-
-  console.log('generateVideo trying full body:', fullBody)
+  debugLog(`generateVideo provider=${provider.provider} trying full body:`, sanitizeDebugBody(fullBody))
   try {
     const response = await client.post(videoEndpoint, fullBody)
-    return response.data
+    return normalizeResponse(response.data)
   } catch (error: any) {
-    console.log('generateVideo error:', error.response?.status, JSON.stringify(error.response?.data))
+    debugLog('generateVideo error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+    })
     if (error.response?.status === 400 || error.response?.status === 422) {
       const minimalBody: Record<string, unknown> = { model: fullBody.model, prompt: fullBody.prompt }
       if (fullBody.image) minimalBody.image = fullBody.image
@@ -251,12 +246,19 @@ export async function generateVideo(params: VideoGenerateRequest): Promise<Video
       if (fullBody.movement_amplitude) minimalBody.movement_amplitude = fullBody.movement_amplitude
       if (typeof fullBody.off_peak === 'boolean') minimalBody.off_peak = fullBody.off_peak
       if (typeof fullBody.watermark === 'boolean') minimalBody.watermark = fullBody.watermark
+      if (typeof fullBody.seed === 'number') minimalBody.seed = fullBody.seed
+      if (fullBody.style) minimalBody.style = fullBody.style
+      if (typeof fullBody.payload === 'string') minimalBody.payload = fullBody.payload
       if (fullBody.extra_body) minimalBody.extra_body = fullBody.extra_body
 
       const fallbackBodies: Record<string, unknown>[] = []
       pushUniqueBody(fallbackBodies, minimalBody)
 
-      if (isViduModel && minimalBody.images && !minimalBody.image) {
+      for (const providerFallbackBody of provider.buildFallbackBodies?.(fullBody) || []) {
+        pushUniqueBody(fallbackBodies, providerFallbackBody)
+      }
+
+      if (provider.provider === 'vidu' && minimalBody.images && !minimalBody.image) {
         const viduImages = minimalBody.images
         const viduImageBody: Record<string, unknown> = {
           ...minimalBody,
@@ -278,11 +280,11 @@ export async function generateVideo(params: VideoGenerateRequest): Promise<Video
 
       let lastError = error
       for (const body of fallbackBodies) {
-        console.log('generateVideo fallback body:', body)
+        debugLog('generateVideo fallback body:', sanitizeDebugBody(body))
         try {
-          const fallbackEndpoint = isViduModel && (body.images || body.image || body.img_url) ? '/videos/vidu/img2video' : '/videos'
+          const fallbackEndpoint = provider.getEndpoint(body)
           const response = await client.post(fallbackEndpoint, body)
-          return response.data
+          return normalizeResponse(response.data)
         } catch (fallbackError: any) {
           lastError = fallbackError
           if (![400, 422].includes(fallbackError.response?.status)) {
@@ -300,6 +302,63 @@ export async function generateVideo(params: VideoGenerateRequest): Promise<Video
 export async function getVideoStatus(taskId: string): Promise<VideoStatusResponse> {
   const response = await client.get(`/videos/${taskId}`)
   return response.data
+}
+
+function normalizeVideoStatus(data: any, taskId: string, provider?: string): VideoStatusResponse {
+  const normalized = data?.task_id && !data.id
+    ? {
+      ...data,
+      id: data.task_id,
+      status: data.status || data.state || 'pending',
+    }
+    : data
+
+  const creations = Array.isArray(normalized?.creations) ? normalized.creations : undefined
+  const normalizedData = normalized?.data || creations?.map((creation: any) => ({
+    url: creation.url || creation.video_url,
+    thumbnail: creation.thumbnail || creation.cover_url || creation.cover,
+    duration: creation.duration || normalized?.duration || normalized?.seconds || 0,
+  })).filter((item: any) => item.url)
+
+  return {
+    ...normalized,
+    id: normalized?.id || normalized?.task_id || taskId,
+    task_id: normalized?.task_id || taskId,
+    status: normalized?.status || normalized?.state || 'pending',
+    video_url: normalized?.video_url || normalized?.url || normalizedData?.[0]?.url,
+    data: normalizedData,
+    error: normalized?.error || normalized?.err_msg || normalized?.message,
+    provider: normalized?.provider || provider,
+  }
+}
+
+export async function getVideoStatusWithProvider(taskId: string, provider?: string): Promise<VideoStatusResponse> {
+  const normalizedProvider = provider?.toLowerCase()
+  const endpoints = normalizedProvider === 'vidu'
+    ? [`/videos/vidu/tasks/${taskId}/creations`, `/videos/${taskId}`]
+    : [`/videos/${taskId}`]
+
+  let lastError: any
+  for (const endpoint of endpoints) {
+    try {
+      debugLog(`getVideoStatus provider=${provider || 'default'} endpoint=${endpoint}`)
+      const response = await client.get(endpoint)
+      return normalizeVideoStatus(response.data, taskId, provider)
+    } catch (error: any) {
+      lastError = error
+      debugLog('getVideoStatus error:', {
+        endpoint,
+        status: error.response?.status,
+        data: error.response?.data,
+      })
+
+      if (![404, 405, 500, 502, 503, 504].includes(error.response?.status)) {
+        break
+      }
+    }
+  }
+
+  throw new AppError(getApiErrorMessage(lastError, `视频状态查询失败 (task: ${taskId})`))
 }
 
 export async function testConnection(testKey?: string, testBaseUrl?: string): Promise<boolean> {
@@ -331,7 +390,11 @@ export async function testConnectionWithDetail(testKey?: string, testBaseUrl?: s
       ? { ok: true }
       : { ok: false, message: `连接验证失败，服务返回状态码 ${res.status}。` }
   } catch (error: any) {
-    console.error('testConnection failed:', error?.message, error?.response?.status, error?.response?.data)
+    debugLog('testConnection failed:', {
+      message: error?.message,
+      status: error?.response?.status,
+      data: error?.response?.data,
+    })
     return { ok: false, message: getConnectionErrorMessage(error) }
   }
 }
