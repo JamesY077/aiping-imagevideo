@@ -85,7 +85,15 @@ export interface ImageGenerateResponse {
 export interface VideoGenerateRequest {
   model?: string
   prompt: string
+  model_name?: string
+  negative_prompt?: string
   image?: string
+  image_url?: string
+  image_tail?: string
+  image_list?: Array<{
+    image_url: string
+    type?: 'first_frame' | 'end_frame' | string
+  }>
   images?: string[]
   img_url?: string
   first_frame_image?: string
@@ -95,6 +103,7 @@ export interface VideoGenerateRequest {
   start_image?: string
   end_image?: string
   reference_images?: string[]
+  video_url?: string
   subject_reference?: Array<{
     type: 'character' | string
     image: string[]
@@ -102,6 +111,11 @@ export interface VideoGenerateRequest {
   video_list?: string[]
   seconds?: number
   duration?: number
+  mode?: string
+  sound?: 'on' | 'off' | string
+  keep_original_sound?: 'yes' | 'no' | string
+  character_orientation?: 'image' | 'video' | string
+  motion_control?: boolean
   aspect_ratio?: string
   ratio?: string
   size?: string
@@ -113,6 +127,8 @@ export interface VideoGenerateRequest {
   seed?: number
   style?: string
   payload?: string
+  callback_url?: string
+  external_task_id?: string
   extra_body?: Record<string, unknown>
 }
 

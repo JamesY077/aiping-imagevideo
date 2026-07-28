@@ -5,6 +5,6 @@ import { klingV26Model, videoModelModules } from '@/models/video'
 export const videoProviders: VideoProviderAdapter[] = videoModelModules.map((model) => model.adapter)
 
 export function getVideoProvider(params: VideoGenerateRequest): VideoProviderAdapter {
-  const model = params.model?.toLowerCase()
+  const model = (params.model || params.model_name)?.toLowerCase()
   return videoProviders.find((provider) => model && provider.models.some((candidate) => candidate.toLowerCase() === model)) || klingV26Model.adapter
 }

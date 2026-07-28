@@ -38,12 +38,19 @@ export interface Message {
   model?: string
 }
 
+export interface MotionControlOptions {
+  keep_original_sound: 'yes' | 'no'
+  character_orientation: 'image' | 'video'
+}
+
 export interface UploadedFile {
   name: string
   type: 'image' | 'video'
   url: string
   size: number
   file?: File
+  purpose?: 'subject-reference' | 'motion-control-image' | 'motion-control-video'
+  motionControlOptions?: MotionControlOptions
   dimensions?: {
     width: number
     height: number

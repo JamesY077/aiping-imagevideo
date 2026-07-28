@@ -22,7 +22,7 @@ export interface ModelCapability {
   requiresReference?: boolean
   availabilityNote?: 'supports-image-upload' | 'supports-video-upload' | 'supports-image-video-upload' | 'requires-image-upload' | 'requires-video-upload'
   imageRequestMode?: 'default' | 'seedream-5-lite'
-  videoRequestMode?: 'kling-v26' | 'kling-v3' | 'kling-o1' | 'viduq3-fast' | 'minimax-hailuo'
+  videoRequestMode?: 'kling-v26' | 'kling-v3' | 'kling-omni' | 'kling-o1' | 'viduq3-fast' | 'minimax-hailuo'
 }
 
 export interface BuiltInModelDescriptor {
@@ -140,7 +140,7 @@ export function getSupportedAspectRatios(modelId: string | null | undefined): st
   if (mode === 'viduq3-fast' || mode === 'minimax-hailuo') {
     return ['16:9', '9:16', '1:1', '4:3']
   }
-  if (mode === 'kling-v26' || mode === 'kling-v3' || mode === 'kling-o1') {
+  if (mode === 'kling-v26' || mode === 'kling-v3' || mode === 'kling-omni' || mode === 'kling-o1') {
     return ['16:9', '9:16', '1:1']
   }
   return null
@@ -152,6 +152,7 @@ export function getSupportedVideoDurations(modelId: string | null | undefined): 
   switch (mode) {
     case 'kling-v26':
     case 'kling-v3':
+    case 'kling-omni':
     case 'kling-o1':
       return [
         { value: 5, label: '5s' },

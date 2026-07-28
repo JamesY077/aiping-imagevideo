@@ -233,8 +233,11 @@ export async function generateVideo(params: VideoGenerateRequest): Promise<Video
       data: error.response?.data,
     })
     if (error.response?.status === 400 || error.response?.status === 422) {
-      const minimalBody: Record<string, unknown> = { model: fullBody.model, prompt: fullBody.prompt }
+      const minimalBody: Record<string, unknown> = { model: fullBody.model, model_name: fullBody.model_name, prompt: fullBody.prompt }
       if (fullBody.image) minimalBody.image = fullBody.image
+      if (fullBody.image_url) minimalBody.image_url = fullBody.image_url
+      if (fullBody.image_tail) minimalBody.image_tail = fullBody.image_tail
+      if (fullBody.image_list) minimalBody.image_list = fullBody.image_list
       if (fullBody.images) minimalBody.images = fullBody.images
       if (fullBody.img_url) minimalBody.img_url = fullBody.img_url
       if (fullBody.first_frame_image) minimalBody.first_frame_image = fullBody.first_frame_image
@@ -243,8 +246,15 @@ export async function generateVideo(params: VideoGenerateRequest): Promise<Video
       if (fullBody.start_image) minimalBody.start_image = fullBody.start_image
       if (fullBody.end_image) minimalBody.end_image = fullBody.end_image
       if (fullBody.subject_reference) minimalBody.subject_reference = fullBody.subject_reference
+      if (fullBody.video_url) minimalBody.video_url = fullBody.video_url
       if (fullBody.video_list) minimalBody.video_list = fullBody.video_list
       if (fullBody.seconds) minimalBody.seconds = fullBody.seconds
+      if (fullBody.duration) minimalBody.duration = fullBody.duration
+      if (fullBody.negative_prompt !== undefined) minimalBody.negative_prompt = fullBody.negative_prompt
+      if (fullBody.mode) minimalBody.mode = fullBody.mode
+      if (fullBody.sound) minimalBody.sound = fullBody.sound
+      if (fullBody.keep_original_sound) minimalBody.keep_original_sound = fullBody.keep_original_sound
+      if (fullBody.character_orientation) minimalBody.character_orientation = fullBody.character_orientation
       if (fullBody.aspect_ratio) minimalBody.aspect_ratio = fullBody.aspect_ratio
       if (fullBody.ratio) minimalBody.ratio = fullBody.ratio
       if (fullBody.size) minimalBody.size = fullBody.size
@@ -256,6 +266,8 @@ export async function generateVideo(params: VideoGenerateRequest): Promise<Video
       if (typeof fullBody.seed === 'number') minimalBody.seed = fullBody.seed
       if (fullBody.style) minimalBody.style = fullBody.style
       if (typeof fullBody.payload === 'string') minimalBody.payload = fullBody.payload
+      if (fullBody.callback_url !== undefined) minimalBody.callback_url = fullBody.callback_url
+      if (fullBody.external_task_id !== undefined) minimalBody.external_task_id = fullBody.external_task_id
       if (fullBody.extra_body) minimalBody.extra_body = fullBody.extra_body
 
       const fallbackBodies: Record<string, unknown>[] = []
@@ -312,13 +324,15 @@ export async function getVideoStatus(taskId: string): Promise<VideoStatusRespons
 }
 
 function normalizeVideoStatus(data: any, taskId: string, provider?: string): VideoStatusResponse {
-  const normalized = data?.task_id && !data.id
+  const task = data?.data?.task_id || data?.data?.task_status ? data.data : data
+  const normalized = task?.task_id && !task.id
     ? {
-      ...data,
-      id: data.task_id,
-      status: data.status || data.state || 'pending',
+      ...task,
+      id: task.task_id,
+      status: task.status || task.task_status || task.state || 'pending',
+      state: task.state || task.task_status,
     }
-    : data
+    : task
 
   const creations = Array.isArray(normalized?.creations) ? normalized.creations : undefined
   const normalizedData = normalized?.data || creations?.map((creation: any) => ({
@@ -343,6 +357,8 @@ export async function getVideoStatusWithProvider(taskId: string, provider?: stri
   const normalizedProvider = provider?.toLowerCase()
   const endpoints = normalizedProvider === 'vidu'
     ? [`/videos/vidu/tasks/${taskId}/creations`, `/videos/${taskId}`]
+    : normalizedProvider === 'kling'
+      ? [`/multimodal/kling/videos/${taskId}`, `/videos/${taskId}`]
     : [`/videos/${taskId}`]
 
   let lastError: any

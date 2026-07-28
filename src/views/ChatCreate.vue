@@ -146,6 +146,65 @@
                   <button v-if="uploadedFile" class="text-btn" type="button" @click="() => removeUploadedFile()">移除</button>
                 </div>
 
+                <div v-else-if="videoMode === 'motionControl2video'" class="motion-control-panel">
+                  <p class="motion-control-note">动作控制 <small>用于通过参考图像和参考视频生成视频，使生成视频中的人物动作与参考视频一致。</small></p>
+                  <div class="motion-control-options">
+                    <label class="motion-control-option">
+                      <span class="motion-control-option-label">保留原声</span>
+                      <select v-model="motionControlKeepOriginalSound" class="motion-control-select" aria-label="是否保留原声">
+                        <option value="yes">保留</option>
+                        <option value="no">不保留</option>
+                      </select>
+                    </label>
+                    <label class="motion-control-option">
+                      <span class="motion-control-option-label">人物朝向</span>
+                      <select v-model="motionControlCharacterOrientation" class="motion-control-select" aria-label="人物朝向">
+                        <option value="image">参考图像</option>
+                        <option value="video">参考视频</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="frame-upload-grid">
+                    <div class="upload-mini-row upload-card-row frame-upload-card" :class="{ 'has-file': !!motionControlImage }">
+                      <input
+                        ref="motionControlImageInput"
+                        type="file"
+                        accept="image/*"
+                        class="file-input"
+                        @change="handleMotionControlFileChange($event, 'image')"
+                      />
+                      <button class="upload-btn upload-icon-btn" type="button" aria-label="上传动作控制参考图" @click="motionControlImageInput?.click()">
+                        +
+                      </button>
+                      <div class="upload-copy">
+                        <span class="upload-label">参考图像</span>
+                        <span class="upload-hint">作为生成视频的人物外观参考</span>
+                      </div>
+                      <span v-if="motionControlImage" class="pill-filename">{{ motionControlImage.name }}</span>
+                      <button v-if="motionControlImage" class="text-btn" type="button" @click="removeMotionControlFile('image')">移除</button>
+                    </div>
+
+                    <div class="upload-mini-row upload-card-row frame-upload-card" :class="{ 'has-file': !!motionControlVideo }">
+                      <input
+                        ref="motionControlVideoInput"
+                        type="file"
+                        accept="video/*"
+                        class="file-input"
+                        @change="handleMotionControlFileChange($event, 'video')"
+                      />
+                      <button class="upload-btn upload-icon-btn" type="button" aria-label="上传动作控制参考视频" @click="motionControlVideoInput?.click()">
+                        +
+                      </button>
+                      <div class="upload-copy">
+                        <span class="upload-label">参考视频</span>
+                        <span class="upload-hint">用于对齐人物动作</span>
+                      </div>
+                      <span v-if="motionControlVideo" class="pill-filename">{{ motionControlVideo.name }}</span>
+                      <button v-if="motionControlVideo" class="text-btn" type="button" @click="removeMotionControlFile('video')">移除</button>
+                    </div>
+                  </div>
+                </div>
+
                 <div v-else-if="videoMode === 'startEnd2video'" class="frame-upload-grid">
                   <div class="upload-mini-row upload-card-row frame-upload-card" :class="{ 'has-file': !!viduStartFrame }">
                     <input
@@ -331,15 +390,21 @@ const promptInputRef = ref<HTMLTextAreaElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const viduStartInput = ref<HTMLInputElement | null>(null)
 const viduEndInput = ref<HTMLInputElement | null>(null)
+const motionControlImageInput = ref<HTMLInputElement | null>(null)
+const motionControlVideoInput = ref<HTMLInputElement | null>(null)
 const isPolishing = ref(false)
 const isComposerExpanded = ref(false)
 const showAspectRatioMenu = ref(false)
 const uploadedFile = ref<UploadedFile | null>(null)
 const viduStartFrame = ref<UploadedFile | null>(null)
 const viduEndFrame = ref<UploadedFile | null>(null)
+const motionControlImage = ref<UploadedFile | null>(null)
+const motionControlVideo = ref<UploadedFile | null>(null)
+const motionControlKeepOriginalSound = ref<'yes' | 'no'>('yes')
+const motionControlCharacterOrientation = ref<'image' | 'video'>('image')
 const referenceUrl = ref('')
 const inputText = ref('')
-type VideoMode = 'text2video' | 'image2video' | 'startEnd2video' | 'subjectReference2video'
+type VideoMode = 'text2video' | 'image2video' | 'startEnd2video' | 'subjectReference2video' | 'motionControl2video'
 interface ImageDimensions {
   width: number
   height: number
@@ -354,6 +419,11 @@ const minimaxHailuoVideoModeOptions: Array<{ value: VideoMode; label: string }> 
   ...viduVideoModeOptions,
   { value: 'subjectReference2video', label: '主体参考视频' },
 ]
+const klingMotionControlVideoModeOptions: Array<{ value: VideoMode; label: string }> = [
+  { value: 'text2video', label: '文生视频' },
+  { value: 'image2video', label: '图生视频' },
+  { value: 'motionControl2video', label: '动作控制' },
+]
 const hasPromptPolishModelConfigured = computed(() => !!settingsStore.promptPolishModel.trim())
 const polishDisabledReason = '请前往设置完成 AI 润色模型设置'
 
@@ -362,8 +432,21 @@ const activeSessionGenerating = computed(() => chatStore.isGenerating)
 const modelCapability = computed(() => getModelCapability(settingsStore.selectedModel))
 const isViduVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'viduq3-fast')
 const isMinimaxHailuoVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'minimax-hailuo')
-const usesViduLikeVideoMode = computed(() => isViduVideoModel.value || isMinimaxHailuoVideoModel.value)
-const activeVideoModeOptions = computed(() => isMinimaxHailuoVideoModel.value ? minimaxHailuoVideoModeOptions : viduVideoModeOptions)
+const isKlingMultimodalVideoModel = computed(() => {
+  const mode = modelCapability.value?.videoRequestMode
+  return settingsStore.mediaType === 'video' && (mode === 'kling-v26' || mode === 'kling-v3' || mode === 'kling-omni')
+})
+const isKlingMotionControlVideoModel = computed(() => {
+  const mode = modelCapability.value?.videoRequestMode
+  return settingsStore.mediaType === 'video' && (mode === 'kling-v26' || mode === 'kling-v3')
+})
+const usesViduLikeVideoMode = computed(() => isViduVideoModel.value || isMinimaxHailuoVideoModel.value || isKlingMultimodalVideoModel.value)
+const activeVideoModeOptions = computed(() => {
+  if (isMinimaxHailuoVideoModel.value) return minimaxHailuoVideoModeOptions
+  if (isKlingMotionControlVideoModel.value) return klingMotionControlVideoModeOptions
+  if (isKlingMultimodalVideoModel.value) return viduVideoModeOptions
+  return viduVideoModeOptions
+})
 const isUploadEnabled = computed(() => modelSupportsLocalUpload(settingsStore.selectedModel))
 const requiresUpload = computed(() => {
   if (!modelRequiresReference(settingsStore.selectedModel)) return false
@@ -401,6 +484,9 @@ const inputPlaceholder = computed(() => {
   if (usesViduLikeVideoMode.value && videoMode.value === 'image2video') {
     return '描述参考图如何动起来：主体运动、镜头推进、节奏和氛围。'
   }
+  if (usesViduLikeVideoMode.value && videoMode.value === 'motionControl2video') {
+    return '描述参考图中的人物外观、服装和场景，并结合参考视频控制人物动作。'
+  }
   if (usesViduLikeVideoMode.value && videoMode.value === 'startEnd2video') {
     return '描述首帧到尾帧之间的变化过程、镜头运动、节奏和氛围。'
   }
@@ -426,6 +512,7 @@ const canSend = computed(() => {
   if (usesViduLikeVideoMode.value) {
     if (videoMode.value === 'text2video') return true
     if (videoMode.value === 'image2video') return !!uploadedFile.value
+    if (videoMode.value === 'motionControl2video') return !!motionControlImage.value && !!motionControlVideo.value
     if (videoMode.value === 'startEnd2video') return !!viduStartFrame.value && !!viduEndFrame.value
     return !!uploadedFile.value || !!referenceUrl.value.trim()
   }
@@ -453,6 +540,7 @@ function handleMediaTypeChange(nextType: MediaType) {
   ensureSupportedAspectRatio()
   removeUploadedFile()
   removeViduFrames()
+  removeMotionControlFiles()
   referenceUrl.value = ''
 }
 
@@ -461,6 +549,7 @@ function setVideoMode(mode: VideoMode) {
   videoMode.value = mode
   removeUploadedFile()
   removeViduFrames()
+  removeMotionControlFiles()
   referenceUrl.value = ''
 }
 
@@ -610,6 +699,24 @@ function removeViduFrames(options: { revoke?: boolean } = {}) {
   removeViduFrame('end', options)
 }
 
+function removeMotionControlFile(type: 'image' | 'video', options: { revoke?: boolean } = {}) {
+  if (type === 'image') {
+    if (options.revoke !== false) releaseUploadedFile(motionControlImage.value)
+    motionControlImage.value = null
+    if (motionControlImageInput.value) motionControlImageInput.value.value = ''
+    return
+  }
+
+  if (options.revoke !== false) releaseUploadedFile(motionControlVideo.value)
+  motionControlVideo.value = null
+  if (motionControlVideoInput.value) motionControlVideoInput.value.value = ''
+}
+
+function removeMotionControlFiles(options: { revoke?: boolean } = {}) {
+  removeMotionControlFile('image', options)
+  removeMotionControlFile('video', options)
+}
+
 function handleFileChange(e: Event) {
   const target = e.target as HTMLInputElement
   const file = target.files?.[0]
@@ -686,6 +793,28 @@ async function handleViduFrameChange(e: Event, position: 'start' | 'end') {
   }
 }
 
+function handleMotionControlFileChange(e: Event, type: 'image' | 'video') {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+
+  const isExpectedType = type === 'image' ? file.type.startsWith('image/') : file.type.startsWith('video/')
+  if (!isExpectedType) {
+    showErrorMessage(type === 'image' ? '动作控制参考图像仅支持图片文件' : '动作控制参考视频仅支持视频文件')
+    target.value = ''
+    return
+  }
+
+  removeMotionControlFile(type)
+  const uploaded = createUploadedFile(file, type)
+  uploaded.purpose = type === 'image' ? 'motion-control-image' : 'motion-control-video'
+  if (type === 'image') {
+    motionControlImage.value = uploaded
+  } else {
+    motionControlVideo.value = uploaded
+  }
+}
+
 async function handlePolishPrompt() {
   const prompt = inputText.value.trim()
   try {
@@ -745,6 +874,7 @@ function scrollChatToBottom() {
 function handleClearConversation() {
   removeUploadedFile({ revoke: false })
   removeViduFrames({ revoke: false })
+  removeMotionControlFiles({ revoke: false })
   referenceUrl.value = ''
   inputText.value = ''
   chatStore.clearMessages()
@@ -762,15 +892,24 @@ onBeforeUnmount(() => {
   releaseUploadedFile(uploadedFile.value)
   releaseUploadedFile(viduStartFrame.value)
   releaseUploadedFile(viduEndFrame.value)
+  releaseUploadedFile(motionControlImage.value)
+  releaseUploadedFile(motionControlVideo.value)
 })
 
 watch(
   () => settingsStore.selectedModel,
   () => {
     const capability = getModelCapability(settingsStore.selectedModel)
-    if (settingsStore.mediaType !== 'video' || !['viduq3-fast', 'minimax-hailuo'].includes(capability?.videoRequestMode || '')) {
+    const usesModeSwitcher = settingsStore.mediaType === 'video' && ['viduq3-fast', 'minimax-hailuo', 'kling-v26', 'kling-v3', 'kling-omni'].includes(capability?.videoRequestMode || '')
+    if (!usesModeSwitcher) {
       videoMode.value = 'text2video'
       removeViduFrames()
+      removeMotionControlFiles()
+    }
+    if (!activeVideoModeOptions.value.some((option) => option.value === videoMode.value)) {
+      videoMode.value = 'text2video'
+      removeViduFrames()
+      removeMotionControlFiles()
     }
     if (uploadedFile.value?.type === 'image' && !capability?.localUploadInputs?.includes('image')) {
       removeUploadedFile()
@@ -817,6 +956,17 @@ async function handleSend() {
   const file: UploadedFile | UploadedFile[] | null = usesViduLikeVideoMode.value
     ? videoMode.value === 'image2video'
       ? uploadedFile.value
+      : videoMode.value === 'motionControl2video' && motionControlImage.value && motionControlVideo.value
+        ? [
+            {
+              ...motionControlImage.value,
+              motionControlOptions: {
+                keep_original_sound: motionControlKeepOriginalSound.value,
+                character_orientation: motionControlCharacterOrientation.value,
+              },
+            },
+            motionControlVideo.value,
+          ]
       : videoMode.value === 'startEnd2video' && viduStartFrame.value && viduEndFrame.value
         ? [viduStartFrame.value, viduEndFrame.value]
         : videoMode.value === 'subjectReference2video'
@@ -842,6 +992,7 @@ async function handleSend() {
 
   removeUploadedFile({ revoke: false })
   removeViduFrames({ revoke: false })
+  removeMotionControlFiles({ revoke: false })
   referenceUrl.value = ''
   const primaryFile = Array.isArray(file) ? file[0] : file
   const ioType = resolveGenerateIoType(settingsStore.mediaType, primaryFile)
@@ -1397,6 +1548,61 @@ async function handleRegenerate(message: Message) {
 .subject-reference-card.has-file {
   border-color: rgba(95, 75, 139, 0.38);
   background: rgba(95, 75, 139, 0.07);
+}
+
+.motion-control-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.motion-control-note {
+  margin: 0;
+  padding: 0 2px;
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(15, 23, 42, 0.9);
+}
+
+.motion-control-note small {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(71, 85, 105, 0.72);
+}
+
+.motion-control-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.motion-control-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.86);
+}
+
+.motion-control-option-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(51, 65, 85, 0.86);
+}
+
+.motion-control-select {
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(15, 23, 42, 0.88);
 }
 
 .subject-upload-btn {

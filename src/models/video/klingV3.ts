@@ -1,4 +1,8 @@
-import { buildOpenAiVideoRequestBody, normalizeOpenAiVideoGenerateResponse } from '@/api/providers/video/common'
+import {
+  buildKlingMultimodalVideoRequestBody,
+  getKlingMultimodalVideoEndpoint,
+  normalizeKlingMultimodalVideoGenerateResponse,
+} from '@/api/providers/video/common'
 import type { VideoModelModule } from '../types'
 import { createModelExample } from '../types'
 
@@ -7,17 +11,17 @@ export const klingV3Model: VideoModelModule = {
   displayName: 'Kling V3',
   capability: {
     mediaType: 'video',
-    inputs: ['text', 'image'],
-    localUploadInputs: ['image'],
-    availabilityNote: 'supports-image-upload',
+    inputs: ['text', 'image', 'video'],
+    localUploadInputs: ['image', 'video'],
+    availabilityNote: 'supports-image-video-upload',
     videoRequestMode: 'kling-v3',
   },
   adapter: {
     provider: 'kling',
     models: ['Kling-V3'],
-    buildRequestBody: (params) => buildOpenAiVideoRequestBody(params, 'Kling-V3'),
-    getEndpoint: () => '/videos',
-    normalizeResponse: normalizeOpenAiVideoGenerateResponse,
+    buildRequestBody: (params) => buildKlingMultimodalVideoRequestBody(params, 'Kling-V3'),
+    getEndpoint: getKlingMultimodalVideoEndpoint,
+    normalizeResponse: normalizeKlingMultimodalVideoGenerateResponse,
   },
   example: createModelExample({
     title: 'Kling V3 视频生成示例',

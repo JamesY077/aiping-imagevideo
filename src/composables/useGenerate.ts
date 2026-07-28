@@ -91,12 +91,55 @@ async function buildVideoParams(
   switch (videoRequestMode) {
     case 'kling-v26':
     case 'kling-v3':
+      if (uploadedFiles.some((file) => file.purpose?.startsWith('motion-control'))) {
+        const referenceImageIndex = uploadedFiles.findIndex((file) => file.purpose === 'motion-control-image' || file.type === 'image')
+        const referenceVideoIndex = uploadedFiles.findIndex((file) => file.purpose === 'motion-control-video' || file.type === 'video')
+        const referenceImage = referenceImageIndex >= 0 ? uploadValues[referenceImageIndex] : undefined
+        const referenceVideo = referenceVideoIndex >= 0 ? uploadValues[referenceVideoIndex] : undefined
+        const motionControlOptions = uploadedFiles.find((file) => file.motionControlOptions)?.motionControlOptions
+
+        if (!referenceImage || !referenceVideo) {
+          throw new Error('动作控制需要同时上传参考图像和参考视频。')
+        }
+
+        videoParams.motion_control = true
+        videoParams.image_url = referenceImage
+        videoParams.video_url = referenceVideo
+        videoParams.keep_original_sound = motionControlOptions?.keep_original_sound || 'yes'
+        videoParams.character_orientation = motionControlOptions?.character_orientation || 'image'
+        videoParams.mode = 'pro'
+        videoParams.model_name = model || undefined
+        delete videoParams.image
+        delete videoParams.img_url
+        deleteVideoRatio(videoParams)
+        delete videoParams.resolution
+        delete videoParams.duration
+        break
+      }
+
       if (uploadValue) {
         videoParams.image = uploadValue
+        videoParams.sound = 'off'
         deleteVideoRatio(videoParams)
       } else {
+        videoParams.sound = 'on'
         setVideoRatio(videoParams, getKlingAspectRatio(aspectRatio))
       }
+      videoParams.model_name = model || undefined
+      break
+    case 'kling-omni':
+      videoParams.model_name = model || undefined
+      videoParams.mode = 'pro'
+      setVideoRatio(videoParams, getKlingAspectRatio(aspectRatio))
+      if (uploadValues.length >= 2) {
+        videoParams.image_list = [
+          { image_url: uploadValues[0], type: 'first_frame' },
+          { image_url: uploadValues[1], type: 'end_frame' },
+        ]
+      } else if (uploadValues.length) {
+        videoParams.images = uploadValues
+      }
+      delete videoParams.resolution
       break
     case 'kling-o1':
       if (primaryFile?.type === 'image' && uploadValue) {
