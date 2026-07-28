@@ -62,6 +62,22 @@
                 </div>
               </div>
 
+              <div v-if="isViduVideoModel" class="meta-pill meta-pill-mode">
+                <span class="meta-pill-label">生成方式</span>
+                <div class="video-mode-switch compact-switch" role="tablist" aria-label="Vidu 视频生成方式">
+                  <button
+                    v-for="option in viduVideoModeOptions"
+                    :key="option.value"
+                    class="switch-btn mode-switch-btn"
+                    :class="{ active: viduVideoMode === option.value }"
+                    type="button"
+                    @click="setViduVideoMode(option.value)"
+                  >
+                    {{ option.label }}
+                  </button>
+                </div>
+              </div>
+
               <div class="ratio-selector" :class="{ open: showAspectRatioMenu }">
                 <button
                   class="ratio-current-btn"
@@ -110,7 +126,68 @@
             </div>
 
             <div v-if="showReferenceField" class="reference-strip">
-              <div v-if="isUploadEnabled" class="upload-mini-row" :class="{ 'has-file': !!uploadedFile }">
+              <template v-if="isViduVideoModel">
+                <div v-if="viduVideoMode === 'image2video'" class="upload-mini-row upload-card-row" :class="{ 'has-file': !!uploadedFile }">
+                  <input
+                    ref="fileInput"
+                    type="file"
+                    accept="image/*"
+                    class="file-input"
+                    @change="handleFileChange"
+                  />
+                  <button class="upload-btn upload-icon-btn" type="button" aria-label="上传参考图" @click="fileInput?.click()">
+                    +
+                  </button>
+                  <div class="upload-copy">
+                    <span class="upload-label">参考图</span>
+                    <span class="upload-hint">用于图生视频</span>
+                  </div>
+                  <span v-if="uploadedFile" class="pill-filename">{{ uploadedFile.name }}</span>
+                  <button v-if="uploadedFile" class="text-btn" type="button" @click="removeUploadedFile">移除</button>
+                </div>
+
+                <div v-else-if="viduVideoMode === 'startEnd2video'" class="frame-upload-grid">
+                  <div class="upload-mini-row upload-card-row frame-upload-card" :class="{ 'has-file': !!viduStartFrame }">
+                    <input
+                      ref="viduStartInput"
+                      type="file"
+                      accept="image/*"
+                      class="file-input"
+                      @change="handleViduFrameChange($event, 'start')"
+                    />
+                    <button class="upload-btn upload-icon-btn" type="button" aria-label="上传首帧" @click="viduStartInput?.click()">
+                      +
+                    </button>
+                    <div class="upload-copy">
+                      <span class="upload-label">首帧</span>
+                      <span class="upload-hint">视频开始画面</span>
+                    </div>
+                    <span v-if="viduStartFrame" class="pill-filename">{{ viduStartFrame.name }}</span>
+                    <button v-if="viduStartFrame" class="text-btn" type="button" @click="removeViduFrame('start')">移除</button>
+                  </div>
+
+                  <div class="upload-mini-row upload-card-row frame-upload-card" :class="{ 'has-file': !!viduEndFrame }">
+                    <input
+                      ref="viduEndInput"
+                      type="file"
+                      accept="image/*"
+                      class="file-input"
+                      @change="handleViduFrameChange($event, 'end')"
+                    />
+                    <button class="upload-btn upload-icon-btn" type="button" aria-label="上传尾帧" @click="viduEndInput?.click()">
+                      +
+                    </button>
+                    <div class="upload-copy">
+                      <span class="upload-label">尾帧</span>
+                      <span class="upload-hint">视频结束画面</span>
+                    </div>
+                    <span v-if="viduEndFrame" class="pill-filename">{{ viduEndFrame.name }}</span>
+                    <button v-if="viduEndFrame" class="text-btn" type="button" @click="removeViduFrame('end')">移除</button>
+                  </div>
+                </div>
+              </template>
+
+              <div v-else-if="isUploadEnabled" class="upload-mini-row" :class="{ 'has-file': !!uploadedFile }">
                 <input
                   ref="fileInput"
                   type="file"
@@ -225,12 +302,23 @@ const { generate } = useGenerate()
 const chatAreaRef = ref<HTMLElement | null>(null)
 const promptInputRef = ref<HTMLTextAreaElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
+const viduStartInput = ref<HTMLInputElement | null>(null)
+const viduEndInput = ref<HTMLInputElement | null>(null)
 const isPolishing = ref(false)
 const isComposerExpanded = ref(false)
 const showAspectRatioMenu = ref(false)
 const uploadedFile = ref<UploadedFile | null>(null)
+const viduStartFrame = ref<UploadedFile | null>(null)
+const viduEndFrame = ref<UploadedFile | null>(null)
 const referenceUrl = ref('')
 const inputText = ref('')
+type ViduVideoMode = 'text2video' | 'image2video' | 'startEnd2video'
+const viduVideoMode = ref<ViduVideoMode>('text2video')
+const viduVideoModeOptions: Array<{ value: ViduVideoMode; label: string }> = [
+  { value: 'text2video', label: '文生视频' },
+  { value: 'image2video', label: '图生视频' },
+  { value: 'startEnd2video', label: '首尾帧生视频' },
+]
 
 const hasPromptPolishModelConfigured = computed(() => !!settingsStore.promptPolishModel.trim())
 const polishDisabledReason = '请前往设置完成 AI 润色模型设置'
@@ -238,13 +326,17 @@ const polishDisabledReason = '请前往设置完成 AI 润色模型设置'
 const activeMessages = computed(() => chatStore.messages)
 const activeSessionGenerating = computed(() => chatStore.isGenerating)
 const modelCapability = computed(() => getModelCapability(settingsStore.selectedModel))
+const isViduVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'viduq3-fast')
 const isUploadEnabled = computed(() => modelSupportsLocalUpload(settingsStore.selectedModel))
 const requiresUpload = computed(() => {
   if (!modelRequiresReference(settingsStore.selectedModel)) return false
   return !!modelCapability.value?.inputs.includes('image') && !inputText.value.trim()
 })
 const showReferenceUrlInput = computed(() => requiresUpload.value && !isUploadEnabled.value)
-const showReferenceField = computed(() => isUploadEnabled.value || showReferenceUrlInput.value)
+const showReferenceField = computed(() => {
+  if (isViduVideoModel.value) return viduVideoMode.value !== 'text2video'
+  return isUploadEnabled.value || showReferenceUrlInput.value
+})
 
 const uploadAccept = computed(() => getLocalUploadAccept(settingsStore.selectedModel) || 'image/*,video/*')
 const aspectRatioOptions = computed(() => {
@@ -266,6 +358,15 @@ const selectedAspectRatioOption = computed(() => {
 })
 
 const inputPlaceholder = computed(() => {
+  if (isViduVideoModel.value && viduVideoMode.value === 'text2video') {
+    return '描述你想生成的视频：场景、运动、节奏、情绪和镜头语言。'
+  }
+  if (isViduVideoModel.value && viduVideoMode.value === 'image2video') {
+    return '描述参考图如何动起来：主体运动、镜头推进、节奏和氛围。'
+  }
+  if (isViduVideoModel.value && viduVideoMode.value === 'startEnd2video') {
+    return '描述首帧到尾帧之间的变化过程、镜头运动、节奏和氛围。'
+  }
   if (settingsStore.mediaType === 'image' && uploadedFile.value) {
     return '描述你希望参考图如何变化：风格、光线、细节、构图。'
   }
@@ -282,6 +383,11 @@ const inputPlaceholder = computed(() => {
 
 const canSend = computed(() => {
   if (!inputText.value.trim()) return false
+  if (isViduVideoModel.value) {
+    if (viduVideoMode.value === 'text2video') return true
+    if (viduVideoMode.value === 'image2video') return !!uploadedFile.value
+    return !!viduStartFrame.value && !!viduEndFrame.value
+  }
   if (modelCapability.value?.availabilityNote === 'requires-image-upload' || modelCapability.value?.availabilityNote === 'requires-video-upload') {
     return !!uploadedFile.value || !!referenceUrl.value.trim()
   }
@@ -305,6 +411,15 @@ function handleMediaTypeChange(nextType: MediaType) {
   settingsStore.setMediaType(nextType)
   ensureSupportedAspectRatio()
   removeUploadedFile()
+  removeViduFrames()
+  referenceUrl.value = ''
+}
+
+function setViduVideoMode(mode: ViduVideoMode) {
+  if (viduVideoMode.value === mode) return
+  viduVideoMode.value = mode
+  removeUploadedFile()
+  removeViduFrames()
   referenceUrl.value = ''
 }
 
@@ -338,12 +453,39 @@ function releaseUploadedFile(file: UploadedFile | null | undefined) {
   }
 }
 
+function createUploadedFile(file: File, type: UploadedFile['type']): UploadedFile {
+  return {
+    name: file.name,
+    type,
+    url: URL.createObjectURL(file),
+    size: file.size,
+    file,
+  }
+}
+
 function removeUploadedFile() {
   releaseUploadedFile(uploadedFile.value)
   uploadedFile.value = null
   if (fileInput.value) {
     fileInput.value.value = ''
   }
+}
+
+function removeViduFrame(position: 'start' | 'end') {
+  if (position === 'start') {
+    releaseUploadedFile(viduStartFrame.value)
+    viduStartFrame.value = null
+    if (viduStartInput.value) viduStartInput.value.value = ''
+    return
+  }
+  releaseUploadedFile(viduEndFrame.value)
+  viduEndFrame.value = null
+  if (viduEndInput.value) viduEndInput.value.value = ''
+}
+
+function removeViduFrames() {
+  removeViduFrame('start')
+  removeViduFrame('end')
 }
 
 function handleFileChange(e: Event) {
@@ -370,13 +512,26 @@ function handleFileChange(e: Event) {
   }
 
   removeUploadedFile()
-  const url = URL.createObjectURL(file)
-  uploadedFile.value = {
-    name: file.name,
-    type: isImage ? 'image' : 'video',
-    url,
-    size: file.size,
-    file,
+  uploadedFile.value = createUploadedFile(file, isImage ? 'image' : 'video')
+}
+
+function handleViduFrameChange(e: Event, position: 'start' | 'end') {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+
+  if (!file.type.startsWith('image/')) {
+    showErrorMessage('首尾帧生视频仅支持上传图片')
+    target.value = ''
+    return
+  }
+
+  removeViduFrame(position)
+  const uploaded = createUploadedFile(file, 'image')
+  if (position === 'start') {
+    viduStartFrame.value = uploaded
+  } else {
+    viduEndFrame.value = uploaded
   }
 }
 
@@ -438,6 +593,7 @@ function scrollChatToBottom() {
 
 function handleClearConversation() {
   removeUploadedFile()
+  removeViduFrames()
   referenceUrl.value = ''
   inputText.value = ''
   chatStore.clearMessages()
@@ -453,12 +609,18 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   releaseUploadedFile(uploadedFile.value)
+  releaseUploadedFile(viduStartFrame.value)
+  releaseUploadedFile(viduEndFrame.value)
 })
 
 watch(
   () => settingsStore.selectedModel,
   () => {
     const capability = getModelCapability(settingsStore.selectedModel)
+    if (settingsStore.mediaType !== 'video' || capability?.videoRequestMode !== 'viduq3-fast') {
+      viduVideoMode.value = 'text2video'
+      removeViduFrames()
+    }
     if (uploadedFile.value?.type === 'image' && !capability?.localUploadInputs?.includes('image')) {
       removeUploadedFile()
     }
@@ -496,20 +658,27 @@ async function handleSend() {
 
   inputText.value = ''
 
-  const file =
-    uploadedFile.value ||
-    (referenceUrl.value.trim()
-      ? {
-          name: 'Reference URL',
-          type: 'image' as const,
-          url: referenceUrl.value.trim(),
-          size: 0,
-        }
-      : null)
+  const file: UploadedFile | UploadedFile[] | null = isViduVideoModel.value
+    ? viduVideoMode.value === 'image2video'
+      ? uploadedFile.value
+      : viduVideoMode.value === 'startEnd2video' && viduStartFrame.value && viduEndFrame.value
+        ? [viduStartFrame.value, viduEndFrame.value]
+        : null
+    : uploadedFile.value ||
+      (referenceUrl.value.trim()
+        ? {
+            name: 'Reference URL',
+            type: 'image' as const,
+            url: referenceUrl.value.trim(),
+            size: 0,
+          }
+        : null)
 
   removeUploadedFile()
+  removeViduFrames()
   referenceUrl.value = ''
-  const ioType = resolveGenerateIoType(settingsStore.mediaType, file)
+  const primaryFile = Array.isArray(file) ? file[0] : file
+  const ioType = resolveGenerateIoType(settingsStore.mediaType, primaryFile)
 
   await nextTick()
   scrollChatToBottom()
@@ -528,9 +697,9 @@ async function handleRegenerate(message: Message) {
     const duration = userMsg.duration || settingsStore.videoDuration
     await generate(
       userMsg.content,
-      resolveGenerateIoType(settingsStore.mediaType, userMsg.uploadedFile),
+      resolveGenerateIoType(settingsStore.mediaType, userMsg.uploadedFiles?.[0] || userMsg.uploadedFile),
       model,
-      userMsg.uploadedFile || null,
+      userMsg.uploadedFiles || userMsg.uploadedFile || null,
       aspectRatio,
       duration,
     )
@@ -763,7 +932,7 @@ async function handleRegenerate(message: Message) {
 .dock-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
 .dock-pills-primary {
@@ -775,11 +944,12 @@ async function handleRegenerate(message: Message) {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 6px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.26);
-  background: rgba(255, 255, 255, 0.16);
+  gap: 8px;
+  padding: 5px 7px 5px 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(248, 250, 252, 0.78);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
 .meta-pill-type {
@@ -793,9 +963,9 @@ async function handleRegenerate(message: Message) {
 .meta-pill-label {
   flex-shrink: 0;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1;
-  color: rgba(71, 85, 105, 0.78);
+  color: rgba(51, 65, 85, 0.86);
 }
 
 .media-switch,
@@ -804,9 +974,35 @@ async function handleRegenerate(message: Message) {
 .duration-selector,
 .upload-mini-row,
 .reference-input {
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(148, 163, 184, 0.34);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.84),
+    0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.media-switch,
+.ratio-selector,
+.duration-selector {
+  position: relative;
+}
+
+.media-switch::after,
+.ratio-selector::after,
+.duration-selector::after {
+  content: '';
+  position: absolute;
+  right: -5px;
+  top: 7px;
+  bottom: 7px;
+  width: 1px;
+  background: rgba(148, 163, 184, 0.28);
+}
+
+.duration-slot:last-child .duration-selector::after,
+.dock-pills-primary > :last-child::after {
+  display: none;
 }
 
 .media-switch {
@@ -859,18 +1055,53 @@ async function handleRegenerate(message: Message) {
 
 .ratio-selector {
   position: relative;
+  border-color: rgba(100, 116, 139, 0.42);
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.ratio-selector.open,
+.ratio-selector:focus-within,
+.duration-selector:focus-within,
+.media-switch:focus-within {
+  border-color: rgba(95, 75, 139, 0.42);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 0 0 3px rgba(95, 75, 139, 0.08),
+    0 8px 18px rgba(15, 23, 42, 0.06);
 }
 
 .ratio-current-btn {
-  min-width: 100px;
-  height: 34px;
-  padding: 0 12px;
+  min-width: 112px;
+  height: 36px;
+  padding: 0 14px;
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   background: transparent;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(15, 23, 42, 0.88);
+}
+
+.ratio-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ratio-chip::before {
+  content: '';
+  width: 16px;
+  height: 12px;
+  border-radius: 4px;
+  border: 1px solid rgba(71, 85, 105, 0.44);
+  background: rgba(148, 163, 184, 0.14);
+}
+
+.ratio-caret,
+.duration-caret {
+  color: rgba(71, 85, 105, 0.7);
 }
 
 .ratio-dropdown {
@@ -914,8 +1145,13 @@ async function handleRegenerate(message: Message) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 34px;
-  padding: 0 10px;
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.duration-selector {
+  border-color: rgba(100, 116, 139, 0.42);
+  background: rgba(248, 250, 252, 0.92);
 }
 
 .duration-select-wrap {
@@ -926,9 +1162,12 @@ async function handleRegenerate(message: Message) {
   appearance: none;
   border: 0;
   background: transparent;
-  padding-right: 18px;
+  min-width: 48px;
+  padding-right: 20px;
   font: inherit;
-  color: inherit;
+  font-weight: 700;
+  color: rgba(15, 23, 42, 0.88);
+  outline: none;
 }
 
 .duration-caret {
@@ -943,6 +1182,66 @@ async function handleRegenerate(message: Message) {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  width: 100%;
+  align-items: stretch;
+}
+
+.video-mode-switch {
+  display: inline-flex;
+  gap: 2px;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.84),
+    0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.mode-switch-btn {
+  min-width: 72px;
+}
+
+.upload-card-row {
+  min-height: 48px;
+  padding: 6px 10px;
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.88);
+}
+
+.upload-card-row.has-file {
+  border-color: rgba(95, 75, 139, 0.38);
+  background: rgba(95, 75, 139, 0.07);
+}
+
+.upload-copy {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 78px;
+}
+
+.upload-label {
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: rgba(15, 23, 42, 0.9);
+}
+
+.upload-hint {
+  font-size: 10px;
+  line-height: 1.1;
+  color: rgba(71, 85, 105, 0.72);
+}
+
+.frame-upload-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.frame-upload-card {
+  width: 100%;
+  justify-content: flex-start;
 }
 
 .file-input {
@@ -963,6 +1262,13 @@ async function handleRegenerate(message: Message) {
 .upload-btn,
 .icon-btn {
   background: rgba(255, 255, 255, 0.2);
+}
+
+.upload-btn:hover,
+.icon-btn:hover,
+.text-btn:hover,
+.polish-btn:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.46);
 }
 
 .pill-filename {
@@ -1161,6 +1467,15 @@ async function handleRegenerate(message: Message) {
 
   .reference-input {
     min-width: 100%;
+  }
+
+  .frame-upload-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .video-mode-switch,
+  .video-mode-switch .switch-btn {
+    width: 100%;
   }
 }
 </style>

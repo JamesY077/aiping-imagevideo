@@ -237,6 +237,8 @@ export async function generateVideo(params: VideoGenerateRequest): Promise<Video
       if (fullBody.images) minimalBody.images = fullBody.images
       if (fullBody.img_url) minimalBody.img_url = fullBody.img_url
       if (fullBody.first_frame_url) minimalBody.first_frame_url = fullBody.first_frame_url
+      if (fullBody.start_image) minimalBody.start_image = fullBody.start_image
+      if (fullBody.end_image) minimalBody.end_image = fullBody.end_image
       if (fullBody.video_list) minimalBody.video_list = fullBody.video_list
       if (fullBody.aspect_ratio) minimalBody.aspect_ratio = fullBody.aspect_ratio
       if (fullBody.ratio) minimalBody.ratio = fullBody.ratio

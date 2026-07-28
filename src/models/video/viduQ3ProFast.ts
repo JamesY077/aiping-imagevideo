@@ -18,10 +18,10 @@ export const viduQ3ProFastModel: VideoModelModule = {
     canonicalModel: 'viduq3-pro-fast',
     aliases: viduQ3ProFastAliases,
     defaultTextAspectRatio: '4:3',
-    defaultTextResolution: '540p',
+    defaultTextResolution: '1080p',
     defaultImageResolution: '1080p',
     textFallbackAspectRatios: ['4:3'],
-    textFallbackResolutions: ['540p'],
+    textFallbackResolutions: ['1080p'],
     textFields: ['model', 'prompt', 'duration', 'aspect_ratio', 'resolution'],
     imageFields: ['model', 'prompt', 'duration', 'images', 'resolution'],
     enableSeed: false,
@@ -49,7 +49,7 @@ export const viduQ3ProFastModel: VideoModelModule = {
       prompt: '一位宇航员在月球表面弹吉他，地球在远处升起，梦幻电影感',
       duration: 5,
       aspect_ratio: '4:3',
-      resolution: '540p',
+      resolution: '1080p',
     },
     code: `import { generateVideo } from '@/api/aiping'
 
@@ -58,7 +58,7 @@ await generateVideo({
   prompt: '一位宇航员在月球表面弹吉他，地球在远处升起，梦幻电影感',
   duration: 5,
   aspect_ratio: '4:3',
-  resolution: '540p',
+  resolution: '1080p',
 })`,
   }),
 }

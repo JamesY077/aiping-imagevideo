@@ -90,6 +90,8 @@ export interface VideoGenerateRequest {
   img_url?: string
   first_frame_url?: string
   last_frame_url?: string
+  start_image?: string
+  end_image?: string
   reference_images?: string[]
   video_list?: string[]
   duration?: number

@@ -12,6 +12,7 @@ import { pollVideoStatus, setVideoRatio, deleteVideoRatio } from '@/features/gen
 import { resolveRealCost } from '@/utils/format'
 
 type ImageRequestMode = NonNullable<ModelCapability['imageRequestMode']>
+type UploadInput = UploadedFile | UploadedFile[] | null | undefined
 
 function ioTypeToGenerateType(ioType: ModelIOType): GenerateType {
   return ioType === 'text2image' || ioType === 'image2image' ? 'image' : 'video'
@@ -25,14 +26,15 @@ function getKlingAspectRatio(aspectRatio: string): string {
 function buildImageParams(
   prompt: string,
   model: string | null,
-  uploadedFile: UploadedFile | null | undefined,
+  uploadedFile: UploadInput,
   aspectRatio: string,
   mode: ImageRequestMode | undefined
 ): Promise<ImageGenerateRequest> | ImageGenerateRequest {
   const build = async () => {
-    let imageInput = uploadedFile?.url
-    if (uploadedFile?.file) {
-      imageInput = await fileToBase64(uploadedFile.file)
+    const primaryFile = Array.isArray(uploadedFile) ? uploadedFile[0] : uploadedFile
+    let imageInput = primaryFile?.url
+    if (primaryFile?.file) {
+      imageInput = await fileToBase64(primaryFile.file)
     }
 
     const imageParams: ImageGenerateRequest = {
@@ -66,20 +68,23 @@ function buildImageParams(
 async function buildVideoParams(
   prompt: string,
   model: string | null,
-  uploadedFile: UploadedFile | null | undefined,
+  uploadedFile: UploadInput,
   aspectRatio: string,
   duration: number,
   videoRequestMode: ModelCapability['videoRequestMode']
 ): Promise<VideoGenerateRequest> {
-  let uploadValue = uploadedFile?.url
-  if (uploadedFile?.file) {
-    uploadValue = await fileToBase64(uploadedFile.file)
-  }
+  const uploadedFiles = (Array.isArray(uploadedFile) ? uploadedFile : uploadedFile ? [uploadedFile] : [])
+  const uploadValues = await Promise.all(
+    uploadedFiles.map(async (file) => (file.file ? fileToBase64(file.file) : file.url))
+  )
+  const primaryFile = uploadedFiles[0]
+  const uploadValue = uploadValues[0]
 
   const videoParams: VideoGenerateRequest = {
     prompt,
     model: model || undefined,
     duration,
+    resolution: '1080p',
   }
   setVideoRatio(videoParams, aspectRatio)
 
@@ -94,24 +99,24 @@ async function buildVideoParams(
       }
       break
     case 'kling-o1':
-      if (uploadedFile?.type === 'image' && uploadValue) {
-        videoParams.first_frame_url = uploadedFile.file ? toRawBase64(uploadValue) : uploadValue
+      if (primaryFile?.type === 'image' && uploadValue) {
+        videoParams.first_frame_url = primaryFile.file ? toRawBase64(uploadValue) : uploadValue
         deleteVideoRatio(videoParams)
-      } else if (uploadedFile?.type === 'video' && uploadedFile.url) {
-        videoParams.video_list = [uploadedFile.url]
+      } else if (primaryFile?.type === 'video' && primaryFile.url) {
+        videoParams.video_list = [primaryFile.url]
         deleteVideoRatio(videoParams)
       } else {
         setVideoRatio(videoParams, getKlingAspectRatio(aspectRatio))
       }
       break
     case 'viduq3-fast':
-      if (uploadValue) {
-        videoParams.images = [uploadValue]
+      if (uploadValues.length) {
+        videoParams.images = uploadValues.slice(0, 2)
         videoParams.resolution = '1080p'
         videoParams.movement_amplitude = 'auto'
       } else {
         videoParams.aspect_ratio = aspectRatio || '4:3'
-        videoParams.resolution = '540p'
+        videoParams.resolution = '1080p'
         videoParams.style = 'general'
         videoParams.movement_amplitude = 'auto'
       }
@@ -143,7 +148,7 @@ export function useGenerate() {
     prompt: string,
     ioType: ModelIOType,
     model: string | null,
-    uploadedFile?: UploadedFile | null,
+    uploadedFile?: UploadInput,
     aspectRatio = '1:1',
     duration = 6
   ) {
@@ -155,10 +160,11 @@ export function useGenerate() {
     chatStore.addMessage({
       type: 'user',
       content: prompt,
-      uploadedFile: uploadedFile || undefined,
+      uploadedFile: Array.isArray(uploadedFile) ? uploadedFile[0] : uploadedFile || undefined,
+      uploadedFiles: Array.isArray(uploadedFile) ? uploadedFile : undefined,
       aspectRatio,
       model: model || undefined,
-        duration,
+      duration,
     })
 
     const assistantId = chatStore.addMessage({

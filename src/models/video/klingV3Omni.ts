@@ -27,6 +27,7 @@ export const klingV3OmniModel: VideoModelModule = {
       prompt: '一只机械蝴蝶从花丛中飞起，微距摄影，浅景深',
       duration: 5,
       aspect_ratio: '16:9',
+      resolution: '1080p',
     },
     code: `import { generateVideo } from '@/api/aiping'
 
@@ -35,6 +36,7 @@ await generateVideo({
   prompt: '一只机械蝴蝶从花丛中飞起，微距摄影，浅景深',
   duration: 5,
   aspect_ratio: '16:9',
+  resolution: '1080p',
 })`,
   }),
 }
