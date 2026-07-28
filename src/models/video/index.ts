@@ -11,7 +11,7 @@ export { klingVideoO1Model } from './klingVideoO1'
 export { klingV26Model } from './klingV26'
 export { klingV3Model } from './klingV3'
 export { klingV3OmniModel } from './klingV3Omni'
-export { minimaxHailuo23Model } from './minimaxHailuo23'
+export { minimaxHailuo23Aliases, minimaxHailuoStartEndAliases, minimaxHailuo23Model } from './minimaxHailuo23'
 export { viduQ3ProAliases, viduQ3ProModel } from './viduQ3Pro'
 export { viduQ3ProFastAliases, viduQ3ProFastModel } from './viduQ3ProFast'
 

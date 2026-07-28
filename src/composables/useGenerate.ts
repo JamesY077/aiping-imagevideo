@@ -133,6 +133,45 @@ async function buildVideoParams(
       delete videoParams.watermark
       delete videoParams.extra_body
       break
+    case 'minimax-hailuo':
+      if (uploadValues.length >= 2) {
+        videoParams.first_frame_image = uploadValues[0]
+        videoParams.last_frame_image = uploadValues[1]
+      } else if (uploadValue) {
+        if (primaryFile?.type === 'image' && primaryFile?.name === 'Subject Reference') {
+          videoParams.subject_reference = [
+            {
+              type: 'character',
+              image: [uploadValue],
+            },
+          ]
+        } else {
+          videoParams.first_frame_image = uploadValue
+        }
+      }
+      if (!videoParams.subject_reference) {
+        videoParams.duration = duration || 6
+        videoParams.resolution = '1080P'
+      }
+      deleteVideoRatio(videoParams)
+      delete videoParams.seconds
+      delete videoParams.size
+      delete videoParams.image
+      delete videoParams.images
+      delete videoParams.img_url
+      delete videoParams.first_frame_url
+      delete videoParams.last_frame_url
+      delete videoParams.reference_images
+      delete videoParams.video_list
+      delete videoParams.audio
+      delete videoParams.movement_amplitude
+      delete videoParams.off_peak
+      delete videoParams.watermark
+      delete videoParams.seed
+      delete videoParams.style
+      delete videoParams.payload
+      delete videoParams.extra_body
+      break
     default:
       if (uploadValue) videoParams.img_url = uploadValue
       break

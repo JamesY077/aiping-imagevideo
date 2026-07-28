@@ -88,12 +88,19 @@ export interface VideoGenerateRequest {
   image?: string
   images?: string[]
   img_url?: string
+  first_frame_image?: string
+  last_frame_image?: string
   first_frame_url?: string
   last_frame_url?: string
   start_image?: string
   end_image?: string
   reference_images?: string[]
+  subject_reference?: Array<{
+    type: 'character' | string
+    image: string[]
+  }>
   video_list?: string[]
+  seconds?: number
   duration?: number
   aspect_ratio?: string
   ratio?: string

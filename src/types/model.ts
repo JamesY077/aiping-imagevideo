@@ -22,7 +22,7 @@ export interface ModelCapability {
   requiresReference?: boolean
   availabilityNote?: 'supports-image-upload' | 'supports-video-upload' | 'supports-image-video-upload' | 'requires-image-upload' | 'requires-video-upload'
   imageRequestMode?: 'default' | 'seedream-5-lite'
-  videoRequestMode?: 'kling-v26' | 'kling-v3' | 'kling-o1' | 'viduq3-fast'
+  videoRequestMode?: 'kling-v26' | 'kling-v3' | 'kling-o1' | 'viduq3-fast' | 'minimax-hailuo'
 }
 
 export interface BuiltInModelDescriptor {
@@ -59,10 +59,14 @@ export const MODEL_CAPABILITIES: Record<string, ModelCapability> = Object.fromEn
   ])
 )
 
-const HIDDEN_MODEL_ALIASES = new Set(['viduq3-pro-fast', 'viduq3-pro', 'viduQ3-pro-fast', 'viduQ3-pro'])
+const HIDDEN_MODEL_ALIASES = new Set(['MiniMax-Hailuo-02', 'S2V-01'].map((id) => id.toLowerCase()))
+
+export function isHiddenModelAlias(modelId: string | null | undefined): boolean {
+  return !!modelId && HIDDEN_MODEL_ALIASES.has(modelId.toLowerCase())
+}
 
 export const BUILT_IN_MODELS: BuiltInModelDescriptor[] = Object.keys(MODEL_CAPABILITIES)
-  .filter((id) => !HIDDEN_MODEL_ALIASES.has(id))
+  .filter((id) => !isHiddenModelAlias(id))
   .map((id) => ({
   id,
   mediaType: MODEL_CAPABILITIES[id].mediaType,
@@ -133,7 +137,7 @@ export function getLocalUploadAccept(modelId: string | null | undefined): string
 
 export function getSupportedAspectRatios(modelId: string | null | undefined): string[] | null {
   const mode = getModelCapability(modelId)?.videoRequestMode
-  if (mode === 'viduq3-fast') {
+  if (mode === 'viduq3-fast' || mode === 'minimax-hailuo') {
     return ['16:9', '9:16', '1:1', '4:3']
   }
   if (mode === 'kling-v26' || mode === 'kling-v3' || mode === 'kling-o1') {
@@ -154,8 +158,9 @@ export function getSupportedVideoDurations(modelId: string | null | undefined): 
         { value: 10, label: '10s' },
       ]
     case 'viduq3-fast':
+    case 'minimax-hailuo':
       return [
-        { value: 5, label: '5s' },
+        { value: mode === 'viduq3-fast' ? 5 : 6, label: mode === 'viduq3-fast' ? '5s' : '6s' },
       ]
     default:
       return [
@@ -169,5 +174,5 @@ export function getDefaultVideoDuration(modelId: string | null | undefined): num
 }
 
 export function getModelsByMediaType(mediaType: MediaType, ids: string[]): string[] {
-  return ids.filter((id) => MODEL_CAPABILITIES[id]?.mediaType === mediaType)
+  return ids.filter((id) => !isHiddenModelAlias(id) && MODEL_CAPABILITIES[id]?.mediaType === mediaType)
 }

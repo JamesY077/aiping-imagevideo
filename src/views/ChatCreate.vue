@@ -62,16 +62,16 @@
                 </div>
               </div>
 
-              <div v-if="isViduVideoModel" class="meta-pill meta-pill-mode">
+              <div v-if="usesViduLikeVideoMode" class="meta-pill meta-pill-mode">
                 <span class="meta-pill-label">生成方式</span>
-                <div class="video-mode-switch compact-switch" role="tablist" aria-label="Vidu 视频生成方式">
+                <div class="video-mode-switch compact-switch" role="tablist" aria-label="视频生成方式">
                   <button
-                    v-for="option in viduVideoModeOptions"
+                    v-for="option in activeVideoModeOptions"
                     :key="option.value"
                     class="switch-btn mode-switch-btn"
-                    :class="{ active: viduVideoMode === option.value }"
+                    :class="{ active: videoMode === option.value }"
                     type="button"
-                    @click="setViduVideoMode(option.value)"
+                    @click="setVideoMode(option.value)"
                   >
                     {{ option.label }}
                   </button>
@@ -126,8 +126,8 @@
             </div>
 
             <div v-if="showReferenceField" class="reference-strip">
-              <template v-if="isViduVideoModel">
-                <div v-if="viduVideoMode === 'image2video'" class="upload-mini-row upload-card-row" :class="{ 'has-file': !!uploadedFile }">
+              <template v-if="usesViduLikeVideoMode">
+                <div v-if="videoMode === 'image2video'" class="upload-mini-row upload-card-row" :class="{ 'has-file': !!uploadedFile }">
                   <input
                     ref="fileInput"
                     type="file"
@@ -146,7 +146,7 @@
                   <button v-if="uploadedFile" class="text-btn" type="button" @click="() => removeUploadedFile()">移除</button>
                 </div>
 
-                <div v-else-if="viduVideoMode === 'startEnd2video'" class="frame-upload-grid">
+                <div v-else-if="videoMode === 'startEnd2video'" class="frame-upload-grid">
                   <div class="upload-mini-row upload-card-row frame-upload-card" :class="{ 'has-file': !!viduStartFrame }">
                     <input
                       ref="viduStartInput"
@@ -184,6 +184,33 @@
                     <span v-if="viduEndFrame" class="pill-filename">{{ viduEndFrame.name }}</span>
                     <button v-if="viduEndFrame" class="text-btn" type="button" @click="removeViduFrame('end')">移除</button>
                   </div>
+                </div>
+
+                <div v-else-if="videoMode === 'subjectReference2video'" class="subject-reference-card" :class="{ 'has-file': !!uploadedFile || !!referenceUrl }">
+                  <input
+                    ref="fileInput"
+                    type="file"
+                    accept="image/*"
+                    class="file-input"
+                    @change="handleFileChange"
+                  />
+                  <button class="subject-upload-btn" type="button" @click="fileInput?.click()">
+                    <span class="subject-upload-icon">+</span>
+                    上传主体图
+                  </button>
+                  <div class="subject-reference-copy">
+                    <span class="upload-label">主体参考</span>
+                    <span class="upload-hint">上传人物主体图片，或粘贴图片链接生成 S2V 视频</span>
+                  </div>
+                  <span v-if="uploadedFile" class="pill-filename">{{ uploadedFile.name }}</span>
+                  <button v-if="uploadedFile" class="text-btn" type="button" @click="() => removeUploadedFile()">移除</button>
+                  <input
+                    v-else
+                    v-model.trim="referenceUrl"
+                    type="url"
+                    class="reference-input subject-reference-url"
+                    placeholder="或粘贴主体图片 URL"
+                  />
                 </div>
               </template>
 
@@ -312,18 +339,21 @@ const viduStartFrame = ref<UploadedFile | null>(null)
 const viduEndFrame = ref<UploadedFile | null>(null)
 const referenceUrl = ref('')
 const inputText = ref('')
-type ViduVideoMode = 'text2video' | 'image2video' | 'startEnd2video'
+type VideoMode = 'text2video' | 'image2video' | 'startEnd2video' | 'subjectReference2video'
 interface ImageDimensions {
   width: number
   height: number
 }
-const viduVideoMode = ref<ViduVideoMode>('text2video')
-const viduVideoModeOptions: Array<{ value: ViduVideoMode; label: string }> = [
+const videoMode = ref<VideoMode>('text2video')
+const viduVideoModeOptions: Array<{ value: VideoMode; label: string }> = [
   { value: 'text2video', label: '文生视频' },
   { value: 'image2video', label: '图生视频' },
   { value: 'startEnd2video', label: '首尾帧生视频' },
 ]
-
+const minimaxHailuoVideoModeOptions: Array<{ value: VideoMode; label: string }> = [
+  ...viduVideoModeOptions,
+  { value: 'subjectReference2video', label: '主体参考视频' },
+]
 const hasPromptPolishModelConfigured = computed(() => !!settingsStore.promptPolishModel.trim())
 const polishDisabledReason = '请前往设置完成 AI 润色模型设置'
 
@@ -331,6 +361,9 @@ const activeMessages = computed(() => chatStore.messages)
 const activeSessionGenerating = computed(() => chatStore.isGenerating)
 const modelCapability = computed(() => getModelCapability(settingsStore.selectedModel))
 const isViduVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'viduq3-fast')
+const isMinimaxHailuoVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'minimax-hailuo')
+const usesViduLikeVideoMode = computed(() => isViduVideoModel.value || isMinimaxHailuoVideoModel.value)
+const activeVideoModeOptions = computed(() => isMinimaxHailuoVideoModel.value ? minimaxHailuoVideoModeOptions : viduVideoModeOptions)
 const isUploadEnabled = computed(() => modelSupportsLocalUpload(settingsStore.selectedModel))
 const requiresUpload = computed(() => {
   if (!modelRequiresReference(settingsStore.selectedModel)) return false
@@ -338,7 +371,7 @@ const requiresUpload = computed(() => {
 })
 const showReferenceUrlInput = computed(() => requiresUpload.value && !isUploadEnabled.value)
 const showReferenceField = computed(() => {
-  if (isViduVideoModel.value) return viduVideoMode.value !== 'text2video'
+  if (usesViduLikeVideoMode.value) return videoMode.value !== 'text2video'
   return isUploadEnabled.value || showReferenceUrlInput.value
 })
 
@@ -362,14 +395,17 @@ const selectedAspectRatioOption = computed(() => {
 })
 
 const inputPlaceholder = computed(() => {
-  if (isViduVideoModel.value && viduVideoMode.value === 'text2video') {
+  if (usesViduLikeVideoMode.value && videoMode.value === 'text2video') {
     return '描述你想生成的视频：场景、运动、节奏、情绪和镜头语言。'
   }
-  if (isViduVideoModel.value && viduVideoMode.value === 'image2video') {
+  if (usesViduLikeVideoMode.value && videoMode.value === 'image2video') {
     return '描述参考图如何动起来：主体运动、镜头推进、节奏和氛围。'
   }
-  if (isViduVideoModel.value && viduVideoMode.value === 'startEnd2video') {
+  if (usesViduLikeVideoMode.value && videoMode.value === 'startEnd2video') {
     return '描述首帧到尾帧之间的变化过程、镜头运动、节奏和氛围。'
+  }
+  if (isMinimaxHailuoVideoModel.value && videoMode.value === 'subjectReference2video') {
+    return '描述人物主体在视频中的动作、表情、镜头运动和氛围。'
   }
   if (settingsStore.mediaType === 'image' && uploadedFile.value) {
     return '描述你希望参考图如何变化：风格、光线、细节、构图。'
@@ -387,10 +423,11 @@ const inputPlaceholder = computed(() => {
 
 const canSend = computed(() => {
   if (!inputText.value.trim()) return false
-  if (isViduVideoModel.value) {
-    if (viduVideoMode.value === 'text2video') return true
-    if (viduVideoMode.value === 'image2video') return !!uploadedFile.value
-    return !!viduStartFrame.value && !!viduEndFrame.value
+  if (usesViduLikeVideoMode.value) {
+    if (videoMode.value === 'text2video') return true
+    if (videoMode.value === 'image2video') return !!uploadedFile.value
+    if (videoMode.value === 'startEnd2video') return !!viduStartFrame.value && !!viduEndFrame.value
+    return !!uploadedFile.value || !!referenceUrl.value.trim()
   }
   if (modelCapability.value?.availabilityNote === 'requires-image-upload' || modelCapability.value?.availabilityNote === 'requires-video-upload') {
     return !!uploadedFile.value || !!referenceUrl.value.trim()
@@ -419,9 +456,9 @@ function handleMediaTypeChange(nextType: MediaType) {
   referenceUrl.value = ''
 }
 
-function setViduVideoMode(mode: ViduVideoMode) {
-  if (viduVideoMode.value === mode) return
-  viduVideoMode.value = mode
+function setVideoMode(mode: VideoMode) {
+  if (videoMode.value === mode) return
+  videoMode.value = mode
   removeUploadedFile()
   removeViduFrames()
   referenceUrl.value = ''
@@ -439,6 +476,7 @@ function handleAspectRatioMenuSelect(value: string) {
 }
 
 function ensureSupportedAspectRatio() {
+  if (!aspectRatioOptions.value.length) return
   if (aspectRatioOptions.value.some((option) => option.value === settingsStore.aspectRatio)) return
   settingsStore.aspectRatio = aspectRatioOptions.value[0]?.value || '1:1'
   settingsStore.saveToStorage()
@@ -730,8 +768,8 @@ watch(
   () => settingsStore.selectedModel,
   () => {
     const capability = getModelCapability(settingsStore.selectedModel)
-    if (settingsStore.mediaType !== 'video' || capability?.videoRequestMode !== 'viduq3-fast') {
-      viduVideoMode.value = 'text2video'
+    if (settingsStore.mediaType !== 'video' || !['viduq3-fast', 'minimax-hailuo'].includes(capability?.videoRequestMode || '')) {
+      videoMode.value = 'text2video'
       removeViduFrames()
     }
     if (uploadedFile.value?.type === 'image' && !capability?.localUploadInputs?.includes('image')) {
@@ -769,19 +807,29 @@ async function handleSend() {
 
   if (!canSend.value || activeSessionGenerating.value) return
 
-  if (isViduVideoModel.value && viduVideoMode.value === 'startEnd2video') {
+  if (usesViduLikeVideoMode.value && videoMode.value === 'startEnd2video') {
     const isAspectRatioValid = await validateViduFrameAspectRatio()
     if (!isAspectRatioValid) return
   }
 
   inputText.value = ''
 
-  const file: UploadedFile | UploadedFile[] | null = isViduVideoModel.value
-    ? viduVideoMode.value === 'image2video'
+  const file: UploadedFile | UploadedFile[] | null = usesViduLikeVideoMode.value
+    ? videoMode.value === 'image2video'
       ? uploadedFile.value
-      : viduVideoMode.value === 'startEnd2video' && viduStartFrame.value && viduEndFrame.value
+      : videoMode.value === 'startEnd2video' && viduStartFrame.value && viduEndFrame.value
         ? [viduStartFrame.value, viduEndFrame.value]
-        : null
+        : videoMode.value === 'subjectReference2video'
+          ? (uploadedFile.value ? { ...uploadedFile.value, name: 'Subject Reference' } : null) ||
+            (referenceUrl.value.trim()
+              ? {
+                  name: 'Subject Reference',
+                  type: 'image' as const,
+                  url: referenceUrl.value.trim(),
+                  size: 0,
+                }
+              : null)
+          : null
     : uploadedFile.value ||
       (referenceUrl.value.trim()
         ? {
@@ -1330,6 +1378,58 @@ async function handleRegenerate(message: Message) {
   background: rgba(95, 75, 139, 0.07);
 }
 
+.subject-reference-card {
+  width: 100%;
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.84),
+    0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.subject-reference-card.has-file {
+  border-color: rgba(95, 75, 139, 0.38);
+  background: rgba(95, 75, 139, 0.07);
+}
+
+.subject-upload-btn {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(23, 23, 23, 0.94), rgba(95, 75, 139, 0.9));
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.subject-upload-icon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.subject-reference-copy {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .upload-copy {
   display: inline-flex;
   flex-direction: column;
@@ -1589,6 +1689,11 @@ async function handleRegenerate(message: Message) {
 
   .frame-upload-grid {
     grid-template-columns: 1fr;
+  }
+
+  .subject-reference-card {
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 
   .video-mode-switch,

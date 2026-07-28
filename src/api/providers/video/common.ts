@@ -12,12 +12,16 @@ export function buildOpenAiVideoRequestBody(
   if (params.image) body.image = params.image
   if (params.images?.length) body.images = params.images
   if (params.img_url) body.img_url = params.img_url
+  if (params.first_frame_image) body.first_frame_image = params.first_frame_image
+  if (params.last_frame_image) body.last_frame_image = params.last_frame_image
   if (params.first_frame_url) body.first_frame_url = params.first_frame_url
   if (params.last_frame_url) body.last_frame_url = params.last_frame_url
   if (params.start_image) body.start_image = params.start_image
   if (params.end_image) body.end_image = params.end_image
   if (params.reference_images?.length) body.reference_images = params.reference_images
+  if (params.subject_reference?.length) body.subject_reference = params.subject_reference
   if (params.video_list?.length) body.video_list = params.video_list
+  if (params.seconds) body.seconds = params.seconds
   if (params.duration) body.duration = params.duration
   if (params.aspect_ratio) body.aspect_ratio = params.aspect_ratio
   if (params.ratio) body.ratio = params.ratio

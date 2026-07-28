@@ -108,15 +108,16 @@ function maskSensitiveValue(value: unknown): unknown {
   return value
 }
 
+function sanitizeDebugValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeDebugValue)
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, child]) => [key, sanitizeDebugValue(child)]))
+  }
+  return maskSensitiveValue(value)
+}
+
 function sanitizeDebugBody(body: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(body).map(([key, value]) => {
-      if (Array.isArray(value)) {
-        return [key, value.map(maskSensitiveValue)]
-      }
-      return [key, maskSensitiveValue(value)]
-    })
-  )
+  return Object.fromEntries(Object.entries(body).map(([key, value]) => [key, sanitizeDebugValue(value)]))
 }
 
 function debugLog(message: string, payload?: unknown) {
@@ -236,10 +237,14 @@ export async function generateVideo(params: VideoGenerateRequest): Promise<Video
       if (fullBody.image) minimalBody.image = fullBody.image
       if (fullBody.images) minimalBody.images = fullBody.images
       if (fullBody.img_url) minimalBody.img_url = fullBody.img_url
+      if (fullBody.first_frame_image) minimalBody.first_frame_image = fullBody.first_frame_image
+      if (fullBody.last_frame_image) minimalBody.last_frame_image = fullBody.last_frame_image
       if (fullBody.first_frame_url) minimalBody.first_frame_url = fullBody.first_frame_url
       if (fullBody.start_image) minimalBody.start_image = fullBody.start_image
       if (fullBody.end_image) minimalBody.end_image = fullBody.end_image
+      if (fullBody.subject_reference) minimalBody.subject_reference = fullBody.subject_reference
       if (fullBody.video_list) minimalBody.video_list = fullBody.video_list
+      if (fullBody.seconds) minimalBody.seconds = fullBody.seconds
       if (fullBody.aspect_ratio) minimalBody.aspect_ratio = fullBody.aspect_ratio
       if (fullBody.ratio) minimalBody.ratio = fullBody.ratio
       if (fullBody.size) minimalBody.size = fullBody.size
