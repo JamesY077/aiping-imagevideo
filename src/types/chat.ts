@@ -44,4 +44,8 @@ export interface UploadedFile {
   url: string
   size: number
   file?: File
+  dimensions?: {
+    width: number
+    height: number
+  }
 }

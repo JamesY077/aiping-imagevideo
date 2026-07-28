@@ -60,7 +60,7 @@ export function isViduStartEndToVideoBody(body: Record<string, unknown>): boolea
 }
 
 export function getViduEndpoint(body: Record<string, unknown>): string {
-  if (isViduStartEndToVideoBody(body)) return '/ent/v2/start-end2video'
+  if (isViduStartEndToVideoBody(body)) return '/videos/vidu/start-end2video'
   return isViduImageToVideoBody(body)
     ? '/videos/vidu/img2video'
     : '/videos/vidu/text2video'

@@ -143,7 +143,7 @@
                     <span class="upload-hint">用于图生视频</span>
                   </div>
                   <span v-if="uploadedFile" class="pill-filename">{{ uploadedFile.name }}</span>
-                  <button v-if="uploadedFile" class="text-btn" type="button" @click="removeUploadedFile">移除</button>
+                  <button v-if="uploadedFile" class="text-btn" type="button" @click="() => removeUploadedFile()">移除</button>
                 </div>
 
                 <div v-else-if="viduVideoMode === 'startEnd2video'" class="frame-upload-grid">
@@ -199,7 +199,7 @@
                   +
                 </button>
                 <span v-if="uploadedFile" class="pill-filename">{{ uploadedFile.name }}</span>
-                <button v-if="uploadedFile" class="text-btn" type="button" @click="removeUploadedFile">移除</button>
+                <button v-if="uploadedFile" class="text-btn" type="button" @click="() => removeUploadedFile()">移除</button>
               </div>
               <input
                 v-else-if="showReferenceUrlInput"
@@ -313,6 +313,10 @@ const viduEndFrame = ref<UploadedFile | null>(null)
 const referenceUrl = ref('')
 const inputText = ref('')
 type ViduVideoMode = 'text2video' | 'image2video' | 'startEnd2video'
+interface ImageDimensions {
+  width: number
+  height: number
+}
 const viduVideoMode = ref<ViduVideoMode>('text2video')
 const viduVideoModeOptions: Array<{ value: ViduVideoMode; label: string }> = [
   { value: 'text2video', label: '文生视频' },
@@ -453,39 +457,119 @@ function releaseUploadedFile(file: UploadedFile | null | undefined) {
   }
 }
 
-function createUploadedFile(file: File, type: UploadedFile['type']): UploadedFile {
+function createUploadedFile(file: File, type: UploadedFile['type'], dimensions?: ImageDimensions): UploadedFile {
   return {
     name: file.name,
     type,
     url: URL.createObjectURL(file),
     size: file.size,
     file,
+    dimensions,
   }
 }
 
-function removeUploadedFile() {
-  releaseUploadedFile(uploadedFile.value)
+function getGreatestCommonDivisor(a: number, b: number): number {
+  let x = Math.abs(a)
+  let y = Math.abs(b)
+  while (y) {
+    const next = x % y
+    x = y
+    y = next
+  }
+  return x || 1
+}
+
+function getAspectRatioLabel(dimensions: ImageDimensions): string {
+  const divisor = getGreatestCommonDivisor(dimensions.width, dimensions.height)
+  return `${dimensions.width / divisor}:${dimensions.height / divisor}`
+}
+
+function hasSameAspectRatio(a: ImageDimensions, b: ImageDimensions): boolean {
+  return a.width * b.height === b.width * a.height
+}
+
+function getImageDimensions(file: File): Promise<ImageDimensions> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file)
+    const image = new Image()
+    image.onload = () => {
+      const dimensions = {
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+      }
+      URL.revokeObjectURL(objectUrl)
+      if (!dimensions.width || !dimensions.height) {
+        reject(new Error('无法读取图片尺寸'))
+        return
+      }
+      resolve(dimensions)
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      reject(new Error('无法读取图片尺寸'))
+    }
+    image.src = objectUrl
+  })
+}
+
+async function resolveUploadedImageDimensions(uploadedFile: UploadedFile): Promise<ImageDimensions | null> {
+  if (uploadedFile.dimensions) return uploadedFile.dimensions
+  if (!uploadedFile.file) return null
+  const dimensions = await getImageDimensions(uploadedFile.file)
+  uploadedFile.dimensions = dimensions
+  return dimensions
+}
+
+function showViduFrameAspectRatioError(startDimensions: ImageDimensions, endDimensions: ImageDimensions) {
+  showErrorMessage(
+    `首帧和尾帧图片比例必须相同。当前首帧为 ${getAspectRatioLabel(startDimensions)}，尾帧为 ${getAspectRatioLabel(endDimensions)}。`,
+  )
+}
+
+async function validateViduFrameAspectRatio(): Promise<boolean> {
+  if (!viduStartFrame.value || !viduEndFrame.value) return true
+  try {
+    const startDimensions = await resolveUploadedImageDimensions(viduStartFrame.value)
+    const endDimensions = await resolveUploadedImageDimensions(viduEndFrame.value)
+    if (!startDimensions || !endDimensions) return true
+    if (hasSameAspectRatio(startDimensions, endDimensions)) return true
+    showViduFrameAspectRatioError(startDimensions, endDimensions)
+    return false
+  } catch (error) {
+    showErrorMessage('无法读取首帧或尾帧图片尺寸，请重新上传图片后再试。')
+    return false
+  }
+}
+
+function removeUploadedFile(options: { revoke?: boolean } = {}) {
+  if (options.revoke !== false) {
+    releaseUploadedFile(uploadedFile.value)
+  }
   uploadedFile.value = null
   if (fileInput.value) {
     fileInput.value.value = ''
   }
 }
 
-function removeViduFrame(position: 'start' | 'end') {
+function removeViduFrame(position: 'start' | 'end', options: { revoke?: boolean } = {}) {
   if (position === 'start') {
-    releaseUploadedFile(viduStartFrame.value)
+    if (options.revoke !== false) {
+      releaseUploadedFile(viduStartFrame.value)
+    }
     viduStartFrame.value = null
     if (viduStartInput.value) viduStartInput.value.value = ''
     return
   }
-  releaseUploadedFile(viduEndFrame.value)
+  if (options.revoke !== false) {
+    releaseUploadedFile(viduEndFrame.value)
+  }
   viduEndFrame.value = null
   if (viduEndInput.value) viduEndInput.value.value = ''
 }
 
-function removeViduFrames() {
-  removeViduFrame('start')
-  removeViduFrame('end')
+function removeViduFrames(options: { revoke?: boolean } = {}) {
+  removeViduFrame('start', options)
+  removeViduFrame('end', options)
 }
 
 function handleFileChange(e: Event) {
@@ -515,7 +599,7 @@ function handleFileChange(e: Event) {
   uploadedFile.value = createUploadedFile(file, isImage ? 'image' : 'video')
 }
 
-function handleViduFrameChange(e: Event, position: 'start' | 'end') {
+async function handleViduFrameChange(e: Event, position: 'start' | 'end') {
   const target = e.target as HTMLInputElement
   const file = target.files?.[0]
   if (!file) return
@@ -526,8 +610,37 @@ function handleViduFrameChange(e: Event, position: 'start' | 'end') {
     return
   }
 
+  let dimensions: ImageDimensions
+  try {
+    dimensions = await getImageDimensions(file)
+  } catch (error) {
+    showErrorMessage('无法读取图片尺寸，请重新上传图片后再试。')
+    target.value = ''
+    return
+  }
+
+  const oppositeFrame = position === 'start' ? viduEndFrame.value : viduStartFrame.value
+  if (oppositeFrame) {
+    try {
+      const oppositeDimensions = await resolveUploadedImageDimensions(oppositeFrame)
+      if (oppositeDimensions && !hasSameAspectRatio(dimensions, oppositeDimensions)) {
+        if (position === 'start') {
+          showViduFrameAspectRatioError(dimensions, oppositeDimensions)
+        } else {
+          showViduFrameAspectRatioError(oppositeDimensions, dimensions)
+        }
+        target.value = ''
+        return
+      }
+    } catch (error) {
+      showErrorMessage('无法读取已上传图片尺寸，请重新上传首帧和尾帧。')
+      target.value = ''
+      return
+    }
+  }
+
   removeViduFrame(position)
-  const uploaded = createUploadedFile(file, 'image')
+  const uploaded = createUploadedFile(file, 'image', dimensions)
   if (position === 'start') {
     viduStartFrame.value = uploaded
   } else {
@@ -592,8 +705,8 @@ function scrollChatToBottom() {
 }
 
 function handleClearConversation() {
-  removeUploadedFile()
-  removeViduFrames()
+  removeUploadedFile({ revoke: false })
+  removeViduFrames({ revoke: false })
   referenceUrl.value = ''
   inputText.value = ''
   chatStore.clearMessages()
@@ -656,6 +769,11 @@ async function handleSend() {
 
   if (!canSend.value || activeSessionGenerating.value) return
 
+  if (isViduVideoModel.value && viduVideoMode.value === 'startEnd2video') {
+    const isAspectRatioValid = await validateViduFrameAspectRatio()
+    if (!isAspectRatioValid) return
+  }
+
   inputText.value = ''
 
   const file: UploadedFile | UploadedFile[] | null = isViduVideoModel.value
@@ -674,8 +792,8 @@ async function handleSend() {
           }
         : null)
 
-  removeUploadedFile()
-  removeViduFrames()
+  removeUploadedFile({ revoke: false })
+  removeViduFrames({ revoke: false })
   referenceUrl.value = ''
   const primaryFile = Array.isArray(file) ? file[0] : file
   const ioType = resolveGenerateIoType(settingsStore.mediaType, primaryFile)
