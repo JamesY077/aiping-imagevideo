@@ -27,6 +27,7 @@ export const klingV3Model: VideoModelModule = {
       prompt: '无人机航拍穿越峡谷，清晨阳光照亮河流，史诗感',
       duration: 5,
       aspect_ratio: '16:9',
+      resolution: '1080p',
     },
     code: `import { generateVideo } from '@/api/aiping'
 
@@ -35,6 +36,7 @@ await generateVideo({
   prompt: '无人机航拍穿越峡谷，清晨阳光照亮河流，史诗感',
   duration: 5,
   aspect_ratio: '16:9',
+  resolution: '1080p',
 })`,
   }),
 }

@@ -27,6 +27,7 @@ export const klingV26Model: VideoModelModule = {
       prompt: '水墨风山水画动起来，云雾流动，仙鹤飞过远山',
       duration: 5,
       aspect_ratio: '16:9',
+      resolution: '1080p',
     },
     code: `import { generateVideo } from '@/api/aiping'
 
@@ -35,6 +36,7 @@ await generateVideo({
   prompt: '水墨风山水画动起来，云雾流动，仙鹤飞过远山',
   duration: 5,
   aspect_ratio: '16:9',
+  resolution: '1080p',
 })`,
   }),
 }

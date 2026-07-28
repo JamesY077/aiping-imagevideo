@@ -36,6 +36,8 @@ const DEFAULT_IMAGE_FIELDS = [
   'prompt',
   'duration',
   'images',
+  'start_image',
+  'end_image',
   'resolution',
   'movement_amplitude',
   'seed',
@@ -48,10 +50,17 @@ function createRandomSeed(): number {
 }
 
 export function isViduImageToVideoBody(body: Record<string, unknown>): boolean {
-  return !!(body.images || body.image || body.img_url || body.first_frame_url || body.last_frame_url)
+  return !!(body.images || body.image || body.img_url || body.first_frame_url || body.last_frame_url || body.start_image || body.end_image)
+}
+
+export function isViduStartEndToVideoBody(body: Record<string, unknown>): boolean {
+  if (typeof body.start_image === 'string' && typeof body.end_image === 'string') return true
+  if (typeof body.first_frame_url === 'string' && typeof body.last_frame_url === 'string') return true
+  return Array.isArray(body.images) && body.images.filter((image) => typeof image === 'string' && !!image).length >= 2
 }
 
 export function getViduEndpoint(body: Record<string, unknown>): string {
+  if (isViduStartEndToVideoBody(body)) return '/ent/v2/start-end2video'
   return isViduImageToVideoBody(body)
     ? '/videos/vidu/img2video'
     : '/videos/vidu/text2video'
@@ -82,11 +91,15 @@ function normalizeViduImages(body: Record<string, unknown>) {
   if (typeof body.img_url === 'string' && body.img_url) images.push(body.img_url)
   if (typeof body.first_frame_url === 'string' && body.first_frame_url) images.push(body.first_frame_url)
   if (typeof body.last_frame_url === 'string' && body.last_frame_url) images.push(body.last_frame_url)
+  if (typeof body.start_image === 'string' && body.start_image) images.push(body.start_image)
+  if (typeof body.end_image === 'string' && body.end_image) images.push(body.end_image)
 
   delete body.image
   delete body.img_url
   delete body.first_frame_url
   delete body.last_frame_url
+  delete body.start_image
+  delete body.end_image
 
   if (images.length) {
     body.images = Array.from(new Set(images)).slice(0, 2)

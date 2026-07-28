@@ -8,10 +8,17 @@
     <div class="bubble">
       <div class="content">
         <p v-if="message.content">{{ message.content }}</p>
-        <div v-if="message.uploadedFile" class="file-preview">
-          <img v-if="message.uploadedFile.type === 'image'" :src="message.uploadedFile.url" class="preview-img" />
-          <video v-else :src="message.uploadedFile.url" class="preview-video" controls />
-          <span class="file-name">{{ message.uploadedFile.name }}</span>
+        <div v-if="previewFiles.length" class="file-preview-list">
+          <div
+            v-for="(file, index) in previewFiles"
+            :key="`${file.url}-${index}`"
+            class="file-preview"
+          >
+            <span v-if="previewFiles.length > 1" class="frame-badge">{{ index === 0 ? '首帧' : '尾帧' }}</span>
+            <img v-if="file.type === 'image'" :src="file.url" class="preview-img" />
+            <video v-else :src="file.url" class="preview-video" controls />
+            <span class="file-name">{{ file.name }}</span>
+          </div>
         </div>
       </div>
       <div v-if="message.generateStatus" class="generate-result">
@@ -61,12 +68,15 @@ import ImageResult from './ImageResult.vue'
 import VideoResult from './VideoResult.vue'
 import { formatTime } from '@/utils/format'
 import type { Message } from '@/types/chat'
+import { computed } from 'vue'
 
-defineProps<{ message: Message }>()
+const props = defineProps<{ message: Message }>()
 defineEmits<{
   (e: 'regenerate', message: Message): void
   (e: 'copyPrompt', prompt: string): void
 }>()
+
+const previewFiles = computed(() => props.message.uploadedFiles?.length ? props.message.uploadedFiles : props.message.uploadedFile ? [props.message.uploadedFile] : [])
 </script>
 
 <style scoped>
@@ -134,12 +144,32 @@ defineEmits<{
   color: rgba(255, 255, 255, 0.96);
 }
 
-.file-preview {
+.file-preview-list {
   margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.file-preview {
+  position: relative;
   overflow: hidden;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.86);
   border: 1px solid rgba(255, 255, 255, 0.24);
+}
+
+.frame-badge {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  z-index: 1;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.74);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .preview-img,

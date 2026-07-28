@@ -32,6 +32,7 @@ export interface Message {
   error?: string
   progress?: number
   uploadedFile?: UploadedFile
+  uploadedFiles?: UploadedFile[]
   duration?: number
   aspectRatio?: string
   model?: string

@@ -23,6 +23,7 @@ export const minimaxHailuo23Model: VideoModelModule = {
       model: 'MiniMax-Hailuo-2.3',
       prompt: '一个温暖的咖啡馆清晨，阳光穿过窗户，咖啡蒸汽缓慢升起',
       duration: 6,
+      resolution: '1080p',
     },
     code: `import { generateVideo } from '@/api/aiping'
 
@@ -30,6 +31,7 @@ await generateVideo({
   model: 'MiniMax-Hailuo-2.3',
   prompt: '一个温暖的咖啡馆清晨，阳光穿过窗户，咖啡蒸汽缓慢升起',
   duration: 6,
+  resolution: '1080p',
 })`,
   }),
 }

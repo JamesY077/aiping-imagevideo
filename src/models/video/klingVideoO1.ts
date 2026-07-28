@@ -27,6 +27,7 @@ export const klingVideoO1Model: VideoModelModule = {
       prompt: '镜头缓慢推进，一辆复古跑车穿过雨夜霓虹街道，电影感',
       duration: 5,
       aspect_ratio: '16:9',
+      resolution: '1080p',
     },
     code: `import { generateVideo } from '@/api/aiping'
 
@@ -35,6 +36,7 @@ await generateVideo({
   prompt: '镜头缓慢推进，一辆复古跑车穿过雨夜霓虹街道，电影感',
   duration: 5,
   aspect_ratio: '16:9',
+  resolution: '1080p',
 })`,
   }),
 }
