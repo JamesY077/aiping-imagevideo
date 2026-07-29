@@ -62,7 +62,24 @@
                 </div>
               </div>
 
-              <div v-if="usesViduLikeVideoMode" class="meta-pill meta-pill-mode">
+              <div v-if="settingsStore.mediaType === 'image'" class="meta-pill meta-pill-mode">
+                <span class="meta-pill-label">生成方式</span>
+                <div class="video-mode-switch compact-switch" role="tablist" aria-label="图片生成方式">
+                  <button
+                    v-for="option in imageModeOptions"
+                    :key="option.value"
+                    class="switch-btn mode-switch-btn"
+                    :class="{ active: imageMode === option.value }"
+                    type="button"
+                    :disabled="option.value === 'image2image' && !supportsImageReferenceMode"
+                    @click="setImageMode(option.value)"
+                  >
+                    {{ option.label }}
+                  </button>
+                </div>
+              </div>
+
+              <div v-else-if="usesViduLikeVideoMode" class="meta-pill meta-pill-mode">
                 <span class="meta-pill-label">生成方式</span>
                 <div class="video-mode-switch compact-switch" role="tablist" aria-label="视频生成方式">
                   <button
@@ -86,7 +103,13 @@
                   aria-label="选择比例"
                   @click="showAspectRatioMenu = !showAspectRatioMenu"
                 >
-                  <span class="ratio-chip">{{ selectedAspectRatioOption.label }}</span>
+                  <span class="ratio-chip">
+                    <span
+                      class="ratio-current-box"
+                      :style="{ width: `${selectedAspectRatioOption.boxWidth}px`, height: `${selectedAspectRatioOption.boxHeight}px` }"
+                    />
+                    {{ selectedAspectRatioOption.label }}
+                  </span>
                   <span class="ratio-caret">▾</span>
                 </button>
 
@@ -99,7 +122,9 @@
                     :class="{ active: settingsStore.aspectRatio === option.value }"
                     @click="handleAspectRatioMenuSelect(option.value)"
                   >
-                    <span class="ratio-option-box" :style="{ width: `${option.boxWidth}px`, height: `${option.boxHeight}px` }" />
+                    <span class="ratio-option-preview">
+                      <span class="ratio-option-box" :style="{ width: `${option.boxWidth}px`, height: `${option.boxHeight}px` }" />
+                    </span>
                     <span>{{ option.label }}</span>
                   </button>
                 </div>
@@ -273,6 +298,24 @@
                 </div>
               </template>
 
+              <div v-else-if="isImageReferenceMode" class="upload-mini-row upload-card-row" :class="{ 'has-file': !!uploadedFile }">
+                <input
+                  ref="fileInput"
+                  type="file"
+                  accept="image/*"
+                  class="file-input"
+                  @change="handleFileChange"
+                />
+                <button class="upload-btn upload-icon-btn" type="button" aria-label="上传参考图" @click="fileInput?.click()">
+                  +
+                </button>
+                <div class="upload-copy">
+                  <span class="upload-label">参考图</span>
+                  <span class="upload-hint">用于图生图</span>
+                </div>
+                <span v-if="uploadedFile" class="pill-filename">{{ uploadedFile.name }}</span>
+                <button v-if="uploadedFile" class="text-btn" type="button" @click="() => removeUploadedFile()">移除</button>
+              </div>
               <div v-else-if="isUploadEnabled" class="upload-mini-row" :class="{ 'has-file': !!uploadedFile }">
                 <input
                   ref="fileInput"
@@ -404,12 +447,18 @@ const motionControlKeepOriginalSound = ref<'yes' | 'no'>('yes')
 const motionControlCharacterOrientation = ref<'image' | 'video'>('image')
 const referenceUrl = ref('')
 const inputText = ref('')
+type ImageMode = 'text2image' | 'image2image'
 type VideoMode = 'text2video' | 'image2video' | 'startEnd2video' | 'subjectReference2video' | 'motionControl2video'
 interface ImageDimensions {
   width: number
   height: number
 }
+const imageMode = ref<ImageMode>('text2image')
 const videoMode = ref<VideoMode>('text2video')
+const imageModeOptions: Array<{ value: ImageMode; label: string }> = [
+  { value: 'text2image', label: '文生图' },
+  { value: 'image2image', label: '图生图' },
+]
 const viduVideoModeOptions: Array<{ value: VideoMode; label: string }> = [
   { value: 'text2video', label: '文生视频' },
   { value: 'image2video', label: '图生视频' },
@@ -448,6 +497,12 @@ const activeVideoModeOptions = computed(() => {
   return viduVideoModeOptions
 })
 const isUploadEnabled = computed(() => modelSupportsLocalUpload(settingsStore.selectedModel))
+const supportsImageReferenceMode = computed(() => {
+  return settingsStore.mediaType === 'image' && !!modelCapability.value?.inputs.includes('image') && isUploadEnabled.value
+})
+const isImageReferenceMode = computed(() => {
+  return settingsStore.mediaType === 'image' && imageMode.value === 'image2image' && supportsImageReferenceMode.value
+})
 const requiresUpload = computed(() => {
   if (!modelRequiresReference(settingsStore.selectedModel)) return false
   return !!modelCapability.value?.inputs.includes('image') && !inputText.value.trim()
@@ -455,6 +510,7 @@ const requiresUpload = computed(() => {
 const showReferenceUrlInput = computed(() => requiresUpload.value && !isUploadEnabled.value)
 const showReferenceField = computed(() => {
   if (usesViduLikeVideoMode.value) return videoMode.value !== 'text2video'
+  if (settingsStore.mediaType === 'image') return isImageReferenceMode.value || showReferenceUrlInput.value
   return isUploadEnabled.value || showReferenceUrlInput.value
 })
 
@@ -493,7 +549,7 @@ const inputPlaceholder = computed(() => {
   if (isMinimaxHailuoVideoModel.value && videoMode.value === 'subjectReference2video') {
     return '描述人物主体在视频中的动作、表情、镜头运动和氛围。'
   }
-  if (settingsStore.mediaType === 'image' && uploadedFile.value) {
+  if (isImageReferenceMode.value) {
     return '描述你希望参考图如何变化：风格、光线、细节、构图。'
   }
   if (settingsStore.mediaType === 'video' && uploadedFile.value?.type === 'image') {
@@ -515,6 +571,9 @@ const canSend = computed(() => {
     if (videoMode.value === 'motionControl2video') return !!motionControlImage.value && !!motionControlVideo.value
     if (videoMode.value === 'startEnd2video') return !!viduStartFrame.value && !!viduEndFrame.value
     return !!uploadedFile.value || !!referenceUrl.value.trim()
+  }
+  if (settingsStore.mediaType === 'image' && imageMode.value === 'image2image') {
+    return supportsImageReferenceMode.value && !!uploadedFile.value
   }
   if (modelCapability.value?.availabilityNote === 'requires-image-upload' || modelCapability.value?.availabilityNote === 'requires-video-upload') {
     return !!uploadedFile.value || !!referenceUrl.value.trim()
@@ -538,9 +597,18 @@ function ensureWelcomeMessage() {
 function handleMediaTypeChange(nextType: MediaType) {
   settingsStore.setMediaType(nextType)
   ensureSupportedAspectRatio()
+  imageMode.value = 'text2image'
   removeUploadedFile()
   removeViduFrames()
   removeMotionControlFiles()
+  referenceUrl.value = ''
+}
+
+function setImageMode(mode: ImageMode) {
+  if (mode === 'image2image' && !supportsImageReferenceMode.value) return
+  if (imageMode.value === mode) return
+  imageMode.value = mode
+  removeUploadedFile()
   referenceUrl.value = ''
 }
 
@@ -900,6 +968,9 @@ watch(
   () => settingsStore.selectedModel,
   () => {
     const capability = getModelCapability(settingsStore.selectedModel)
+    if (!supportsImageReferenceMode.value) {
+      imageMode.value = 'text2image'
+    }
     const usesModeSwitcher = settingsStore.mediaType === 'video' && ['viduq3-fast', 'minimax-hailuo', 'kling-v26', 'kling-v3', 'kling-omni'].includes(capability?.videoRequestMode || '')
     if (!usesModeSwitcher) {
       videoMode.value = 'text2video'
@@ -1232,6 +1303,7 @@ async function handleRegenerate(message: Message) {
   gap: 8px;
   border-top-color: rgba(255, 255, 255, 0.76);
   background: rgba(255, 255, 255, 0.94);
+  overflow: visible;
 }
 
 .composer-meta-row {
@@ -1374,6 +1446,8 @@ async function handleRegenerate(message: Message) {
   position: relative;
   border-color: rgba(100, 116, 139, 0.42);
   background: rgba(248, 250, 252, 0.92);
+  flex: 0 0 auto;
+  z-index: 2;
 }
 
 .ratio-selector.open,
@@ -1385,6 +1459,10 @@ async function handleRegenerate(message: Message) {
     inset 0 1px 0 rgba(255, 255, 255, 0.92),
     0 0 0 3px rgba(95, 75, 139, 0.08),
     0 8px 18px rgba(15, 23, 42, 0.06);
+}
+
+.ratio-selector.open {
+  z-index: 30;
 }
 
 .ratio-current-btn {
@@ -1407,13 +1485,19 @@ async function handleRegenerate(message: Message) {
   gap: 6px;
 }
 
-.ratio-chip::before {
-  content: '';
-  width: 16px;
-  height: 12px;
-  border-radius: 4px;
-  border: 1px solid rgba(71, 85, 105, 0.44);
-  background: rgba(148, 163, 184, 0.14);
+.ratio-current-box,
+.ratio-option-box {
+  display: inline-block;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  border-radius: 6px;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.ratio-current-box {
+  transform: scale(0.72);
+  transform-origin: center;
 }
 
 .ratio-caret,
@@ -1423,26 +1507,39 @@ async function handleRegenerate(message: Message) {
 
 .ratio-dropdown {
   position: absolute;
-  left: 0;
+  right: 0;
   bottom: calc(100% + 10px);
-  min-width: 180px;
+  width: min(420px, calc(100vw - 40px));
+  min-width: max(300px, 100%);
+  max-height: min(220px, calc(100dvh - 220px));
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 8px;
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.84);
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 24px 48px rgba(15, 23, 42, 0.14);
+  z-index: 31;
 }
 
 .ratio-dropdown-item {
   width: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  justify-content: center;
+  gap: 4px;
+  min-height: 52px;
+  padding: 6px 6px;
   border: 0;
-  border-radius: 14px;
+  border-radius: 12px;
   background: transparent;
-  text-align: left;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
   cursor: pointer;
 }
 
@@ -1450,11 +1547,13 @@ async function handleRegenerate(message: Message) {
   background: rgba(95, 75, 139, 0.1);
 }
 
-.ratio-option-box {
-  display: inline-block;
-  border-radius: 6px;
-  border: 1px solid rgba(15, 23, 42, 0.18);
-  background: rgba(15, 23, 42, 0.06);
+.ratio-option-preview {
+  width: 32px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
 }
 
 .duration-selector,
@@ -1905,6 +2004,20 @@ async function handleRegenerate(message: Message) {
   .video-mode-switch,
   .video-mode-switch .switch-btn {
     width: 100%;
+  }
+
+  .ratio-selector,
+  .ratio-current-btn {
+    width: 100%;
+  }
+
+  .ratio-dropdown {
+    left: 0;
+    right: auto;
+    min-width: 100%;
+    width: min(100%, calc(100vw - 20px));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-height: min(260px, calc(100dvh - 190px));
   }
 }
 </style>
