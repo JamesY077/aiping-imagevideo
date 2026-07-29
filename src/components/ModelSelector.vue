@@ -1,7 +1,6 @@
 <template>
   <div class="model-selector" :class="{ compact }">
     <select v-model="selectedModel" @change="onChange">
-      <option :value="null">Auto select</option>
       <option v-for="model in models" :key="model.id" :value="model.id">
         {{ formatModelLabel(model.id) }}
       </option>

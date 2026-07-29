@@ -95,44 +95,47 @@
                 </div>
               </div>
 
-              <div class="ratio-selector" :class="{ open: showAspectRatioMenu }">
-                <button
-                  class="ratio-current-btn"
-                  type="button"
-                  :aria-expanded="showAspectRatioMenu"
-                  aria-label="选择比例"
-                  @click="showAspectRatioMenu = !showAspectRatioMenu"
-                >
-                  <span class="ratio-chip">
-                    <span
-                      class="ratio-current-box"
-                      :style="{ width: `${selectedAspectRatioOption.boxWidth}px`, height: `${selectedAspectRatioOption.boxHeight}px` }"
-                    />
-                    {{ selectedAspectRatioOption.label }}
-                  </span>
-                  <span class="ratio-caret">▾</span>
-                </button>
-
-                <div v-if="showAspectRatioMenu" class="ratio-dropdown">
+              <div class="meta-pill meta-pill-ratio">
+                <span class="meta-pill-label">比例</span>
+                <div class="ratio-selector" :class="{ open: showAspectRatioMenu }">
                   <button
-                    v-for="option in aspectRatioOptions"
-                    :key="option.value"
+                    class="ratio-current-btn"
                     type="button"
-                    class="ratio-dropdown-item"
-                    :class="{ active: settingsStore.aspectRatio === option.value }"
-                    @click="handleAspectRatioMenuSelect(option.value)"
+                    :aria-expanded="showAspectRatioMenu"
+                    aria-label="选择比例"
+                    @click="showAspectRatioMenu = !showAspectRatioMenu"
                   >
-                    <span class="ratio-option-preview">
-                      <span class="ratio-option-box" :style="{ width: `${option.boxWidth}px`, height: `${option.boxHeight}px` }" />
+                    <span class="ratio-chip">
+                      <span
+                        class="ratio-current-box"
+                        :style="{ width: `${selectedAspectRatioOption.boxWidth}px`, height: `${selectedAspectRatioOption.boxHeight}px` }"
+                      />
+                      {{ selectedAspectRatioOption.label }}
                     </span>
-                    <span>{{ option.label }}</span>
+                    <span class="ratio-caret">▾</span>
                   </button>
+
+                  <div v-if="showAspectRatioMenu" class="ratio-dropdown">
+                    <button
+                      v-for="option in aspectRatioOptions"
+                      :key="option.value"
+                      type="button"
+                      class="ratio-dropdown-item"
+                      :class="{ active: settingsStore.aspectRatio === option.value }"
+                      @click="handleAspectRatioMenuSelect(option.value)"
+                    >
+                      <span class="ratio-option-preview">
+                        <span class="ratio-option-box" :style="{ width: `${option.boxWidth}px`, height: `${option.boxHeight}px` }" />
+                      </span>
+                      <span>{{ option.label }}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div v-if="settingsStore.mediaType === 'video'" class="duration-slot">
+              <div v-if="settingsStore.mediaType === 'video'" class="meta-pill meta-pill-duration duration-slot">
+                <span class="meta-pill-label">时长</span>
                 <div class="duration-selector">
-                  <label class="duration-label" for="video-duration">时长</label>
                   <div class="duration-select-wrap">
                     <select
                       id="video-duration"
@@ -1349,6 +1352,14 @@ async function handleRegenerate(message: Message) {
   flex: 1 1 220px;
 }
 
+.meta-pill-ratio {
+  flex: 0 0 auto;
+}
+
+.meta-pill-duration {
+  flex: 0 0 auto;
+}
+
 .meta-pill-label {
   flex-shrink: 0;
   font-size: 11px;
@@ -1447,6 +1458,8 @@ async function handleRegenerate(message: Message) {
   border-color: rgba(100, 116, 139, 0.42);
   background: rgba(248, 250, 252, 0.92);
   flex: 0 0 auto;
+  padding: 2px;
+  border-radius: 14px;
   z-index: 2;
 }
 
@@ -1467,14 +1480,14 @@ async function handleRegenerate(message: Message) {
 
 .ratio-current-btn {
   min-width: 112px;
-  height: 36px;
-  padding: 0 14px;
+  height: 28px;
+  padding: 0 10px;
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   background: transparent;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
   color: rgba(15, 23, 42, 0.88);
 }
@@ -1568,6 +1581,9 @@ async function handleRegenerate(message: Message) {
 .duration-selector {
   border-color: rgba(100, 116, 139, 0.42);
   background: rgba(248, 250, 252, 0.92);
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 14px;
 }
 
 .duration-select-wrap {
