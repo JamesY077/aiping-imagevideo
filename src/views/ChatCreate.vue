@@ -10,6 +10,9 @@
 
 
         <div class="sidebar-footer">
+          <button class="sidebar-secondary-btn canvas-entry-btn" type="button" @click="router.push('/canvas')">
+            无限画布
+          </button>
           <button class="sidebar-secondary-btn" type="button" @click="router.push('/settings')">
             设置
           </button>
