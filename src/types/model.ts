@@ -42,6 +42,19 @@ export interface VideoDurationOption {
   label: string
 }
 
+export type VideoGenerationMode =
+  | 'text2video'
+  | 'image2video'
+  | 'startEnd2video'
+  | 'subjectReference2video'
+  | 'motionControl2video'
+
+export interface VideoModeOption {
+  value: VideoGenerationMode
+  label: string
+}
+
+
 export const ASPECT_RATIO_OPTIONS: AspectRatioOption[] = [
   { value: '16:9', label: '16:9', boxWidth: 28, boxHeight: 16 },
   { value: '3:2', label: '3:2', boxWidth: 24, boxHeight: 16 },
@@ -173,6 +186,48 @@ export function getSupportedVideoDurations(modelId: string | null | undefined): 
 export function getDefaultVideoDuration(modelId: string | null | undefined): number {
   return getSupportedVideoDurations(modelId)?.[0]?.value ?? 6
 }
+
+const VIDEO_MODE_LABELS: Record<VideoGenerationMode, string> = {
+  text2video: '文生视频',
+  image2video: '图生视频',
+  startEnd2video: '首尾帧生视频',
+  subjectReference2video: '主体参考视频',
+  motionControl2video: '动作控制',
+}
+
+function buildVideoModeOptions(modes: VideoGenerationMode[]): VideoModeOption[] {
+  return modes.map((value) => ({ value, label: VIDEO_MODE_LABELS[value] }))
+}
+
+/**
+ * 返回指定视频模型支持的所有生成模式。
+ * - viduq3-fast（Vidu Q3）：文生 / 图生 / 首尾帧
+ * - minimax-hailuo（MiniMax Hailuo）：文生 / 图生 / 首尾帧 / 主体参考
+ * - kling-v26 / kling-v3：文生 / 图生 / 动作控制
+ * - kling-omni：文生 / 图生 / 首尾帧
+ * - 其他（含默认）：文生 / 图生
+ */
+export function getSupportedVideoModes(modelId: string | null | undefined): VideoModeOption[] {
+  const mode = getModelCapability(modelId)?.videoRequestMode
+  switch (mode) {
+    case 'viduq3-fast':
+    case 'kling-omni':
+      return buildVideoModeOptions(['text2video', 'image2video', 'startEnd2video'])
+    case 'minimax-hailuo':
+      return buildVideoModeOptions([
+        'text2video',
+        'image2video',
+        'startEnd2video',
+        'subjectReference2video',
+      ])
+    case 'kling-v26':
+    case 'kling-v3':
+      return buildVideoModeOptions(['text2video', 'image2video', 'motionControl2video'])
+    default:
+      return buildVideoModeOptions(['text2video', 'image2video'])
+  }
+}
+
 
 export function getModelsByMediaType(mediaType: MediaType, ids: string[]): string[] {
   return ids.filter((id) => !isHiddenModelAlias(id) && MODEL_CAPABILITIES[id]?.mediaType === mediaType)

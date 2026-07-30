@@ -27,8 +27,9 @@
       <button type="button" class="canvas-create-item" @click="createNodeAt('video')">视频节点</button>
     </div>
 
-    <div class="canvas-root">
+    <div ref="canvasRootRef" class="canvas-root">
       <CanvasToolbar @add-node="handleAddNode" />
+
 
       <VueFlow
 
@@ -167,14 +168,22 @@ const {
   zoomOut,
   fitView,
   setInteractive,
+  getViewport,
+  setViewport,
   nodesDraggable,
   nodesConnectable,
   elementsSelectable,
 } = useVueFlow()
 
+
+
+// 画布容器引用：用于监听尺寸变化并保持视口内容不丢失
+const canvasRootRef = ref<HTMLElement | null>(null)
+
 // 默认箭头（选择/框选）模式；按住空格切换为抓手拖动画布模式
 const isSpacePressed = ref(false)
 const isGrabbing = ref(false)
+
 
 // 画板锁定状态：可拖动/可连线/可选中 三者都开启视为“可交互（未锁定）”
 const isInteractive = computed(
@@ -259,6 +268,50 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return tag === 'input' || tag === 'textarea' || target.isContentEditable
 }
 
+// ------ 画布自适应：容器尺寸变化时保持视口内容不丢失 ------
+// 原因：VueFlow 的 fit-view-on-init 只在初始化执行一次，浏览器窗口/容器尺寸
+// 改变后视口（viewport）不会自动适配，导致原本可见的节点跑到可视区域外。
+// 处理：记录尺寸变化前后视口中心对应的画布坐标，缩放不变，重新平移画布，
+// 让原本处于视口中心的内容依旧居中，从而避免内容“消失”。
+let resizeObserver: ResizeObserver | null = null
+let prevSize: { width: number; height: number } | null = null
+let resizeRaf = 0
+
+function keepViewportCentered(width: number, height: number) {
+  if (!prevSize) {
+    prevSize = { width, height }
+    return
+  }
+  const { width: prevWidth, height: prevHeight } = prevSize
+  if (prevWidth === width && prevHeight === height) return
+  if (prevWidth <= 0 || prevHeight <= 0 || width <= 0 || height <= 0) {
+    prevSize = { width, height }
+    return
+  }
+
+  const vp = getViewport()
+  const zoom = vp.zoom || 1
+  // 变化前视口中心对应的画布坐标
+  const centerFlowX = (prevWidth / 2 - vp.x) / zoom
+  const centerFlowY = (prevHeight / 2 - vp.y) / zoom
+  // 变化后重新计算平移量，使该画布坐标仍位于新的视口中心
+  const nextX = width / 2 - centerFlowX * zoom
+  const nextY = height / 2 - centerFlowY * zoom
+  setViewport({ x: nextX, y: nextY, zoom })
+
+  prevSize = { width, height }
+}
+
+function handleContainerResize(entries: ResizeObserverEntry[]) {
+  const entry = entries[0]
+  if (!entry) return
+  const { width, height } = entry.contentRect
+  // 用 rAF 合并高频回调，避免拖动窗口时抖动
+  if (resizeRaf) cancelAnimationFrame(resizeRaf)
+  resizeRaf = requestAnimationFrame(() => keepViewportCentered(width, height))
+}
+
+
 function handleKeyDown(event: KeyboardEvent) {
   if (isEditableTarget(event.target)) return
   const meta = event.metaKey || event.ctrlKey
@@ -311,6 +364,15 @@ onMounted(() => {
   window.addEventListener('mousedown', handleMouseDown)
   window.addEventListener('mouseup', handleMouseUp)
   window.addEventListener('click', closeContextMenu)
+
+  // 监听画布容器尺寸变化（覆盖窗口缩放、侧栏开合、DPR 变化等场景），
+  // 在尺寸变化后保持视口内容居中，避免节点跑出可视区域。
+  if (canvasRootRef.value && typeof ResizeObserver !== 'undefined') {
+    const rect = canvasRootRef.value.getBoundingClientRect()
+    prevSize = { width: rect.width, height: rect.height }
+    resizeObserver = new ResizeObserver(handleContainerResize)
+    resizeObserver.observe(canvasRootRef.value)
+  }
 })
 
 onBeforeUnmount(() => {
@@ -320,7 +382,12 @@ onBeforeUnmount(() => {
   window.removeEventListener('mousedown', handleMouseDown)
   window.removeEventListener('mouseup', handleMouseUp)
   window.removeEventListener('click', closeContextMenu)
+
+  if (resizeRaf) cancelAnimationFrame(resizeRaf)
+  resizeObserver?.disconnect()
+  resizeObserver = null
 })
+
 
 </script>
 
@@ -526,8 +593,11 @@ onBeforeUnmount(() => {
 
 /* Basic node */
 :deep(.basic-node) {
-  min-width: 160px;
-  padding: 12px 16px;
+  min-width: 200px;
+  min-height: 56px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
   border-radius: 16px;
   border: 1px solid var(--ac-border);
   background: var(--ac-surface-solid);

@@ -10,14 +10,23 @@ import {
 
 import { chatCompletion, generateImage, generateVideo, polishPrompt } from '@/api/aiping'
 import { buildImageParams, buildVideoParams } from '@/features/generate/buildParams'
+import type { UploadInput } from '@/features/generate/buildParams'
+
 import { pollVideoStatus } from '@/features/generate/video'
-import { getModelCapability } from '@/types/model'
+import { getModelCapability, getSupportedVideoModes } from '@/types/model'
+import type { VideoGenerationMode } from '@/types/model'
+
 import { buildTextExtraBody, DEFAULT_TEXT_MODEL_ID, getTextModelModule } from '@/models'
 import {
   useSettingsStore,
   DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT,
   DEFAULT_TEXT_SYSTEM_PROMPT,
+  DEFAULT_IMAGE_SYSTEM_PROMPT,
+  DEFAULT_VIDEO_SYSTEM_PROMPT,
 } from '@/stores/settingsStore'
+
+
+
 import { normalizeErrorMessage } from '@/utils/errors'
 import type { ChatMessage, ChatMessageContentPart } from '@/types/api'
 import type { UploadedFile } from '@/types/chat'
@@ -34,14 +43,34 @@ export interface CanvasNodeData {
   imageMode?: 'text2image' | 'image2image'
   aspectRatio?: string
   // video
-  videoMode?: 'text2video' | 'image2video'
+  videoMode?: VideoGenerationMode
   duration?: number
-  // reference image (data url), used by image2image / image2video
+  // reference image (data url), used by image2image / image2video / subjectReference2video
   referenceImage?: string
   referenceFileName?: string
+  // 首尾帧生视频（startEnd2video）：首帧 / 尾帧图片（data url）
+  startFrameImage?: string
+  startFrameName?: string
+  endFrameImage?: string
+  endFrameName?: string
+  // 动作控制（motionControl2video）：参考图像 + 参考视频（data url）及选项
+  motionImage?: string
+  motionImageName?: string
+  motionVideo?: string
+  motionVideoName?: string
+  motionKeepOriginalSound?: 'yes' | 'no'
+  motionCharacterOrientation?: 'image' | 'video'
   polish?: boolean
+
+  // 每个节点自定义的 AI 润色系统提示词（可在节点“设置”里编辑）。
+  // 为空时回退到该类型的默认系统提示词。
+  systemPrompt?: string
+
+  // 文本节点：润色进行中（供“润色”按钮显示 loading，与整体运行状态区分）
+  polishing?: boolean
   // runtime state
   status?: CanvasNodeRunStatus
+
   progress?: number
   error?: string
   // results
@@ -210,7 +239,10 @@ export const useCanvasStore = defineStore('canvas', () => {
     }
     if (kind === 'text') {
       data.model = DEFAULT_TEXT_MODEL_ID
+      // 文本节点默认开启 AI 润色；关闭后直接把用户输入透传给下游节点。
+      data.polish = true
     } else if (kind === 'image') {
+
       data.imageMode = 'text2image'
       data.aspectRatio = '1:1'
       data.polish = false
@@ -513,22 +545,51 @@ export const useCanvasStore = defineStore('canvas', () => {
     return order
   }
 
-  // 找到某节点的上游生成型节点（用于把上游文本结果串联为 prompt）
+  // 找到某节点的「直接上游」生成型节点（仅一跳）
   function getUpstreamNodeIds(nodeId: string): string[] {
     return edges.value.filter((edge) => edge.target === nodeId).map((edge) => edge.source)
   }
 
-  async function maybePolish(prompt: string): Promise<string> {
+  // 递归找到某节点的「所有上游祖先」节点（多跳，用于跨节点传播文本 / 图片）。
+  // 例如 文本→图片→视频 链路中，视频节点可借此拿到最上游文本节点的结果。
+  // 返回顺序：距离当前节点由近到远（BFS）。带环保护。
+  function getAncestorNodeIds(nodeId: string): string[] {
+    const result: string[] = []
+    const visited = new Set<string>([nodeId])
+    const queue: string[] = [nodeId]
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      const parents = edges.value
+        .filter((edge) => edge.target === current)
+        .map((edge) => edge.source)
+      for (const parent of parents) {
+        if (!visited.has(parent)) {
+          visited.add(parent)
+          result.push(parent)
+          queue.push(parent)
+        }
+      }
+    }
+    return result
+  }
+
+
+  async function maybePolish(prompt: string, systemPrompt?: string): Promise<string> {
     const settingsStore = useSettingsStore()
     const model = settingsStore.promptPolishModel.trim()
     if (!model) return prompt
+    // 优先使用节点自定义的系统提示词，其次是全局设置，最后回退到内置默认。
+    const finalSystemPrompt =
+      (systemPrompt || '').trim() ||
+      settingsStore.promptPolishSystemPrompt.trim() ||
+      DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT
     try {
       return await polishPrompt({
         model,
         messages: [
           {
             role: 'system',
-            content: settingsStore.promptPolishSystemPrompt.trim() || DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT,
+            content: finalSystemPrompt,
           },
           { role: 'user', content: prompt },
         ],
@@ -537,6 +598,76 @@ export const useCanvasStore = defineStore('canvas', () => {
       return prompt
     }
   }
+
+
+  // 文本节点：用所选文本模型对 prompt 进行润色。
+  // 系统提示词沿用文本节点系统提示词（默认包含“文本创作、扩写与润色”定位），
+  // 视觉模型且携带参考图时走多模态 content。
+  async function polishTextWith(
+    model: string,
+    prompt: string,
+    referenceImage?: string,
+    nodeSystemPrompt?: string,
+  ): Promise<string> {
+    const settingsStore = useSettingsStore()
+    // 优先使用节点自定义系统提示词，其次是全局设置，最后回退到内置默认。
+    const systemPrompt =
+      (nodeSystemPrompt || '').trim() ||
+      settingsStore.textSystemPrompt.trim() ||
+      DEFAULT_TEXT_SYSTEM_PROMPT
+
+    const textModel = getTextModelModule(model)
+    const userMessage: ChatMessage =
+      textModel?.supportsVision && referenceImage
+        ? {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: referenceImage } },
+            { type: 'text', text: prompt },
+          ] as ChatMessageContentPart[],
+        }
+        : { role: 'user', content: prompt }
+    return await chatCompletion({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        userMessage,
+      ],
+      extra_body: buildTextExtraBody(model),
+    })
+  }
+
+  // 文本节点“润色”按钮：对当前 prompt 进行润色，并直接覆盖回 prompt 输入框（可继续修改）。
+  // 不改动下游节点，仅更新本节点的输入内容。
+  async function polishTextNode(nodeId: string) {
+    const node = nodes.value.find((n) => n.id === nodeId)
+    if (!node || node.data.nodeKind !== 'text') return
+    if (node.data.polishing) return
+
+    const model = node.data.model
+    if (!model) {
+      updateNodeData(nodeId, { error: '请先选择润色模型。' })
+      return
+    }
+    const prompt = (node.data.prompt || '').trim()
+    if (!prompt) {
+      updateNodeData(nodeId, { error: '请先输入需要润色的文字。' })
+      return
+    }
+
+    updateNodeData(nodeId, { polishing: true, error: undefined })
+    try {
+      const polished = await polishTextWith(model, prompt, undefined, node.data.systemPrompt)
+      // 直接覆盖 prompt（在原始输入基础上润色），用户可继续修改
+      updateNodeData(nodeId, { prompt: polished })
+
+    } catch (error) {
+      updateNodeData(nodeId, { error: normalizeErrorMessage(error, '润色失败，请重试') })
+    } finally {
+      updateNodeData(nodeId, { polishing: false })
+    }
+  }
+
 
   async function executeNode(nodeId: string) {
     const node = nodes.value.find((n) => n.id === nodeId)
@@ -548,58 +679,62 @@ export const useCanvasStore = defineStore('canvas', () => {
     updateNodeData(nodeId, { status: 'running', progress: 0, error: undefined })
 
     try {
-      // 拼接上游文本节点的结果作为额外上下文
+      // 收集上游上下文：
+
+      // - 直接上游（一跳）：用于识别"最近的"图片输入作为参考图。
+      // - 全部祖先（多跳）：用于把链路上所有文本节点的结果串联进 prompt，
+      //   从而支持 文本→图片→视频 这类跨节点传播（视频节点仍能拿到最上游文本）。
       const upstreamIds = getUpstreamNodeIds(nodeId)
-      const upstreamTexts = upstreamIds
+      const ancestorIds = getAncestorNodeIds(nodeId)
+      const ancestorNodes = ancestorIds
         .map((uid) => nodes.value.find((n) => n.id === uid))
-        .filter((n): n is CanvasNode => !!n && n.data.nodeKind === 'text' && !!n.data.resultText)
+        .filter((n): n is CanvasNode => !!n)
+
+      // 祖先文本按"由远到近"拼接，使距离当前节点更近的上下文排在后面（更贴近本步意图）。
+      const upstreamTexts = ancestorNodes
+        .filter((n) => n.data.nodeKind === 'text' && !!n.data.resultText)
         .map((n) => n.data.resultText as string)
+        .reverse()
 
       let prompt = (node.data.prompt || '').trim()
       if (upstreamTexts.length > 0) {
         prompt = [...upstreamTexts, prompt].filter(Boolean).join('\n')
       }
 
-      if (!prompt) {
-        throw new Error('请输入内容后再运行。')
-      }
-
-      // image / video 需要参考图（上游图片节点结果可作为参考图）
+      // image / video 参考图：优先取本节点手动上传的参考图；
+      // 否则取"最近的"上游图片结果（先看直接上游，再回退到更远的祖先）。
       let referenceFile: UploadedFile | null = null
-      const upstreamImageUrl = upstreamIds
-        .map((uid) => nodes.value.find((n) => n.id === uid))
-        .find((n) => n?.data.resultType === 'image' && n?.data.resultUrl)?.data.resultUrl
+      const findImageUrl = (ids: string[]) =>
+        ids
+          .map((uid) => nodes.value.find((n) => n.id === uid))
+          .find((n) => n?.data.resultType === 'image' && n?.data.resultUrl)?.data.resultUrl
+      const upstreamImageUrl = findImageUrl(upstreamIds) || findImageUrl(ancestorIds)
       const referenceImage = node.data.referenceImage || upstreamImageUrl
 
+      // prompt 边界：若没有任何可用输入（既无 prompt 文本，也无参考图），才判定为"没有输入"。
+      // 有上游图片时（如 图片→视频），即使 prompt 为空也允许继续运行。
+      if (!prompt && !referenceImage) {
+        throw new Error('请输入内容或连接可用的上游节点后再运行。')
+      }
+
+
       if (kind === 'text') {
+        // 关闭 AI 润色：文本节点不调用模型，直接把用户输入（含上游文本）透传给下游节点。
+        if (!node.data.polish) {
+          updateNodeData(nodeId, {
+            status: 'completed',
+            progress: 100,
+            resultText: prompt,
+            resultType: 'text',
+          })
+          return
+        }
+
+        // 开启 AI 润色：用所选文本模型对 prompt 润色，结果作为本节点输出向下游传播。
         const model = node.data.model
-        if (!model) throw new Error('请先选择文本模型。')
+        if (!model) throw new Error('请先选择润色模型。')
 
-        // 系统提示词：所有文本模型生成前统一经过一遍，明确身份和边界（对应 PRD）
-        const settingsStore = useSettingsStore()
-        const systemPrompt = settingsStore.textSystemPrompt.trim() || DEFAULT_TEXT_SYSTEM_PROMPT
-
-        // 视觉模型且携带参考图片时，走多模态 content（image_url + text）
-        const textModel = getTextModelModule(model)
-        const userMessage: ChatMessage =
-          textModel?.supportsVision && referenceImage
-            ? {
-              role: 'user',
-              content: [
-                { type: 'image_url', image_url: { url: referenceImage } },
-                { type: 'text', text: prompt },
-              ] as ChatMessageContentPart[],
-            }
-            : { role: 'user', content: prompt }
-
-        const text = await chatCompletion({
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            userMessage,
-          ],
-          extra_body: buildTextExtraBody(model),
-        })
+        const text = await polishTextWith(model, prompt, referenceImage, node.data.systemPrompt)
         updateNodeData(nodeId, {
           status: 'completed',
           progress: 100,
@@ -609,14 +744,19 @@ export const useCanvasStore = defineStore('canvas', () => {
         return
       }
 
+
+
       if (kind === 'image') {
         const model = node.data.model
         if (!model) throw new Error('请先选择图片模型。')
         const isImage2Image = node.data.imageMode === 'image2image'
+        // 图生图模式必须要有参考图（手动上传或上游图片）。
         if (isImage2Image && !referenceImage) {
-          throw new Error('图生图模式需要上传参考图片。')
+          throw new Error('图生图模式需要上传参考图片，或连接一个已生成图片的上游节点。')
         }
-        if (isImage2Image && referenceImage) {
+        // 只要存在参考图（含上游连线传入的图片），即作为参考图使用；
+        // 上游图片是明确的连接意图，即便当前是"文生图"模式也一并消费。
+        if (referenceImage) {
           referenceFile = {
             name: node.data.referenceFileName || 'reference',
             type: 'image',
@@ -625,9 +765,14 @@ export const useCanvasStore = defineStore('canvas', () => {
           }
         }
 
-        const finalPrompt = node.data.polish ? await maybePolish(prompt) : prompt
+
+        const finalPrompt = node.data.polish
+          ? await maybePolish(prompt, node.data.systemPrompt || DEFAULT_IMAGE_SYSTEM_PROMPT)
+          : prompt
         const capability = getModelCapability(model)
         const params = await buildImageParams(
+
+
           finalPrompt,
           model,
           referenceFile,
@@ -649,29 +794,102 @@ export const useCanvasStore = defineStore('canvas', () => {
       // video
       const model = node.data.model
       if (!model) throw new Error('请先选择视频模型。')
-      const isImage2Video = node.data.videoMode === 'image2video'
-      if (isImage2Video && !referenceImage) {
-        throw new Error('图生视频模式需要上传参考图片。')
-      }
-      if (isImage2Video && referenceImage) {
-        referenceFile = {
+
+      // 依据模型支持的模式，纠正/兜底当前节点选择的生成方式，
+      // 避免切换模型后遗留不支持的模式（如从 MiniMax 切到普通模型仍停留在主体参考）。
+      const supportedModes = getSupportedVideoModes(model).map((m) => m.value)
+      const videoMode: VideoGenerationMode = supportedModes.includes(node.data.videoMode as VideoGenerationMode)
+        ? (node.data.videoMode as VideoGenerationMode)
+        : 'text2video'
+
+      // 依据不同生成方式组装视频请求的文件输入（buildVideoParams 支持单文件或文件数组）。
+      let videoInput: UploadInput = null
+
+      if (videoMode === 'startEnd2video') {
+        // 首尾帧生视频：需要首帧 + 尾帧两张图片。
+        const startFrame = node.data.startFrameImage
+        const endFrame = node.data.endFrameImage
+        if (!startFrame || !endFrame) {
+          throw new Error('首尾帧生视频需要同时上传首帧和尾帧图片。')
+        }
+        videoInput = [
+          { name: node.data.startFrameName || 'first-frame', type: 'image', url: startFrame, size: 0 },
+          { name: node.data.endFrameName || 'end-frame', type: 'image', url: endFrame, size: 0 },
+        ]
+      } else if (videoMode === 'subjectReference2video') {
+        // 主体参考视频：需要一张主体参考图（本节点上传或上游图片）。
+        if (!referenceImage) {
+          throw new Error('主体参考视频需要上传主体参考图片，或连接一个已生成图片的上游节点。')
+        }
+        videoInput = { name: 'Subject Reference', type: 'image', url: referenceImage, size: 0 }
+      } else if (videoMode === 'motionControl2video') {
+        // 动作控制：需要参考图像 + 参考视频。
+        const motionImage = node.data.motionImage
+        const motionVideo = node.data.motionVideo
+        if (!motionImage || !motionVideo) {
+          throw new Error('动作控制需要同时上传参考图像和参考视频。')
+        }
+        videoInput = [
+          {
+            name: node.data.motionImageName || 'motion-image',
+            type: 'image',
+            url: motionImage,
+            size: 0,
+            purpose: 'motion-control-image',
+            motionControlOptions: {
+              keep_original_sound: node.data.motionKeepOriginalSound || 'yes',
+              character_orientation: node.data.motionCharacterOrientation || 'image',
+            },
+          },
+          {
+            name: node.data.motionVideoName || 'motion-video',
+            type: 'video',
+            url: motionVideo,
+            size: 0,
+            purpose: 'motion-control-video',
+          },
+        ]
+      } else if (videoMode === 'image2video') {
+        // 图生视频：需要一张参考图（本节点上传或上游图片）。
+        if (!referenceImage) {
+          throw new Error('图生视频模式需要上传参考图片，或连接一个已生成图片的上游节点。')
+        }
+        videoInput = {
           name: node.data.referenceFileName || 'reference',
           type: 'image',
           url: referenceImage,
           size: 0,
         }
+      } else {
+        // 文生视频：默认无文件；若上游连线传入了图片（明确的连接意图），一并消费。
+        if (referenceImage) {
+          videoInput = {
+            name: node.data.referenceFileName || 'reference',
+            type: 'image',
+            url: referenceImage,
+            size: 0,
+          }
+        }
       }
 
-      const finalPrompt = node.data.polish ? await maybePolish(prompt) : prompt
+      // 保留 referenceFile 变量语义：非文生/图生场景不再单独使用。
+      void referenceFile
+
+      const finalPrompt = node.data.polish
+        ? await maybePolish(prompt, node.data.systemPrompt || DEFAULT_VIDEO_SYSTEM_PROMPT)
+        : prompt
       const capability = getModelCapability(model)
       const params = await buildVideoParams(
+
+
         finalPrompt,
         model,
-        referenceFile,
+        videoInput,
         node.data.aspectRatio || '16:9',
         node.data.duration || 5,
         capability?.videoRequestMode,
       )
+
       const task = await generateVideo(params)
       if (!task.id) throw new Error('视频任务创建成功但未返回任务 ID。')
       updateNodeData(nodeId, { progress: 5 })
@@ -782,5 +1000,7 @@ export const useCanvasStore = defineStore('canvas', () => {
     reset,
     runAll,
     runNode,
+    polishTextNode,
   }
 })
+
