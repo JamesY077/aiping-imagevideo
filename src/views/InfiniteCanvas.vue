@@ -4,9 +4,34 @@
       ← 返回生成
     </button>
 
+    <!-- 顶部整体进度条 -->
+    <div v-if="canvasStore.isRunning" class="canvas-progress">
+      <div class="canvas-progress-info">
+        <span>正在运行 {{ canvasStore.runDone }} / {{ canvasStore.runTotal }}</span>
+        <span>{{ canvasStore.runProgress }}%</span>
+      </div>
+      <div class="canvas-progress-track">
+        <div class="canvas-progress-bar" :style="{ width: canvasStore.runProgress + '%' }" />
+      </div>
+    </div>
+
+    <!-- 双击空白处的创建菜单 -->
+    <div
+      v-if="contextMenu.visible"
+      class="canvas-create-menu"
+      :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
+      @click.stop
+    >
+      <button type="button" class="canvas-create-item" @click="createNodeAt('text')">文本节点</button>
+      <button type="button" class="canvas-create-item" @click="createNodeAt('image')">图片节点</button>
+      <button type="button" class="canvas-create-item" @click="createNodeAt('video')">视频节点</button>
+    </div>
+
     <div class="canvas-root">
-      <CanvasToolbar />
+      <CanvasToolbar @add-node="handleAddNode" />
+
       <VueFlow
+
         class="canvas-flow"
         :class="{ 'is-panning': isSpacePressed, 'is-grabbing': isGrabbing }"
         :nodes="canvasStore.nodes"
@@ -26,17 +51,73 @@
         @dblclick="handlePaneDoubleClick"
       >
 
-        <Background :variant="BackgroundVariant.Dots" :gap="20" :size="1" />
+        <Background
+          :variant="BackgroundVariant.Lines"
+          :gap="28"
+          :size="1"
+          pattern-color="rgba(255, 255, 255, 0.06)"
+          :bg-color="'transparent'"
+        />
+
         <MiniMap
           class="canvas-minimap"
           pannable
           zoomable
-          :mask-color="'rgba(15, 17, 21, 0.6)'"
-          :node-color="'#2b2f3a'"
-          :node-stroke-color="'#4c7dff'"
+          :mask-color="'rgba(18, 18, 20, 0.65)'"
+          :node-color="'#3a3a3c'"
+          :node-stroke-color="'#0a84ff'"
         />
 
-        <Controls class="canvas-controls" />
+        <div class="canvas-controls">
+          <button
+            type="button"
+            class="ac-control-btn"
+            title="放大"
+            @click="() => zoomIn()"
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path d="M12 5.5v13M5.5 12h13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="ac-control-btn"
+            title="缩小"
+            @click="() => zoomOut()"
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path d="M5.5 12h13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="ac-control-btn"
+            title="跟踪到当前组件"
+            @click="() => fitView()"
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="ac-control-btn"
+            :class="{ 'ac-control-btn--active': !isInteractive }"
+            :title="isInteractive ? '锁定画板' : '解锁画板'"
+            @click="toggleInteractivity"
+          >
+            <svg v-if="isInteractive" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path d="M8 10V7a4 4 0 0 1 7.5-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              <rect x="5" y="10" width="14" height="10" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8" />
+            </svg>
+            <svg v-else viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path d="M8 10V7a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              <rect x="5" y="10" width="14" height="10" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8" />
+            </svg>
+          </button>
+        </div>
+
+
 
         <template #node-basicNode="nodeProps">
           <BasicNode v-bind="nodeProps" />
@@ -44,23 +125,34 @@
         <template #node-groupNode="nodeProps">
           <GroupNode v-bind="nodeProps" />
         </template>
+        <template #node-textNode="nodeProps">
+          <GenerationNode v-bind="nodeProps" />
+        </template>
+        <template #node-imageNode="nodeProps">
+          <GenerationNode v-bind="nodeProps" />
+        </template>
+        <template #node-videoNode="nodeProps">
+          <GenerationNode v-bind="nodeProps" />
+        </template>
       </VueFlow>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+
 
 import { useRouter } from 'vue-router'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import { Background, BackgroundVariant } from '@vue-flow/background'
-import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
-import { useCanvasStore } from '@/stores/canvasStore'
+
+import { useCanvasStore, type CanvasNodeKind } from '@/stores/canvasStore'
 import CanvasToolbar from '@/components/canvas/CanvasToolbar.vue'
 import BasicNode from '@/components/canvas/BasicNode.vue'
 import GroupNode from '@/components/canvas/GroupNode.vue'
+import GenerationNode from '@/components/canvas/GenerationNode.vue'
 
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -69,11 +161,30 @@ import '@vue-flow/minimap/dist/style.css'
 
 const router = useRouter()
 const canvasStore = useCanvasStore()
-const { screenToFlowCoordinate } = useVueFlow()
+const {
+  screenToFlowCoordinate,
+  zoomIn,
+  zoomOut,
+  fitView,
+  setInteractive,
+  nodesDraggable,
+  nodesConnectable,
+  elementsSelectable,
+} = useVueFlow()
 
 // 默认箭头（选择/框选）模式；按住空格切换为抓手拖动画布模式
 const isSpacePressed = ref(false)
 const isGrabbing = ref(false)
+
+// 画板锁定状态：可拖动/可连线/可选中 三者都开启视为“可交互（未锁定）”
+const isInteractive = computed(
+  () => nodesDraggable.value && nodesConnectable.value && elementsSelectable.value,
+)
+
+function toggleInteractivity() {
+  setInteractive(!isInteractive.value)
+}
+
 
 function handleSpaceDown(event: KeyboardEvent) {
   if (event.code !== 'Space') return
@@ -98,12 +209,48 @@ function handleMouseUp() {
 }
 
 
+// 双击空白处弹出创建菜单
+const contextMenu = ref<{ visible: boolean; x: number; y: number; flowX: number; flowY: number }>({
+  visible: false,
+  x: 0,
+  y: 0,
+  flowX: 0,
+  flowY: 0,
+})
+
 function handlePaneDoubleClick(event: MouseEvent) {
   const target = event.target as HTMLElement
   // Only add node when double-clicking empty pane (not on an existing node)
   if (target.closest('.vue-flow__node')) return
-  const position = screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
-  canvasStore.addNode(position)
+  const flow = screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
+  contextMenu.value = {
+    visible: true,
+    x: event.clientX,
+    y: event.clientY,
+    flowX: flow.x,
+    flowY: flow.y,
+  }
+}
+
+function createNodeAt(kind: CanvasNodeKind) {
+  canvasStore.addGenerationNode(kind, { x: contextMenu.value.flowX, y: contextMenu.value.flowY })
+  contextMenu.value.visible = false
+}
+
+// 底部菜单“添加节点”：在当前视口中心创建，避免节点落在可视区域之外
+function handleAddNode(kind: CanvasNodeKind) {
+  const el = document.querySelector('.canvas-flow') as HTMLElement | null
+  const rect = el?.getBoundingClientRect()
+  const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2
+  const cy = rect ? rect.top + rect.height / 2 : window.innerHeight / 2
+  const flow = screenToFlowCoordinate({ x: cx, y: cy })
+  const id = canvasStore.addGenerationNode(kind, { x: flow.x - 150, y: flow.y - 80 })
+  // 稍微偏移以便连续添加时不完全重叠
+  return id
+}
+
+function closeContextMenu() {
+  contextMenu.value.visible = false
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -163,6 +310,7 @@ onMounted(() => {
   window.addEventListener('keyup', handleSpaceUp)
   window.addEventListener('mousedown', handleMouseDown)
   window.addEventListener('mouseup', handleMouseUp)
+  window.addEventListener('click', closeContextMenu)
 })
 
 onBeforeUnmount(() => {
@@ -171,19 +319,33 @@ onBeforeUnmount(() => {
   window.removeEventListener('keyup', handleSpaceUp)
   window.removeEventListener('mousedown', handleMouseDown)
   window.removeEventListener('mouseup', handleMouseUp)
+  window.removeEventListener('click', closeContextMenu)
 })
 
 </script>
 
 <style scoped>
+/* Apple-style dark theme tokens */
 .canvas-page {
+  --ac-bg: #0b0b0d;
+  --ac-surface: rgba(44, 44, 46, 0.72);
+  --ac-surface-solid: #1c1c1e;
+  --ac-surface-hover: rgba(72, 72, 74, 0.9);
+  --ac-border: rgba(255, 255, 255, 0.12);
+  --ac-text: #f5f5f7;
+  --ac-text-dim: #98989d;
+  --ac-accent: #0a84ff;
+
   position: relative;
   width: 100%;
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
-  background: var(--canvas-bg, #0f1115);
-  color: var(--canvas-text, #e6e8ee);
+  color: var(--ac-text);
+  background:
+    radial-gradient(1200px 800px at 15% -10%, rgba(10, 132, 255, 0.12), transparent 60%),
+    radial-gradient(1000px 700px at 90% 110%, rgba(191, 90, 242, 0.1), transparent 60%),
+    linear-gradient(160deg, #141417 0%, #0b0b0d 55%, #08080a 100%);
 }
 
 .canvas-root {
@@ -196,8 +358,19 @@ onBeforeUnmount(() => {
 .canvas-flow {
   width: 100%;
   height: 100%;
-  background: var(--canvas-bg, #0f1115);
+  background: transparent;
 }
+
+/* 背景网格：将实线网格渲染为虚线 */
+.canvas-flow :deep(.vue-flow__background-pattern.lines path),
+.canvas-flow :deep(.vue-flow__background-pattern.lines line),
+.canvas-flow :deep(pattern path),
+.canvas-flow :deep(pattern line) {
+  stroke-dasharray: 4 6;
+  stroke-linecap: round;
+}
+
+
 
 /* 默认箭头模式：面板不显示抓手光标 */
 .canvas-flow :deep(.vue-flow__pane) {
@@ -220,65 +393,154 @@ onBeforeUnmount(() => {
   top: 16px;
   left: 16px;
   z-index: 20;
-  padding: 8px 14px;
-  border: 1px solid var(--canvas-border, #2b2f3a);
-  border-radius: 10px;
-  background: var(--canvas-surface, #1a1d24);
-  color: var(--canvas-text, #e6e8ee);
+  padding: 8px 16px;
+  border: 1px solid var(--ac-border);
+  border-radius: 999px;
+  background: var(--ac-surface);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  color: var(--ac-text);
   font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s ease;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+  transition: background 0.18s ease, transform 0.18s ease;
 }
 
 .canvas-back-btn:hover {
-  background: var(--canvas-surface-hover, #232733);
+  background: var(--ac-surface-hover);
 }
 
-/* Toolbar */
-:deep(.canvas-toolbar) {
+.canvas-back-btn:active {
+  transform: scale(0.97);
+}
+
+/* 顶部整体进度条 */
+.canvas-progress {
   position: absolute;
   top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  width: min(480px, 60vw);
+  padding: 10px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--ac-border);
+  background: var(--ac-surface);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+}
+
+.canvas-progress-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--ac-text-dim);
+  margin-bottom: 6px;
+}
+
+.canvas-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.canvas-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #0a84ff, #64d2ff);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+/* 双击创建菜单 */
+.canvas-create-menu {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-width: 130px;
+  padding: 6px;
+  border-radius: 14px;
+  border: 1px solid var(--ac-border);
+  background: rgba(28, 28, 30, 0.96);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.canvas-create-item {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ac-text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.canvas-create-item:hover {
+  background: var(--ac-surface-hover);
+}
+
+/* Toolbar — moved to the bottom center, Apple-style floating dock */
+:deep(.canvas-toolbar) {
+  position: absolute;
+  bottom: 24px;
+  top: auto;
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
   display: flex;
   gap: 4px;
   padding: 6px;
-  border-radius: 12px;
-  background: var(--canvas-surface, #1a1d24);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  border-radius: 18px;
+  border: 1px solid var(--ac-border);
+  background: var(--ac-surface);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
 }
 
 :deep(.canvas-toolbar-button) {
-  padding: 6px 12px;
+  padding: 8px 14px;
   border: none;
-  border-radius: 8px;
+  border-radius: 12px;
   background: transparent;
-  color: var(--canvas-text, #e6e8ee);
+  color: var(--ac-text);
   font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, transform 0.12s ease;
 }
 
 :deep(.canvas-toolbar-button:hover) {
-  background: var(--canvas-surface-hover, #232733);
+  background: var(--ac-surface-hover);
+}
+
+:deep(.canvas-toolbar-button:active) {
+  transform: scale(0.95);
 }
 
 /* Basic node */
 :deep(.basic-node) {
   min-width: 160px;
   padding: 12px 16px;
-  border-radius: 12px;
-  background: var(--canvas-surface, #1a1d24);
-  color: var(--canvas-text, #e6e8ee);
+  border-radius: 16px;
+  border: 1px solid var(--ac-border);
+  background: var(--ac-surface-solid);
+  color: var(--ac-text);
   font-size: 14px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
   transition: box-shadow 0.15s ease;
 }
 
 :deep(.basic-node--selected) {
-  box-shadow: 0 0 0 2px var(--canvas-accent, #4c7dff), 0 4px 16px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 0 0 2px var(--ac-accent), 0 8px 28px rgba(0, 0, 0, 0.4);
 }
+
 
 :deep(.basic-node-label) {
   cursor: text;
@@ -291,7 +553,7 @@ onBeforeUnmount(() => {
   border: none;
   outline: none;
   background: transparent;
-  color: var(--canvas-text, #e6e8ee);
+  color: var(--ac-text);
   font-size: 14px;
   font-family: inherit;
 }
@@ -299,21 +561,21 @@ onBeforeUnmount(() => {
 :deep(.basic-node-handle) {
   width: 10px;
   height: 10px;
-  background: var(--canvas-accent, #4c7dff);
-  border: 2px solid var(--canvas-surface, #1a1d24);
+  background: var(--ac-accent);
+  border: 2px solid var(--ac-surface-solid);
 }
 
 /* Group node */
 :deep(.group-node) {
   width: 100%;
   height: 100%;
-  border-radius: 16px;
-  background: rgba(76, 125, 255, 0.06);
-  border: 1px dashed rgba(76, 125, 255, 0.4);
+  border-radius: 18px;
+  background: rgba(10, 132, 255, 0.06);
+  border: 1px dashed rgba(10, 132, 255, 0.4);
 }
 
 :deep(.group-node--selected) {
-  border-color: var(--canvas-accent, #4c7dff);
+  border-color: var(--ac-accent);
 }
 
 :deep(.group-node-header) {
@@ -321,36 +583,87 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  color: var(--canvas-text-dim, #9aa0ad);
+  color: var(--ac-text-dim);
   font-size: 12px;
 }
 
 :deep(.group-node-ungroup) {
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 2px 8px;
-  background: var(--canvas-surface-hover, #232733);
-  color: var(--canvas-text, #e6e8ee);
+  background: var(--ac-surface-hover);
+  color: var(--ac-text);
   font-size: 11px;
   cursor: pointer;
 }
 
-/* Vue Flow overrides */
-:deep(.vue-flow__controls),
-:deep(.canvas-minimap) {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+/* Controls — Apple-style floating vertical control (bottom-left) */
+.canvas-controls {
+  position: absolute;
+  left: 16px;
+  bottom: 24px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 18px;
+  border: 1px solid var(--ac-border);
+  background: var(--ac-surface);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
 }
+
+.ac-control-btn {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: none;
+  border-radius: 13px;
+  background: transparent;
+  color: var(--ac-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+
+.ac-control-btn:hover {
+  background: var(--ac-surface-hover);
+}
+
+.ac-control-btn:active {
+  transform: scale(0.92);
+}
+
+.ac-control-btn--active {
+  background: var(--ac-accent);
+  color: #fff;
+}
+
+.ac-control-btn--active:hover {
+  background: var(--ac-accent);
+}
+
+.ac-control-btn svg {
+  display: block;
+}
+
 
 /* MiniMap dark theme */
 :deep(.canvas-minimap) {
-  background: var(--canvas-surface, #1a1d24) !important;
-  border: 1px solid var(--canvas-border, #2b2f3a);
-  border-radius: 10px;
+  background: var(--ac-surface-solid) !important;
+  border: 1px solid var(--ac-border);
+  border-radius: 14px;
   overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
 }
 
 :deep(.canvas-minimap svg) {
-  background: var(--canvas-surface, #1a1d24);
+  background: var(--ac-surface-solid);
 }
 </style>
+
 

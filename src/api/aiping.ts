@@ -168,6 +168,35 @@ export async function polishPrompt(params: ChatCompletionRequest): Promise<strin
   return content
 }
 
+/**
+ * 通用文本对话补全。用于文本节点，支持透传 extra_body
+ * （如 provider 路由配置、enable_thinking 等，见 PRD 示例代码）。
+ */
+export async function chatCompletion(params: ChatCompletionRequest): Promise<string> {
+  const body: Record<string, unknown> = {
+    model: params.model,
+    messages: params.messages,
+  }
+  if (typeof params.temperature === 'number') {
+    body.temperature = params.temperature
+  }
+  if (params.extra_body) {
+    body.extra_body = params.extra_body
+  }
+
+  try {
+    const response = await client.post<ChatCompletionResponse>('/chat/completions', body)
+    const content = response.data.choices?.[0]?.message?.content?.trim()
+    if (!content) {
+      throw new Error('文本模型没有返回有效内容，请更换模型或稍后重试。')
+    }
+    return content
+  } catch (error: any) {
+    if (error instanceof AppError || !error?.response) throw error
+    throw new AppError(getApiErrorMessage(error, '文本生成失败，请稍后重试。'))
+  }
+}
+
 export async function generateImage(params: ImageGenerateRequest): Promise<ImageGenerateResponse> {
   const provider = getImageProvider(params)
   const fullBody = provider.buildRequestBody(params)

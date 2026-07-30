@@ -93,6 +93,29 @@
         <div v-if="polishStatus" class="status-msg success">{{ polishStatus }}</div>
       </section>
 
+      <section class="card">
+        <div class="section-head">
+          <span class="kicker">文本节点</span>
+          <h3>系统提示词</h3>
+        </div>
+        <div class="input-group">
+          <label for="text-system-prompt">文本模型系统提示词</label>
+          <textarea
+            id="text-system-prompt"
+            v-model.trim="settingsStore.textSystemPrompt"
+            class="text-area"
+            :placeholder="defaultTextSystemPrompt"
+            @blur="settingsStore.saveToStorage()"
+          />
+          <p class="field-hint">所有文本模型在生成前都会先经过这段系统提示词，用于明确身份与边界。留空时将使用默认提示词。</p>
+        </div>
+        <div class="btn-row">
+          <button class="ghost-btn" @click="resetTextSystemPrompt">恢复默认</button>
+          <button class="primary-btn" @click="saveTextSystemPrompt">保存系统提示词</button>
+        </div>
+        <div v-if="textPromptStatus" class="status-msg success">{{ textPromptStatus }}</div>
+      </section>
+
       <section class="card about-card">
         <div class="section-head">
           <span class="kicker">关于</span>
@@ -153,7 +176,11 @@ import { useRouter } from 'vue-router'
 import ApiKeyInput from '@/components/ApiKeyInput.vue'
 import { useApiStore } from '@/stores/apiStore'
 import { useChatStore } from '@/stores/chatStore'
-import { DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT, useSettingsStore } from '@/stores/settingsStore'
+import {
+  DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT,
+  DEFAULT_TEXT_SYSTEM_PROMPT,
+  useSettingsStore,
+} from '@/stores/settingsStore'
 import { maskApiKey } from '@/utils/format'
 import { testConnectionWithDetail } from '@/api/aiping'
 import { AIPING_PUBLIC_API_BASE_URL, isOpenAiBaseUrlFormat } from '@/api/config'
@@ -176,6 +203,8 @@ const testStatus = ref('')
 const testStatusType = ref<'success' | 'error'>('success')
 const polishStatus = ref('')
 const defaultPolishSystemPrompt = DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT
+const textPromptStatus = ref('')
+const defaultTextSystemPrompt = DEFAULT_TEXT_SYSTEM_PROMPT
 
 const maskedKeyText = computed(() => (apiStore.apiKey ? maskApiKey(apiStore.apiKey) : '未设置'))
 
@@ -251,6 +280,19 @@ function savePolishSettings() {
 function resetPolishPrompt() {
   settingsStore.promptPolishSystemPrompt = ''
   savePolishSettings()
+}
+
+function saveTextSystemPrompt() {
+  settingsStore.saveToStorage()
+  textPromptStatus.value = '系统提示词已保存。'
+  setTimeout(() => {
+    textPromptStatus.value = ''
+  }, 1200)
+}
+
+function resetTextSystemPrompt() {
+  settingsStore.textSystemPrompt = ''
+  saveTextSystemPrompt()
 }
 </script>
 

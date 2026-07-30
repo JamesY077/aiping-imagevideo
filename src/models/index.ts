@@ -5,6 +5,14 @@ import { videoModelModules } from './video'
 export type { BaseModelModule, ImageModelModule, ModelExample, VideoModelModule } from './types'
 export { imageModelModules } from './image'
 export { videoModelModules } from './video'
+export {
+  textModelModules,
+  DEFAULT_TEXT_MODEL_ID,
+  getTextModelModule,
+  isTextModel,
+  buildTextExtraBody,
+} from './text'
+export type { TextModelModule } from './text'
 
 export const modelModules = [...imageModelModules, ...videoModelModules] as Array<ImageModelModule | VideoModelModule>
 

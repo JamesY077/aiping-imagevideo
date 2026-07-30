@@ -34,15 +34,30 @@ export interface ModelsResponse {
   data: Model[]
 }
 
+export interface ChatMessageImageContentPart {
+  type: 'image_url'
+  image_url: {
+    url: string
+  }
+}
+
+export interface ChatMessageTextContentPart {
+  type: 'text'
+  text: string
+}
+
+export type ChatMessageContentPart = ChatMessageImageContentPart | ChatMessageTextContentPart
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
-  content: string
+  content: string | ChatMessageContentPart[]
 }
 
 export interface ChatCompletionRequest {
   model: string
   messages: ChatMessage[]
   temperature?: number
+  extra_body?: Record<string, unknown>
 }
 
 export interface ChatCompletionResponse {
