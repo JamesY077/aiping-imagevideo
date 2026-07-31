@@ -12,7 +12,18 @@ import type {
 } from '@/types/api'
 import { getImageProvider } from '@/api/providers/image'
 import { getVideoProvider } from '@/api/providers/video'
+import {
+  SEEDANCE_ASSETS_ENDPOINT,
+  SEEDANCE_TASKS_ENDPOINT,
+  buildSeedanceContent,
+  collectSeedanceReferenceImages,
+  collectSeedanceReferenceVideos,
+  collectSeedanceReferenceAudios,
+  normalizeSeedanceResponse,
+} from '@/api/providers/video/seedanceShared'
+
 import { AppError } from '@/utils/errors'
+
 
 const client = axios.create({
   timeout: 100000,
@@ -246,11 +257,99 @@ export async function generateImage(params: ImageGenerateRequest): Promise<Image
   }
 }
 
+type SeedanceAssetType = 'Image' | 'Video' | 'Audio'
+
+/**
+ * 通过素材接口把单个参考素材（URL / base64 dataURI）转换成 asset://{id}。
+ * 参考 seedance2.0 api 文档：CreateAsset 中 ProjectName 固定 default，GroupId 可任填。
+ * AssetType 支持 Image / Video / Audio，对应多模态参考的三类素材。
+ */
+async function createSeedanceAsset(url: string, assetType: SeedanceAssetType = 'Image'): Promise<string> {
+  const response = await client.post(SEEDANCE_ASSETS_ENDPOINT, {
+    GroupId: `group-${Date.now()}`,
+    URL: url,
+    Name: `aidraw-${Date.now()}`,
+    AssetType: assetType,
+    ProjectName: 'default',
+  })
+  const assetId = response.data?.Result?.Id || response.data?.Id || response.data?.result?.id
+  if (!assetId) {
+    throw new AppError('素材上传失败：未获取到素材 ID，请稍后重试。')
+  }
+  return `asset://${assetId}`
+}
+
+/** 批量把某一类素材地址转换成 asset://{id}，保持顺序。 */
+async function createSeedanceAssets(urls: string[], assetType: SeedanceAssetType): Promise<string[]> {
+  const assetUrls: string[] = []
+  for (const url of urls) {
+    try {
+      assetUrls.push(await createSeedanceAsset(url, assetType))
+    } catch (error: any) {
+      if (error instanceof AppError) throw error
+      throw new AppError(getApiErrorMessage(error, 'Seedance 素材上传失败，请确认账号已完成白名单接入后重试。'))
+    }
+  }
+  return assetUrls
+}
+
+/**
+ * Seedance 2.0 系列专用生成流程：
+ * 1. 先把参考图 / 参考视频 / 参考音频逐个走素材接口转换成 asset://{id}。
+ * 2. 再调用 contents/generations/tasks 创建视频任务。
+ * 仅 AI Ping 白名单账号生成的 API Key 才能成功，否则上游返回鉴权类报错。
+ */
+async function generateSeedanceVideo(params: VideoGenerateRequest, canonicalModel: string): Promise<VideoGenerateResponse> {
+  const referenceImages = collectSeedanceReferenceImages(params)
+  const referenceVideos = collectSeedanceReferenceVideos(params)
+  const referenceAudios = collectSeedanceReferenceAudios(params)
+
+  const imageAssets = await createSeedanceAssets(referenceImages, 'Image')
+  const videoAssets = await createSeedanceAssets(referenceVideos, 'Video')
+  const audioAssets = await createSeedanceAssets(referenceAudios, 'Audio')
+
+  const body: Record<string, unknown> = {
+    model: params.model || canonicalModel,
+    content: buildSeedanceContent(params.prompt, {
+      images: imageAssets,
+      videos: videoAssets,
+      audios: audioAssets,
+    }),
+    generate_audio: typeof params.audio === 'boolean' ? params.audio : true,
+    ratio: params.aspect_ratio || params.ratio || '16:9',
+    duration: params.duration || params.seconds || 5,
+    watermark: typeof params.watermark === 'boolean' ? params.watermark : false,
+  }
+
+
+  debugLog('generateVideo provider=seedance body:', sanitizeDebugBody(body))
+  try {
+    const response = await client.post(SEEDANCE_TASKS_ENDPOINT, body)
+    return normalizeSeedanceResponse(response.data)
+  } catch (error: any) {
+    debugLog('generateSeedanceVideo error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+    })
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      throw new AppError('Seedance 2.0 系列仅支持 AI Ping 白名单用户调用。当前 API Key 未开通白名单权限，请联系 AI Ping 完成开白后重试。')
+    }
+    throw new AppError(getApiErrorMessage(error, 'Seedance 2.0 视频生成失败，请确认账号已完成白名单接入后重试。'))
+  }
+}
+
 export async function generateVideo(params: VideoGenerateRequest): Promise<VideoGenerateResponse> {
   const provider = getVideoProvider(params)
+
+  // Seedance 2.0 系列走独立的「素材 + 任务」流程。
+  if (provider.provider === 'seedance') {
+    return generateSeedanceVideo(params, provider.models[0])
+  }
+
   const fullBody = provider.buildRequestBody(params)
   const videoEndpoint = provider.getEndpoint(fullBody)
   const normalizeResponse = provider.normalizeResponse || ((data: VideoGenerateResponse) => data)
+
 
   debugLog(`generateVideo provider=${provider.provider} trying full body:`, sanitizeDebugBody(fullBody))
   try {
@@ -347,7 +446,29 @@ export async function getVideoStatus(taskId: string): Promise<VideoStatusRespons
   return response.data
 }
 
+/**
+ * 归一化 Seedance 2.0 任务查询结果。
+ * 文档返回：{ id, model, status, content?.video_url, ... }，status 取值见文档
+ * （queued / running / cancelled / succeeded / failed / expired）。
+ */
+function normalizeSeedanceStatus(data: any, taskId: string): VideoStatusResponse {
+  const videoUrl = data?.content?.video_url || data?.video_url
+  return {
+    ...data,
+    id: data?.id || taskId,
+    task_id: data?.id || taskId,
+    status: data?.status || 'running',
+    state: data?.status,
+    video_url: videoUrl,
+    data: videoUrl ? [{ url: videoUrl, duration: data?.duration || 0 }] : undefined,
+    error: data?.error?.message || data?.error,
+    provider: 'seedance',
+    model: data?.model,
+  }
+}
+
 function normalizeVideoStatus(data: any, taskId: string, provider?: string): VideoStatusResponse {
+
   const task = data?.data?.task_id || data?.data?.task_status ? data.data : data
   const normalized = task?.task_id && !task.id
     ? {
@@ -379,6 +500,22 @@ function normalizeVideoStatus(data: any, taskId: string, provider?: string): Vid
 
 export async function getVideoStatusWithProvider(taskId: string, provider?: string): Promise<VideoStatusResponse> {
   const normalizedProvider = provider?.toLowerCase()
+
+  // Seedance 2.0 走独立的任务查询接口：/multimodal/sd/videos/contents/generations/tasks/{task_id}
+  if (normalizedProvider === 'seedance') {
+    try {
+      debugLog(`getVideoStatus provider=seedance endpoint=${SEEDANCE_TASKS_ENDPOINT}/${taskId}`)
+      const response = await client.get(`${SEEDANCE_TASKS_ENDPOINT}/${taskId}`)
+      return normalizeSeedanceStatus(response.data, taskId)
+    } catch (error: any) {
+      debugLog('getVideoStatus seedance error:', {
+        status: error.response?.status,
+        data: error.response?.data,
+      })
+      throw new AppError(getApiErrorMessage(error, `Seedance 视频状态查询失败 (task: ${taskId})`))
+    }
+  }
+
   const endpoints = normalizedProvider === 'vidu'
     ? [`/videos/vidu/tasks/${taskId}/creations`, `/videos/${taskId}`]
     : normalizedProvider === 'kling'
@@ -392,6 +529,7 @@ export async function getVideoStatusWithProvider(taskId: string, provider?: stri
       const response = await client.get(endpoint)
       return normalizeVideoStatus(response.data, taskId, provider)
     } catch (error: any) {
+
       lastError = error
       debugLog('getVideoStatus error:', {
         endpoint,

@@ -118,7 +118,12 @@ export interface VideoGenerateRequest {
   start_image?: string
   end_image?: string
   reference_images?: string[]
+  /** Seedance 2.0 多模态参考：参考视频地址（URL / base64 dataURI），最多 3 个。 */
+  reference_videos?: string[]
+  /** Seedance 2.0 多模态参考：参考音频地址（URL / base64 dataURI），最多 3 个。 */
+  reference_audios?: string[]
   video_url?: string
+
   subject_reference?: Array<{
     type: 'character' | string
     image: string[]

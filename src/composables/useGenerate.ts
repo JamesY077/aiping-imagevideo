@@ -215,6 +215,47 @@ async function buildVideoParams(
       delete videoParams.payload
       delete videoParams.extra_body
       break
+    case 'seedance-2': {
+      // Seedance 2.0 走「素材 + contents/generations/tasks」接口。
+      // 参考素材按类型分别放入 reference_images / reference_videos / reference_audios，
+      // 由 aiping.ts 逐类生成素材（asset://）后组装 content 数组。
+      const referenceImages: string[] = []
+      const referenceVideos: string[] = []
+      const referenceAudios: string[] = []
+      uploadedFiles.forEach((file, index) => {
+        const value = uploadValues[index]
+        if (!value) return
+        if (file.purpose === 'multimodal-video' || file.type === 'video') {
+          referenceVideos.push(value)
+        } else if (file.purpose === 'multimodal-audio' || file.type === 'audio') {
+          referenceAudios.push(value)
+        } else {
+          referenceImages.push(value)
+        }
+      })
+      if (referenceImages.length) videoParams.reference_images = referenceImages
+      if (referenceVideos.length) videoParams.reference_videos = referenceVideos
+      if (referenceAudios.length) videoParams.reference_audios = referenceAudios
+      videoParams.duration = duration || 5
+      videoParams.audio = true
+      videoParams.watermark = false
+      deleteVideoRatio(videoParams)
+      videoParams.aspect_ratio = aspectRatio || '16:9'
+      delete videoParams.image
+      delete videoParams.img_url
+      delete videoParams.images
+      delete videoParams.first_frame_url
+      delete videoParams.last_frame_url
+      delete videoParams.resolution
+      delete videoParams.movement_amplitude
+      delete videoParams.off_peak
+      delete videoParams.seed
+      delete videoParams.style
+      delete videoParams.payload
+      delete videoParams.extra_body
+      break
+    }
+
     default:
       if (uploadValue) videoParams.img_url = uploadValue
       break
@@ -222,6 +263,7 @@ async function buildVideoParams(
 
   return videoParams
 }
+
 
 export function useGenerate() {
   const chatStore = useChatStore()

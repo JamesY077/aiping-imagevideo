@@ -1,24 +1,51 @@
 <template>
   <div class="model-selector" :class="{ compact }">
     <select v-model="selectedModel" @change="onChange">
-      <option v-for="model in models" :key="model.id" :value="model.id">
+      <!-- 普通模型 -->
+      <option v-for="model in normalModels" :key="model.id" :value="model.id">
         {{ formatModelLabel(model.id) }}
       </option>
+      <!-- seedance2.0 系列分组：三款模型同属一组 -->
+      <optgroup v-if="seedanceModels.length" :label="SEEDANCE_2_GROUP_LABEL">
+        <option v-for="model in seedanceModels" :key="model.id" :value="model.id">
+          {{ formatModelLabel(model.id) }}
+        </option>
+      </optgroup>
     </select>
     <span class="select-icon" aria-hidden="true">
       <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M4 6.5L8 10L12 6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
     </span>
+
+    <!-- seedance2.0 系列白名单提示弹窗 -->
+    <teleport to="body">
+      <div v-if="showSeedanceNotice" class="seedance-modal-mask" @click.self="closeSeedanceNotice">
+        <div class="seedance-modal" role="dialog" aria-modal="true">
+          <div class="seedance-modal-title">seedance2.0 系列使用提示</div>
+          <p class="seedance-modal-text">{{ SEEDANCE_2_WHITELIST_NOTICE }}</p>
+          <div class="seedance-modal-actions">
+            <button type="button" class="seedance-modal-btn" @click="closeSeedanceNotice">我已知晓</button>
+          </div>
+        </div>
+      </div>
+    </teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 import { getModels } from '@/api/aiping'
 import type { Model } from '@/types/api'
 import type { MediaType } from '@/types/model'
-import { BUILT_IN_MODELS, getModelAvailabilityLabel, getModelsByMediaType } from '@/types/model'
+import {
+  BUILT_IN_MODELS,
+  getModelAvailabilityLabel,
+  getModelsByMediaType,
+  isSeedance2Model,
+  SEEDANCE_2_GROUP_LABEL,
+  SEEDANCE_2_WHITELIST_NOTICE,
+} from '@/types/model'
 
 const props = defineProps<{
   mediaType: MediaType
@@ -31,23 +58,60 @@ const emit = defineEmits<{ (e: 'update:modelValue', value: string | null): void 
 const selectedModel = ref<string | null>(props.modelValue)
 const models = ref<Model[]>([])
 const allModels = ref<Model[]>([])
+const showSeedanceNotice = ref(false)
+
+// 普通模型与 seedance2.0 系列模型分组展示。
+const seedanceModels = computed(() => models.value.filter((m) => isSeedance2Model(m.id)))
+const normalModels = computed(() => models.value.filter((m) => !isSeedance2Model(m.id)))
 
 watch(() => props.modelValue, (v) => {
   selectedModel.value = v
 })
 
+// 选择默认模型：优先选择非 seedance2.0 系列（seedance 为白名单专属，
+// 不应作为节点新建时的默认模型），无非 seedance 模型时才退回第一个。
+function pickDefaultModelId(): string | null {
+  if (models.value.length === 0) return null
+  const firstNormal = models.value.find((m) => !isSeedance2Model(m.id))
+  return (firstNormal || models.value[0]).id
+}
+
 watch(() => props.mediaType, () => {
   filterModels()
   if (!models.value.find((m) => m.id === selectedModel.value)) {
-    selectedModel.value = models.value.length > 0 ? models.value[0].id : null
+    selectedModel.value = pickDefaultModelId()
     emit('update:modelValue', selectedModel.value)
   }
 })
 
+
+function toModel(id: string): Model {
+  return {
+    id,
+    object: 'model',
+    created: 0,
+    owned_by: 'built-in',
+    permission: [],
+    root: id,
+    parent: null,
+  }
+}
+
 function filterModels() {
   const allowedIds = new Set(getModelsByMediaType(props.mediaType, allModels.value.map((m) => m.id)))
-  models.value = allModels.value.filter((m) => allowedIds.has(m.id)).sort((a, b) => a.id.localeCompare(b.id, 'zh-CN'))
+  const filtered = allModels.value.filter((m) => allowedIds.has(m.id))
+
+  // seedance2.0 系列为白名单专属模型，/models 接口通常不会返回，
+  // 这里始终把内置的三款 Seedance 模型补进列表，保证前端可见（点击时再弹白名单提示）。
+  const existingIds = new Set(filtered.map((m) => m.id.toLowerCase()))
+  const seedanceModels = BUILT_IN_MODELS
+    .filter((model) => model.mediaType === props.mediaType && isSeedance2Model(model.id))
+    .filter((model) => !existingIds.has(model.id.toLowerCase()))
+    .map((model) => toModel(model.id))
+
+  models.value = [...filtered, ...seedanceModels].sort((a, b) => a.id.localeCompare(b.id, 'zh-CN'))
 }
+
 
 function buildFallbackModels(): Model[] {
   return BUILT_IN_MODELS
@@ -73,20 +137,29 @@ onMounted(async () => {
       models.value = buildFallbackModels()
     }
     if (!models.value.find((m) => m.id === selectedModel.value)) {
-      selectedModel.value = models.value.length > 0 ? models.value[0].id : null
+      selectedModel.value = pickDefaultModelId()
       emit('update:modelValue', selectedModel.value)
     }
   } catch {
     models.value = buildFallbackModels()
     if (!models.value.find((m) => m.id === selectedModel.value)) {
-      selectedModel.value = models.value.length > 0 ? models.value[0].id : null
+      selectedModel.value = pickDefaultModelId()
       emit('update:modelValue', selectedModel.value)
     }
   }
+
 })
 
 function onChange() {
   emit('update:modelValue', selectedModel.value)
+  // 选中 seedance2.0 系列时弹出白名单提示。
+  if (isSeedance2Model(selectedModel.value)) {
+    showSeedanceNotice.value = true
+  }
+}
+
+function closeSeedanceNotice() {
+  showSeedanceNotice.value = false
 }
 
 function formatModelLabel(modelId: string): string {
@@ -157,5 +230,60 @@ select:focus {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+/* seedance2.0 系列白名单提示弹窗 */
+.seedance-modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 20px;
+}
+
+.seedance-modal {
+  width: 100%;
+  max-width: 380px;
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+}
+
+.seedance-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 12px;
+}
+
+.seedance-modal-text {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--color-text-secondary);
+  margin: 0 0 20px;
+}
+
+.seedance-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.seedance-modal-btn {
+  min-height: 40px;
+  padding: 0 24px;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-text);
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.seedance-modal-btn:hover {
+  opacity: 0.88;
 }
 </style>

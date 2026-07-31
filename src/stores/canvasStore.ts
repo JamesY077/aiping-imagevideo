@@ -76,7 +76,18 @@ export interface CanvasNodeData {
   motionVideoName?: string
   motionKeepOriginalSound?: 'yes' | 'no'
   motionCharacterOrientation?: 'image' | 'video'
+  // 多模态参考（multimodalReference2video, Seedance 2.0）：
+  // 图片 0~9 / 视频 0~3 / 音频 0~3，均以 data url 存储。
+  multimodalImages?: string[]
+  multimodalVideos?: string[]
+  multimodalAudios?: string[]
+  // 编辑视频（editVideo, Seedance 2.0）：待编辑视频 + 替换图片（data url）
+  editVideoUrl?: string
+  editVideoName?: string
+  editImageUrl?: string
+  editImageName?: string
   polish?: boolean
+
 
   // 每个节点自定义的 AI 润色系统提示词（可在节点“设置”里编辑）。
   // 为空时回退到该类型的默认系统提示词。
@@ -924,8 +935,43 @@ export const useCanvasStore = defineStore('canvas', () => {
       // 依据不同生成方式组装视频请求的文件输入（buildVideoParams 支持单文件或文件数组）。
       let videoInput: UploadInput = null
 
-      if (videoMode === 'startEnd2video') {
+      if (videoMode === 'multimodalReference2video') {
+        // 多模态参考（Seedance 2.0）：图片 0~9 / 视频 0~3 / 音频 0~3 任意组合。
+        // 注意：不支持「纯音频」或「文本 + 音频」。
+        const images = node.data.multimodalImages || []
+        const videos = node.data.multimodalVideos || []
+        const audios = node.data.multimodalAudios || []
+        // 若本节点未上传任何图片，但有上游图片结果，则将其作为一张参考图消费。
+        const effectiveImages = images.length || videos.length ? images : referenceImage ? [referenceImage] : []
+        const hasAnyMedia = effectiveImages.length + videos.length > 0
+        if (!hasAnyMedia && audios.length > 0) {
+          throw new Error('多模态参考不支持「纯音频」或「文本 + 音频」，请至少添加一张图片或一个视频。')
+        }
+        const files: UploadedFile[] = []
+        effectiveImages.forEach((url, i) =>
+          files.push({ name: `图片${i + 1}`, type: 'image', url, size: 0, purpose: 'multimodal-image' }),
+        )
+        videos.forEach((url, i) =>
+          files.push({ name: `视频${i + 1}`, type: 'video', url, size: 0, purpose: 'multimodal-video' }),
+        )
+        audios.forEach((url, i) =>
+          files.push({ name: `音频${i + 1}`, type: 'audio', url, size: 0, purpose: 'multimodal-audio' }),
+        )
+        videoInput = files.length ? files : null
+      } else if (videoMode === 'editVideo') {
+        // 编辑视频（Seedance 2.0）：待编辑视频 + 替换图片。
+        const editVideoUrl = node.data.editVideoUrl
+        const editImageUrl = node.data.editImageUrl
+        if (!editVideoUrl || !editImageUrl) {
+          throw new Error('编辑视频需要同时上传待编辑视频和替换图片。')
+        }
+        videoInput = [
+          { name: node.data.editVideoName || '视频1', type: 'video', url: editVideoUrl, size: 0, purpose: 'multimodal-video' },
+          { name: node.data.editImageName || '图片1', type: 'image', url: editImageUrl, size: 0, purpose: 'multimodal-image' },
+        ]
+      } else if (videoMode === 'startEnd2video') {
         // 首尾帧生视频：需要首帧 + 尾帧两张图片。
+
         const startFrame = node.data.startFrameImage
         const endFrame = node.data.endFrameImage
         if (!startFrame || !endFrame) {

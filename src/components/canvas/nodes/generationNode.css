@@ -342,3 +342,41 @@
 .gen-model .model-selector {
   width: 100%;
 }
+
+/* @ 提及：输入框容器需相对定位，供菜单绝对定位 */
+.gen-input-wrap {
+  position: relative;
+}
+/* @ 提及菜单：在输入框中键入 @ 时弹出的候选素材列表 */
+.gen-mention {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: calc(100% - 4px);
+  z-index: 20;
+  max-height: 180px;
+  overflow-y: auto;
+  background: #2c2c2e;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  padding: 4px;
+}
+.gen-mention-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: #f5f5f7;
+  font-size: 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.gen-mention-item:hover,
+.gen-mention-item--active {
+  background: #0a84ff;
+  color: #fff;
+}
+
