@@ -62,6 +62,18 @@ export function useGenerationNode(props: GenerationNodeProps) {
   const showMotionUpload = computed(
     () => kind.value === 'video' && props.data.videoMode === 'motionControl2video',
   )
+  // 多模态参考（Seedance 2.0）：图片 0~9 / 视频 0~3 / 音频 0~3。
+  const showMultimodalUpload = computed(
+    () => kind.value === 'video' && props.data.videoMode === 'multimodalReference2video',
+  )
+  // 编辑视频（Seedance 2.0）：待编辑视频 + 替换图片。
+  const showEditVideoUpload = computed(
+    () => kind.value === 'video' && props.data.videoMode === 'editVideo',
+  )
+
+  // 多模态参考各模态的数量上限。
+  const MULTIMODAL_LIMITS = { image: 9, video: 3, audio: 3 } as const
+
 
   // ------ 选择类控件的更新处理 ------
   function onImageMode(e: Event) {
@@ -119,7 +131,63 @@ export function useGenerationNode(props: GenerationNodeProps) {
     readFileInto(e, 'motionVideo', 'motionVideoName')
   }
 
+  // ------ 多模态参考（Seedance 2.0）：图片 / 视频 / 音频列表 ------
+  // 追加选中的多个文件到对应模态数组（受上限约束），以 data url 存储。
+  function appendMultimodal(
+    e: Event,
+    listKey: 'multimodalImages' | 'multimodalVideos' | 'multimodalAudios',
+    limit: number,
+  ) {
+    const input = e.target as HTMLInputElement
+    const files = Array.from(input.files || [])
+    if (!files.length) return
+    const current = (props.data[listKey] as string[] | undefined) || []
+    const room = Math.max(0, limit - current.length)
+    const picked = files.slice(0, room)
+    Promise.all(
+      picked.map(
+        (file) =>
+          new Promise<string>((resolve) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result as string)
+            reader.readAsDataURL(file)
+          }),
+      ),
+    ).then((urls) => {
+      const latest = (props.data[listKey] as string[] | undefined) || []
+      store.updateNodeData(props.id, { [listKey]: [...latest, ...urls] } as Partial<CanvasNodeData>)
+    })
+    // 允许连续选择同一批文件时也能触发 change
+    input.value = ''
+  }
+  function onMultimodalImages(e: Event) {
+    appendMultimodal(e, 'multimodalImages', MULTIMODAL_LIMITS.image)
+  }
+  function onMultimodalVideos(e: Event) {
+    appendMultimodal(e, 'multimodalVideos', MULTIMODAL_LIMITS.video)
+  }
+  function onMultimodalAudios(e: Event) {
+    appendMultimodal(e, 'multimodalAudios', MULTIMODAL_LIMITS.audio)
+  }
+  function removeMultimodal(
+    listKey: 'multimodalImages' | 'multimodalVideos' | 'multimodalAudios',
+    index: number,
+  ) {
+    const current = [...((props.data[listKey] as string[] | undefined) || [])]
+    current.splice(index, 1)
+    store.updateNodeData(props.id, { [listKey]: current } as Partial<CanvasNodeData>)
+  }
+
+  // ------ 编辑视频（Seedance 2.0）：待编辑视频 + 替换图片 ------
+  function onEditVideo(e: Event) {
+    readFileInto(e, 'editVideoUrl', 'editVideoName')
+  }
+  function onEditImage(e: Event) {
+    readFileInto(e, 'editImageUrl', 'editImageName')
+  }
+
   return {
+
     store,
     kind,
     isRunning,
@@ -132,6 +200,9 @@ export function useGenerationNode(props: GenerationNodeProps) {
     showSubjectUpload,
     showStartEndUpload,
     showMotionUpload,
+    showMultimodalUpload,
+    showEditVideoUpload,
+    MULTIMODAL_LIMITS,
     onImageMode,
     onVideoMode,
     onTextModel,
@@ -142,5 +213,12 @@ export function useGenerationNode(props: GenerationNodeProps) {
     onEndFrame,
     onMotionImage,
     onMotionVideo,
+    onMultimodalImages,
+    onMultimodalVideos,
+    onMultimodalAudios,
+    removeMultimodal,
+    onEditVideo,
+    onEditImage,
   }
 }
+

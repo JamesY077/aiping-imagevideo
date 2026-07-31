@@ -310,7 +310,131 @@
                     placeholder="或粘贴主体图片 URL"
                   />
                 </div>
+
+                <div v-else-if="videoMode === 'editVideo'" class="multimodal-panel edit-video-panel">
+                  <p class="multimodal-note">
+                    编辑视频
+                    <small>提供「待编辑视频 + 参考图片 + 提示词」，完成替换主体、对象增删改、局部重绘/修复等编辑；仅需 1 个视频 + 1 张图片。可在文本中输入 <b>@</b> 精确指定素材位置，例如「将 @视频1 礼盒中的香水替换成 @图片1 中的面霜，运镜不变」。</small>
+                  </p>
+                  <div class="frame-upload-grid">
+                    <div class="upload-mini-row upload-card-row frame-upload-card" :class="{ 'has-file': !!editVideoFile }">
+                      <input
+                        ref="editVideoInput"
+                        type="file"
+                        accept="video/*"
+                        class="file-input"
+                        @change="handleEditFileChange($event, 'video')"
+                      />
+                      <button class="upload-btn upload-icon-btn" type="button" aria-label="上传待编辑视频" @click="editVideoInput?.click()">
+                        +
+                      </button>
+                      <div class="upload-copy">
+                        <span class="upload-label">视频1</span>
+                        <span class="upload-hint">请上传需要修改的视频</span>
+                      </div>
+                      <span v-if="editVideoFile" class="pill-filename">{{ editVideoFile.name }}</span>
+                      <button v-if="editVideoFile" class="text-btn" type="button" @click="removeEditFile('video')">移除</button>
+                    </div>
+
+                    <div class="upload-mini-row upload-card-row frame-upload-card" :class="{ 'has-file': !!editImageFile }">
+                      <input
+                        ref="editImageInput"
+                        type="file"
+                        accept="image/*"
+                        class="file-input"
+                        @change="handleEditFileChange($event, 'image')"
+                      />
+                      <button class="upload-btn upload-icon-btn" type="button" aria-label="上传替换图片" @click="editImageInput?.click()">
+                        +
+                      </button>
+                      <div class="upload-copy">
+                        <span class="upload-label">图片1</span>
+                        <span class="upload-hint">请上传想要替换成的图片</span>
+                      </div>
+                      <span v-if="editImageFile" class="pill-filename">{{ editImageFile.name }}</span>
+                      <button v-if="editImageFile" class="text-btn" type="button" @click="removeEditFile('image')">移除</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-else-if="videoMode === 'multimodalReference2video'" class="multimodal-panel">
+                  <p class="multimodal-note">
+                    多模态参考
+                    <small>可任意组合图片（0~9）、视频（0~3）、音频（0~3）作为参考；不支持「纯音频」或「文本+音频」。上传后可在文本中输入 <b>@</b> 精确指定素材位置。</small>
+                  </p>
+
+
+                  <div class="multimodal-groups">
+
+                    <div class="multimodal-group">
+                      <div class="multimodal-group-head">
+                        <span class="multimodal-group-title">图片</span>
+                        <span class="multimodal-group-count">{{ multimodalImages.length }}/{{ MULTIMODAL_LIMITS.image }}</span>
+                      </div>
+                      <div class="multimodal-thumb-row">
+                        <div v-for="item in multimodalImages" :key="item.url" class="multimodal-thumb">
+                          <img :src="item.url" :alt="item.refLabel" />
+                          <span class="multimodal-thumb-tag">{{ item.refLabel }}</span>
+                          <button class="multimodal-thumb-remove" type="button" aria-label="移除" @click="removeMultimodalAsset('image', item)">×</button>
+                        </div>
+                        <button
+                          v-if="multimodalImages.length < MULTIMODAL_LIMITS.image"
+                          class="multimodal-add-btn"
+                          type="button"
+                          aria-label="添加图片"
+                          @click="multimodalImageInput?.click()"
+                        >+</button>
+                      </div>
+                      <input ref="multimodalImageInput" type="file" accept="image/*" multiple class="file-input" @change="handleMultimodalFileChange($event, 'image')" />
+                    </div>
+
+                    <div class="multimodal-group">
+                      <div class="multimodal-group-head">
+                        <span class="multimodal-group-title">视频</span>
+                        <span class="multimodal-group-count">{{ multimodalVideos.length }}/{{ MULTIMODAL_LIMITS.video }}</span>
+                      </div>
+                      <div class="multimodal-thumb-row">
+                        <div v-for="item in multimodalVideos" :key="item.url" class="multimodal-thumb multimodal-thumb-file">
+                          <span class="multimodal-file-icon">🎬</span>
+                          <span class="multimodal-thumb-tag">{{ item.refLabel }}</span>
+                          <button class="multimodal-thumb-remove" type="button" aria-label="移除" @click="removeMultimodalAsset('video', item)">×</button>
+                        </div>
+                        <button
+                          v-if="multimodalVideos.length < MULTIMODAL_LIMITS.video"
+                          class="multimodal-add-btn"
+                          type="button"
+                          aria-label="添加视频"
+                          @click="multimodalVideoInput?.click()"
+                        >+</button>
+                      </div>
+                      <input ref="multimodalVideoInput" type="file" accept="video/*" multiple class="file-input" @change="handleMultimodalFileChange($event, 'video')" />
+                    </div>
+
+                    <div class="multimodal-group">
+                      <div class="multimodal-group-head">
+                        <span class="multimodal-group-title">音频</span>
+                        <span class="multimodal-group-count">{{ multimodalAudios.length }}/{{ MULTIMODAL_LIMITS.audio }}</span>
+                      </div>
+                      <div class="multimodal-thumb-row">
+                        <div v-for="item in multimodalAudios" :key="item.url" class="multimodal-thumb multimodal-thumb-file">
+                          <span class="multimodal-file-icon">🎵</span>
+                          <span class="multimodal-thumb-tag">{{ item.refLabel }}</span>
+                          <button class="multimodal-thumb-remove" type="button" aria-label="移除" @click="removeMultimodalAsset('audio', item)">×</button>
+                        </div>
+                        <button
+                          v-if="multimodalAudios.length < MULTIMODAL_LIMITS.audio"
+                          class="multimodal-add-btn"
+                          type="button"
+                          aria-label="添加音频"
+                          @click="multimodalAudioInput?.click()"
+                        >+</button>
+                      </div>
+                      <input ref="multimodalAudioInput" type="file" accept="audio/*" multiple class="file-input" @change="handleMultimodalFileChange($event, 'audio')" />
+                    </div>
+                  </div>
+                </div>
               </template>
+
 
               <div v-else-if="isImageReferenceMode" class="upload-mini-row upload-card-row" :class="{ 'has-file': !!uploadedFile }">
                 <input
@@ -354,13 +478,49 @@
             </div>
           </div>
 
+          <div v-if="referencedMentions.length" class="referenced-mentions" aria-label="已引用素材">
+            <span class="referenced-mentions-label">已引用</span>
+            <span
+              v-for="item in referencedMentions"
+              :key="item.url"
+              class="referenced-chip"
+              :class="`referenced-chip-${mentionKind(item)}`"
+            >
+              <span class="referenced-chip-dot" aria-hidden="true" />
+              {{ item.refLabel }}
+            </span>
+          </div>
+
           <div :class="['input-shell', { expanded: isComposerExpanded }]">
+            <div
+              v-if="showMentionMenu && mentionableAssets.length"
+              class="mention-menu"
+              role="listbox"
+              aria-label="选择参考素材"
+            >
+              <button
+                v-for="(item, index) in mentionableAssets"
+                :key="item.url"
+                type="button"
+                class="mention-item"
+                :class="{ active: index === activeMentionIndex }"
+                @mousedown.prevent="insertMentionReference(item)"
+                @mouseenter="activeMentionIndex = index"
+              >
+                <span class="mention-item-tag">{{ item.refLabel }}</span>
+                <span class="mention-item-name">{{ item.name }}</span>
+              </button>
+            </div>
             <textarea
               ref="promptInputRef"
               v-model="inputText"
               :placeholder="inputPlaceholder"
-              @keydown.enter.exact.prevent="handleSend"
+              @input="handlePromptInput"
+              @keyup="handlePromptInput"
+              @click="handlePromptInput"
+              @keydown="handleComposerKeydown"
             />
+
 
             <div class="composer-actions">
               <button
@@ -462,13 +622,35 @@ const motionControlCharacterOrientation = ref<'image' | 'video'>('image')
 const referenceUrl = ref('')
 const inputText = ref('')
 type ImageMode = 'text2image' | 'image2image'
-type VideoMode = 'text2video' | 'image2video' | 'startEnd2video' | 'subjectReference2video' | 'motionControl2video'
+type VideoMode = 'text2video' | 'image2video' | 'startEnd2video' | 'subjectReference2video' | 'motionControl2video' | 'multimodalReference2video' | 'editVideo'
+
 interface ImageDimensions {
   width: number
   height: number
 }
 const imageMode = ref<ImageMode>('text2image')
 const videoMode = ref<VideoMode>('text2video')
+
+// 多模态参考（Seedance 2.0 系列）：图片 0~9 / 视频 0~3 / 音频 0~3
+const MULTIMODAL_LIMITS = { image: 9, video: 3, audio: 3 } as const
+const multimodalImages = ref<UploadedFile[]>([])
+const multimodalVideos = ref<UploadedFile[]>([])
+const multimodalAudios = ref<UploadedFile[]>([])
+const multimodalImageInput = ref<HTMLInputElement | null>(null)
+const multimodalVideoInput = ref<HTMLInputElement | null>(null)
+const multimodalAudioInput = ref<HTMLInputElement | null>(null)
+// 编辑视频（Seedance 2.0）：固定「1 个待修改视频 + 1 张替换图片」
+const editVideoFile = ref<UploadedFile | null>(null)
+const editImageFile = ref<UploadedFile | null>(null)
+const editVideoInput = ref<HTMLInputElement | null>(null)
+const editImageInput = ref<HTMLInputElement | null>(null)
+
+// @ 引用菜单状态
+const showMentionMenu = ref(false)
+const mentionAtIndex = ref(-1)
+// 当前高亮的引用项索引（用于键盘上下选择）
+const activeMentionIndex = ref(0)
+
 const imageModeOptions: Array<{ value: ImageMode; label: string }> = [
   { value: 'text2image', label: '文生图' },
   { value: 'image2image', label: '图生图' },
@@ -487,6 +669,14 @@ const klingMotionControlVideoModeOptions: Array<{ value: VideoMode; label: strin
   { value: 'image2video', label: '图生视频' },
   { value: 'motionControl2video', label: '动作控制' },
 ]
+const seedanceVideoModeOptions: Array<{ value: VideoMode; label: string }> = [
+  { value: 'text2video', label: '文生视频' },
+  { value: 'image2video', label: '图生视频' },
+  { value: 'multimodalReference2video', label: '多模态参考' },
+  { value: 'editVideo', label: '编辑视频' },
+]
+
+
 const hasPromptPolishModelConfigured = computed(() => !!settingsStore.promptPolishModel.trim())
 const polishDisabledReason = '请前往设置完成 AI 润色模型设置'
 
@@ -503,13 +693,57 @@ const isKlingMotionControlVideoModel = computed(() => {
   const mode = modelCapability.value?.videoRequestMode
   return settingsStore.mediaType === 'video' && (mode === 'kling-v26' || mode === 'kling-v3')
 })
-const usesViduLikeVideoMode = computed(() => isViduVideoModel.value || isMinimaxHailuoVideoModel.value || isKlingMultimodalVideoModel.value)
+const isSeedanceVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'seedance-2')
+const isMultimodalReferenceMode = computed(() => isSeedanceVideoModel.value && videoMode.value === 'multimodalReference2video')
+const isEditVideoMode = computed(() => isSeedanceVideoModel.value && videoMode.value === 'editVideo')
+// 多模态参考与编辑视频都使用「图片/视频/音频 + @ 引用」的素材面板
+const isSeedanceMentionMode = computed(() => isMultimodalReferenceMode.value || isEditVideoMode.value)
+
+const usesViduLikeVideoMode = computed(() => isViduVideoModel.value || isMinimaxHailuoVideoModel.value || isKlingMultimodalVideoModel.value || isSeedanceVideoModel.value)
 const activeVideoModeOptions = computed(() => {
   if (isMinimaxHailuoVideoModel.value) return minimaxHailuoVideoModeOptions
   if (isKlingMotionControlVideoModel.value) return klingMotionControlVideoModeOptions
+  if (isSeedanceVideoModel.value) return seedanceVideoModeOptions
   if (isKlingMultimodalVideoModel.value) return viduVideoModeOptions
   return viduVideoModeOptions
 })
+const mentionableAssets = computed<UploadedFile[]>(() => {
+  // 编辑视频：固定「视频1 + 图片1」，用于 @ 引用与彩色标签
+  if (isEditVideoMode.value) {
+    return [editVideoFile.value, editImageFile.value].filter((item): item is UploadedFile => !!item)
+  }
+  return [
+    ...multimodalImages.value,
+    ...multimodalVideos.value,
+    ...multimodalAudios.value,
+  ]
+})
+
+
+// 匹配文本中的 @图片N / @视频N / @音频N 引用标签
+const MENTION_TAG_REGEX = /@(图片|视频|音频)\d+/g
+
+/** 判断素材属于哪一类，用于给标签上不同的渐变色。 */
+function mentionKind(item: UploadedFile): 'image' | 'video' | 'audio' {
+  const label = item.refLabel || ''
+  if (label.startsWith('视频')) return 'video'
+  if (label.startsWith('音频')) return 'audio'
+  return 'image'
+}
+
+/**
+ * 当前文本中真正被 @ 引用、且与已上传素材匹配的素材列表（去重、保持出现顺序）。
+ * 在输入框上方以彩色标签展示，用作图片/视频/音频的直观区分。
+ */
+const referencedMentions = computed<UploadedFile[]>(() => {
+  if (!isSeedanceMentionMode.value || !inputText.value) return []
+
+  const referencedLabels = new Set(
+    Array.from(inputText.value.matchAll(MENTION_TAG_REGEX)).map((match) => match[0].slice(1)),
+  )
+  return mentionableAssets.value.filter((item) => referencedLabels.has(item.refLabel || ''))
+})
+
 const isUploadEnabled = computed(() => modelSupportsLocalUpload(settingsStore.selectedModel))
 const supportsImageReferenceMode = computed(() => {
   return settingsStore.mediaType === 'image' && !!modelCapability.value?.inputs.includes('image') && isUploadEnabled.value
@@ -581,11 +815,17 @@ const canSend = computed(() => {
   if (!inputText.value.trim()) return false
   if (usesViduLikeVideoMode.value) {
     if (videoMode.value === 'text2video') return true
+    if (videoMode.value === 'multimodalReference2video') return true
+    // 编辑视频：需上传待编辑视频 + 替换图片
+    if (videoMode.value === 'editVideo') return !!editVideoFile.value && !!editImageFile.value
+
     if (videoMode.value === 'image2video') return !!uploadedFile.value
+
     if (videoMode.value === 'motionControl2video') return !!motionControlImage.value && !!motionControlVideo.value
     if (videoMode.value === 'startEnd2video') return !!viduStartFrame.value && !!viduEndFrame.value
     return !!uploadedFile.value || !!referenceUrl.value.trim()
   }
+
   if (settingsStore.mediaType === 'image' && imageMode.value === 'image2image') {
     return supportsImageReferenceMode.value && !!uploadedFile.value
   }
@@ -645,8 +885,13 @@ function setVideoMode(mode: VideoMode) {
   removeUploadedFile()
   removeViduFrames()
   removeMotionControlFiles()
+  clearMultimodalAssets()
+  clearEditFiles()
+  showMentionMenu.value = false
   referenceUrl.value = ''
 }
+
+
 
 function selectAspectRatio(value: string) {
   if (!aspectRatioOptions.value.some((option) => option.value === value)) return
@@ -910,7 +1155,194 @@ function handleMotionControlFileChange(e: Event, type: 'image' | 'video') {
   }
 }
 
+// ---- 编辑视频（Seedance 2.0）相关：固定 1 视频 + 1 图片 ----
+
+function handleEditFileChange(e: Event, type: 'image' | 'video') {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+
+  const isExpectedType = type === 'image' ? file.type.startsWith('image/') : file.type.startsWith('video/')
+  if (!isExpectedType) {
+    showErrorMessage(type === 'image' ? '请上传图片文件' : '请上传视频文件')
+    target.value = ''
+    return
+  }
+
+  removeEditFile(type)
+  const uploaded = createUploadedFile(file, type)
+  // 与多模态参考保持一致的 purpose / refLabel，交由 buildParams 分类为 reference_image / reference_video
+  uploaded.purpose = type === 'image' ? 'multimodal-image' : 'multimodal-video'
+  uploaded.refLabel = type === 'image' ? '图片1' : '视频1'
+  if (type === 'image') {
+    editImageFile.value = uploaded
+  } else {
+    editVideoFile.value = uploaded
+  }
+  target.value = ''
+}
+
+function removeEditFile(type: 'image' | 'video', options: { revoke?: boolean } = {}) {
+  if (type === 'image') {
+    if (options.revoke !== false) releaseUploadedFile(editImageFile.value)
+    editImageFile.value = null
+    if (editImageInput.value) editImageInput.value.value = ''
+    return
+  }
+  if (options.revoke !== false) releaseUploadedFile(editVideoFile.value)
+  editVideoFile.value = null
+  if (editVideoInput.value) editVideoInput.value.value = ''
+}
+
+function clearEditFiles(options: { revoke?: boolean } = {}) {
+  removeEditFile('image', options)
+  removeEditFile('video', options)
+}
+
+// ---- 多模态参考（Seedance 2.0）相关 ----
+
+
+function multimodalRefFromType(type: 'image' | 'video' | 'audio') {
+  return type === 'image' ? multimodalImages : type === 'video' ? multimodalVideos : multimodalAudios
+}
+
+function multimodalLabelPrefix(type: 'image' | 'video' | 'audio') {
+  return type === 'image' ? '图片' : type === 'video' ? '视频' : '音频'
+}
+
+/** 重新编号某一类素材的 refLabel（图片1、图片2……）。 */
+function relabelMultimodal(type: 'image' | 'video' | 'audio') {
+  const list = multimodalRefFromType(type).value
+  const prefix = multimodalLabelPrefix(type)
+  list.forEach((item, index) => {
+    item.refLabel = `${prefix}${index + 1}`
+  })
+}
+
+function handleMultimodalFileChange(e: Event, type: 'image' | 'video' | 'audio') {
+  const target = e.target as HTMLInputElement
+  const files = Array.from(target.files || [])
+  if (!files.length) return
+
+  const listRef = multimodalRefFromType(type)
+  const limit = MULTIMODAL_LIMITS[type]
+  const acceptPrefix = type === 'image' ? 'image/' : type === 'video' ? 'video/' : 'audio/'
+
+  for (const file of files) {
+    if (listRef.value.length >= limit) {
+      showErrorMessage(`${multimodalLabelPrefix(type)}最多上传 ${limit} 个。`)
+      break
+    }
+    if (!file.type.startsWith(acceptPrefix)) {
+      showErrorMessage(`请上传正确的${multimodalLabelPrefix(type)}文件。`)
+      continue
+    }
+    const uploaded = createUploadedFile(file, type)
+    uploaded.purpose = type === 'image' ? 'multimodal-image' : type === 'video' ? 'multimodal-video' : 'multimodal-audio'
+    listRef.value.push(uploaded)
+  }
+  relabelMultimodal(type)
+  target.value = ''
+}
+
+function removeMultimodalAsset(type: 'image' | 'video' | 'audio', item: UploadedFile) {
+  const listRef = multimodalRefFromType(type)
+  const index = listRef.value.findIndex((entry) => entry.url === item.url)
+  if (index < 0) return
+  releaseUploadedFile(listRef.value[index])
+  listRef.value.splice(index, 1)
+  relabelMultimodal(type)
+}
+
+function clearMultimodalAssets(options: { revoke?: boolean } = {}) {
+  const revoke = options.revoke !== false
+  for (const listRef of [multimodalImages, multimodalVideos, multimodalAudios]) {
+    if (revoke) listRef.value.forEach((item) => releaseUploadedFile(item))
+    listRef.value = []
+  }
+}
+
+/**
+ * 输入框键盘处理：
+ * - 当 @ 引用菜单打开时：↑/↓ 切换高亮项，Enter/Tab 选中当前项，Esc 关闭菜单；
+ * - 菜单关闭时：Enter 仅作为普通换行（不再触发发送）。
+ */
+function handleComposerKeydown(event: KeyboardEvent) {
+  if (event.isComposing) return
+  if (!showMentionMenu.value || !mentionableAssets.value.length) return
+
+  const total = mentionableAssets.value.length
+  switch (event.key) {
+    case 'ArrowDown':
+      event.preventDefault()
+      activeMentionIndex.value = (activeMentionIndex.value + 1) % total
+      break
+    case 'ArrowUp':
+      event.preventDefault()
+      activeMentionIndex.value = (activeMentionIndex.value - 1 + total) % total
+      break
+    case 'Enter':
+    case 'Tab': {
+      event.preventDefault()
+      const item = mentionableAssets.value[activeMentionIndex.value]
+      if (item) insertMentionReference(item)
+      break
+    }
+    case 'Escape':
+      event.preventDefault()
+      showMentionMenu.value = false
+      mentionAtIndex.value = -1
+      break
+    default:
+      break
+  }
+}
+
+/** 在光标处插入 @素材标签 引用。 */
+function insertMentionReference(item: UploadedFile) {
+  const label = item.refLabel || item.name
+  const textarea = promptInputRef.value
+  const insertText = `@${label} `
+  if (!textarea) {
+    inputText.value += insertText
+  } else {
+    const start = mentionAtIndex.value >= 0 ? mentionAtIndex.value : textarea.selectionStart
+    const end = textarea.selectionStart
+    const before = inputText.value.slice(0, start)
+    const after = inputText.value.slice(end)
+    inputText.value = `${before}${insertText}${after}`
+  }
+  showMentionMenu.value = false
+  mentionAtIndex.value = -1
+  nextTick(() => promptInputRef.value?.focus())
+}
+
+/** 监听输入，检测末尾的 @ 以触发引用菜单。 */
+function handlePromptInput() {
+  if (!isSeedanceMentionMode.value || !mentionableAssets.value.length) {
+    showMentionMenu.value = false
+    return
+  }
+
+  const textarea = promptInputRef.value
+  const caret = textarea ? textarea.selectionStart : inputText.value.length
+  const textBefore = inputText.value.slice(0, caret)
+  const atIndex = textBefore.lastIndexOf('@')
+  if (atIndex >= 0 && !/\s/.test(textBefore.slice(atIndex + 1))) {
+    mentionAtIndex.value = atIndex
+    // 菜单（重新）打开时，若高亮索引越界则复位到第一项
+    if (!showMentionMenu.value || activeMentionIndex.value >= mentionableAssets.value.length) {
+      activeMentionIndex.value = 0
+    }
+    showMentionMenu.value = true
+  } else {
+    showMentionMenu.value = false
+    mentionAtIndex.value = -1
+  }
+}
+
 async function handlePolishPrompt() {
+
   const prompt = inputText.value.trim()
   try {
     validatePromptOrThrow(prompt)
@@ -980,7 +1412,12 @@ onBeforeUnmount(() => {
   releaseUploadedFile(viduEndFrame.value)
   releaseUploadedFile(motionControlImage.value)
   releaseUploadedFile(motionControlVideo.value)
+  releaseUploadedFile(editVideoFile.value)
+  releaseUploadedFile(editImageFile.value)
+  clearMultimodalAssets()
 })
+
+
 
 watch(
   () => settingsStore.selectedModel,
@@ -989,17 +1426,20 @@ watch(
     if (!supportsImageReferenceMode.value) {
       imageMode.value = 'text2image'
     }
-    const usesModeSwitcher = settingsStore.mediaType === 'video' && ['viduq3-fast', 'minimax-hailuo', 'kling-v26', 'kling-v3', 'kling-omni'].includes(capability?.videoRequestMode || '')
+    const usesModeSwitcher = settingsStore.mediaType === 'video' && ['viduq3-fast', 'minimax-hailuo', 'kling-v26', 'kling-v3', 'kling-omni', 'seedance-2'].includes(capability?.videoRequestMode || '')
     if (!usesModeSwitcher) {
       videoMode.value = 'text2video'
       removeViduFrames()
       removeMotionControlFiles()
+      clearMultimodalAssets()
     }
     if (!activeVideoModeOptions.value.some((option) => option.value === videoMode.value)) {
       videoMode.value = 'text2video'
       removeViduFrames()
       removeMotionControlFiles()
+      clearMultimodalAssets()
     }
+
     if (uploadedFile.value?.type === 'image' && !capability?.localUploadInputs?.includes('image')) {
       removeUploadedFile()
     }
@@ -1058,6 +1498,9 @@ async function handleSend() {
           ]
       : videoMode.value === 'startEnd2video' && viduStartFrame.value && viduEndFrame.value
         ? [viduStartFrame.value, viduEndFrame.value]
+        : videoMode.value === 'multimodalReference2video' || videoMode.value === 'editVideo'
+          ? (mentionableAssets.value.length ? [...mentionableAssets.value] : null)
+
         : videoMode.value === 'subjectReference2video'
           ? (uploadedFile.value ? { ...uploadedFile.value, name: 'Subject Reference' } : null) ||
             (referenceUrl.value.trim()
@@ -1070,6 +1513,7 @@ async function handleSend() {
               : null)
           : null
     : uploadedFile.value ||
+
       (referenceUrl.value.trim()
         ? {
             name: 'Reference URL',
@@ -1082,8 +1526,11 @@ async function handleSend() {
   removeUploadedFile({ revoke: false })
   removeViduFrames({ revoke: false })
   removeMotionControlFiles({ revoke: false })
+  clearMultimodalAssets({ revoke: false })
+  showMentionMenu.value = false
   referenceUrl.value = ''
   const primaryFile = Array.isArray(file) ? file[0] : file
+
   const ioType = resolveGenerateIoType(settingsStore.mediaType, primaryFile)
 
   await nextTick()
@@ -1874,9 +2321,203 @@ async function handleRegenerate(message: Message) {
   justify-content: flex-start;
 }
 
+.multimodal-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.multimodal-note {
+  margin: 0;
+  padding: 0 2px;
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(15, 23, 42, 0.9);
+}
+
+.multimodal-note small {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(71, 85, 105, 0.72);
+}
+
+.multimodal-note b {
+  color: rgba(95, 75, 139, 0.95);
+}
+
+.multimodal-groups {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.multimodal-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.86);
+}
+
+.multimodal-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.multimodal-group-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(51, 65, 85, 0.9);
+}
+
+.multimodal-group-count {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(71, 85, 105, 0.66);
+}
+
+.multimodal-thumb-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.multimodal-thumb {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.multimodal-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.multimodal-thumb-file {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.multimodal-file-icon {
+  font-size: 20px;
+}
+
+.multimodal-thumb-tag {
+  position: absolute;
+  left: 2px;
+  bottom: 2px;
+  padding: 0 4px;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 800;
+  color: #fff;
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.multimodal-thumb-remove {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  color: #fff;
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.multimodal-add-btn {
+  width: 52px;
+  height: 52px;
+  border: 1px dashed rgba(95, 75, 139, 0.5);
+  border-radius: 12px;
+  background: rgba(95, 75, 139, 0.06);
+  color: rgba(95, 75, 139, 0.9);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.multimodal-add-btn:hover {
+  background: rgba(95, 75, 139, 0.12);
+}
+
+/* @ 引用菜单 */
+.mention-menu {
+  position: absolute;
+  left: 8px;
+  bottom: calc(100% + 6px);
+  z-index: 40;
+  max-height: 220px;
+  min-width: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.84);
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
+}
+
+.mention-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.mention-item:hover,
+.mention-item.active {
+  background: rgba(95, 75, 139, 0.14);
+}
+
+.mention-item-tag {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, #5f4b8b, #c86b4a);
+}
+
+.mention-item-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: rgba(15, 23, 42, 0.86);
+}
+
 .file-input {
   display: none;
 }
+
 
 .upload-icon-btn,
 .icon-btn,
@@ -1947,14 +2588,67 @@ async function handleRegenerate(message: Message) {
   width: 100%;
   min-height: 52px;
   max-height: 152px;
-  resize: vertical;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 6px 8px;
   border: 0;
+  resize: vertical;
   background: transparent;
   outline: none;
   font: inherit;
-  color: inherit;
-  padding: 6px 8px;
   line-height: 1.45;
+  color: rgba(15, 23, 42, 0.92);
+}
+
+/* 输入框上方「已引用素材」彩色标签行：用不同渐变色区分图片/视频/音频 */
+.referenced-mentions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+}
+
+.referenced-mentions-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(71, 85, 105, 0.8);
+}
+
+.referenced-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.16);
+}
+
+.referenced-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.28);
+}
+
+/* 图片：紫色系 */
+.referenced-chip-image {
+  background: linear-gradient(135deg, #5f4b8b, #8b6cd6);
+}
+
+/* 视频：橙红色系 */
+.referenced-chip-video {
+  background: linear-gradient(135deg, #c86b4a, #e4805a);
+}
+
+/* 音频：青绿色系 */
+.referenced-chip-audio {
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
 }
 
 .composer-actions {

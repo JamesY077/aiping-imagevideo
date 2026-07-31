@@ -201,10 +201,54 @@ export async function buildVideoParams(
       delete videoParams.payload
       delete videoParams.extra_body
       break
+    case 'seedance-2': {
+      // Seedance 2.0 走「素材 + contents/generations/tasks」接口。
+      // 多模态参考模式下，前端会用 purpose（multimodal-image/-video/-audio）标记素材，
+      // 这里按类别分别放入 reference_images / reference_videos / reference_audios，
+      // 交由 seedance provider / aiping.ts 处理成素材（asset://）并组装 content 数组。
+      // 图生视频等模式上传的普通图片（无 purpose）默认归为参考图。
+      const referenceImages: string[] = []
+      const referenceVideos: string[] = []
+      const referenceAudios: string[] = []
+      uploadedFiles.forEach((file, index) => {
+        const value = uploadValues[index]
+        if (!value) return
+        if (file.purpose === 'multimodal-video' || (!file.purpose && file.type === 'video')) {
+          referenceVideos.push(value)
+        } else if (file.purpose === 'multimodal-audio' || (!file.purpose && file.type === 'audio')) {
+          referenceAudios.push(value)
+        } else {
+          referenceImages.push(value)
+        }
+      })
+      if (referenceImages.length) videoParams.reference_images = referenceImages
+      if (referenceVideos.length) videoParams.reference_videos = referenceVideos
+      if (referenceAudios.length) videoParams.reference_audios = referenceAudios
+
+      videoParams.duration = duration || 5
+      videoParams.audio = true
+      videoParams.watermark = false
+      deleteVideoRatio(videoParams)
+      videoParams.aspect_ratio = aspectRatio || '16:9'
+      delete videoParams.image
+      delete videoParams.img_url
+      delete videoParams.images
+      delete videoParams.first_frame_url
+      delete videoParams.last_frame_url
+      delete videoParams.resolution
+      delete videoParams.movement_amplitude
+      delete videoParams.off_peak
+      delete videoParams.seed
+      delete videoParams.style
+      delete videoParams.payload
+      delete videoParams.extra_body
+      break
+    }
     default:
       if (uploadValue) videoParams.img_url = uploadValue
       break
   }
+
 
   return videoParams
 }

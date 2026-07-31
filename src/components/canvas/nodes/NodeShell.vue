@@ -107,17 +107,42 @@
 
     <!-- 展开后的编辑区：输入框 + 操作 -->
     <template v-if="expanded">
-      <textarea
-        ref="promptRef"
-        class="gen-input nodrag"
-        :value="data.prompt"
-        :placeholder="placeholder"
-        rows="3"
-        @input="onPromptInput"
-        @mousedown.stop
-        @dblclick.stop
-        @wheel.stop
-      />
+      <div class="gen-input-wrap">
+        <textarea
+          ref="promptRef"
+          class="gen-input nodrag"
+          :value="data.prompt"
+          :placeholder="placeholder"
+          rows="3"
+          @input="onPromptInput"
+          @keyup="detectMention"
+          @click="detectMention"
+          @keydown="onPromptKeydown"
+          @blur="onPromptBlur"
+          @mousedown.stop
+          @dblclick.stop
+          @wheel.stop
+        />
+
+        <!-- @ 提及菜单：在输入框中键入 @ 时弹出可选素材（如多模态参考的图片/视频/音频） -->
+        <div
+          v-if="mentionOpen && filteredMentions.length"
+          class="gen-mention nodrag"
+          @mousedown.prevent.stop
+          @wheel.stop
+        >
+          <button
+            v-for="(m, mi) in filteredMentions"
+            :key="m"
+            class="gen-mention-item"
+            :class="{ 'gen-mention-item--active': mi === mentionActive }"
+            @click="applyMention(m)"
+          >
+            @{{ m }}
+          </button>
+        </div>
+      </div>
+
 
       <div class="gen-toolbar nodrag" @mousedown.stop>
         <!-- 各节点差异化控件（模型、比例、上传等）由具体节点通过插槽注入 -->
@@ -128,7 +153,11 @@
           {{ data.status === 'running' ? '生成中' : data.status === 'completed' ? '重新运行' : '运行' }}
         </button>
       </div>
+
+      <!-- 工具栏下方的扩展区（如视频节点的多模态素材缩略图） -->
+      <slot name="below" />
     </template>
+
 
     <Handle class="gen-handle" type="source" :position="Position.Right" />
   </div>
@@ -209,8 +238,127 @@ watch(
 function onPromptInput(e: Event) {
   store.updateNodeData(props.id, { prompt: (e.target as HTMLTextAreaElement).value })
   autoResize()
+  detectMention()
 }
+
+// ------ @ 提及：在提示词输入框中键入 @ 时，弹出可选的多模态参考素材 ------
+// 可供 @ 引用的素材标签（如 图片1 / 视频1 / 音频1），由当前节点已上传的多模态素材派生。
+const mentionCandidates = computed<string[]>(() => {
+  const labels: string[] = []
+  const imgs = props.data.multimodalImages || []
+  const vids = props.data.multimodalVideos || []
+  const auds = props.data.multimodalAudios || []
+  imgs.forEach((_, i) => labels.push(`图片${i + 1}`))
+  vids.forEach((_, i) => labels.push(`视频${i + 1}`))
+  auds.forEach((_, i) => labels.push(`音频${i + 1}`))
+  return labels
+})
+
+const mentionOpen = ref(false)
+const mentionQuery = ref('')
+const mentionActive = ref(0)
+// @ 所在的位置（用于替换时定位）。
+const mentionStart = ref(-1)
+
+// 根据 @ 后的查询词过滤候选。
+const filteredMentions = computed(() => {
+  const q = mentionQuery.value
+  if (!q) return mentionCandidates.value
+  return mentionCandidates.value.filter((m) => m.includes(q))
+})
+
+// 检测光标前是否处于「@xxx」输入态，若是则打开菜单并解析查询词。
+function detectMention() {
+  const el = promptRef.value
+  if (!el || !mentionCandidates.value.length) {
+    mentionOpen.value = false
+    return
+  }
+  const pos = el.selectionStart ?? 0
+  const text = el.value.slice(0, pos)
+  const at = text.lastIndexOf('@')
+  if (at === -1) {
+    mentionOpen.value = false
+    return
+  }
+  // @ 与光标之间不能包含空白/换行，否则视为已结束的引用。
+  const between = text.slice(at + 1)
+  if (/\s/.test(between)) {
+    mentionOpen.value = false
+    return
+  }
+  mentionStart.value = at
+  mentionQuery.value = between
+  mentionActive.value = 0
+  mentionOpen.value = true
+}
+
+// 选中某个候选：把从 @ 到光标处的文本替换为「@标签 」。
+function applyMention(label: string) {
+  const el = promptRef.value
+  if (!el || mentionStart.value < 0) {
+    mentionOpen.value = false
+    return
+  }
+  const pos = el.selectionStart ?? el.value.length
+  const before = el.value.slice(0, mentionStart.value)
+  const after = el.value.slice(pos)
+  const next = `${before}@${label} ${after}`
+  store.updateNodeData(props.id, { prompt: next })
+  mentionOpen.value = false
+  nextTick(() => {
+    const caret = (before + '@' + label + ' ').length
+    el.focus()
+    el.setSelectionRange(caret, caret)
+    autoResize()
+  })
+}
+
+// 键盘导航：菜单打开时支持上下选择 / 回车确认 / Esc 关闭。
+function onPromptKeydown(e: KeyboardEvent) {
+  if (!mentionOpen.value || !filteredMentions.value.length) return
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    mentionActive.value = (mentionActive.value + 1) % filteredMentions.value.length
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    mentionActive.value =
+      (mentionActive.value - 1 + filteredMentions.value.length) % filteredMentions.value.length
+  } else if (e.key === 'Enter' || e.key === 'Tab') {
+    e.preventDefault()
+    applyMention(filteredMentions.value[mentionActive.value])
+  } else if (e.key === 'Escape') {
+    mentionOpen.value = false
+  }
+}
+
+// 失焦时延迟关闭，避免点击菜单项前就被收起。
+function onPromptBlur() {
+  setTimeout(() => {
+    mentionOpen.value = false
+  }, 150)
+}
+
+// 供外部（具体节点）主动触发插入 @ 引用，例如点击素材缩略图。
+defineExpose({
+  insertMention(label: string) {
+    const el = promptRef.value
+    const current = props.data.prompt || ''
+    const next =
+      current && !current.endsWith(' ') ? `${current} @${label} ` : `${current}@${label} `
+    store.updateNodeData(props.id, { prompt: next })
+    nextTick(() => {
+      if (el) {
+        el.focus()
+        const caret = next.length
+        el.setSelectionRange(caret, caret)
+      }
+      autoResize()
+    })
+  },
+})
 </script>
+
 
 <!-- 共享样式（非 scoped）：外壳与各节点插槽内容共用同一套 gen-* 类名 -->
 <style src="./generationNode.css"></style>

@@ -14,12 +14,23 @@ export async function pollVideoStatus(
     if (typeof status.progress === 'number' && onProgress) {
       onProgress(status.progress)
     }
-    if (normalizedStatus === 'completed' || normalizedStatus === 'succeed' || normalizedStatus === 'success') {
+    if (
+      normalizedStatus === 'completed' ||
+      normalizedStatus === 'succeed' ||
+      normalizedStatus === 'success' ||
+      normalizedStatus === 'succeeded'
+    ) {
       return status
     }
-    if (normalizedStatus === 'failed' || normalizedStatus === 'error') {
+    if (
+      normalizedStatus === 'failed' ||
+      normalizedStatus === 'error' ||
+      normalizedStatus === 'expired' ||
+      normalizedStatus === 'cancelled'
+    ) {
       throw new Error(status.error || `视频生成失败 (task: ${taskId})`)
     }
+
     await new Promise((resolve) => setTimeout(resolve, interval))
   }
   throw new Error('视频生成超时')

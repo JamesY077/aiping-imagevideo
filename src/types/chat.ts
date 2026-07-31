@@ -43,16 +43,27 @@ export interface MotionControlOptions {
   character_orientation: 'image' | 'video'
 }
 
+export type UploadedFilePurpose =
+  | 'subject-reference'
+  | 'motion-control-image'
+  | 'motion-control-video'
+  | 'multimodal-image'
+  | 'multimodal-video'
+  | 'multimodal-audio'
+
 export interface UploadedFile {
   name: string
-  type: 'image' | 'video'
+  type: 'image' | 'video' | 'audio'
   url: string
   size: number
   file?: File
-  purpose?: 'subject-reference' | 'motion-control-image' | 'motion-control-video'
+  purpose?: UploadedFilePurpose
+  /** 多模态参考模式下用于 @ 引用的稳定标识（如 图片1 / 视频1 / 音频1）。 */
+  refLabel?: string
   motionControlOptions?: MotionControlOptions
   dimensions?: {
     width: number
     height: number
   }
 }
+

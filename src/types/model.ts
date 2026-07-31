@@ -22,7 +22,8 @@ export interface ModelCapability {
   requiresReference?: boolean
   availabilityNote?: 'supports-image-upload' | 'supports-video-upload' | 'supports-image-video-upload' | 'requires-image-upload' | 'requires-video-upload'
   imageRequestMode?: 'default' | 'seedream-5-lite'
-  videoRequestMode?: 'kling-v26' | 'kling-v3' | 'kling-omni' | 'kling-o1' | 'viduq3-fast' | 'minimax-hailuo'
+  videoRequestMode?: 'kling-v26' | 'kling-v3' | 'kling-omni' | 'kling-o1' | 'viduq3-fast' | 'minimax-hailuo' | 'seedance-2'
+
 }
 
 export interface BuiltInModelDescriptor {
@@ -48,6 +49,10 @@ export type VideoGenerationMode =
   | 'startEnd2video'
   | 'subjectReference2video'
   | 'motionControl2video'
+  | 'multimodalReference2video'
+  | 'editVideo'
+
+
 
 export interface VideoModeOption {
   value: VideoGenerationMode
@@ -150,6 +155,9 @@ export function getLocalUploadAccept(modelId: string | null | undefined): string
 
 export function getSupportedAspectRatios(modelId: string | null | undefined): string[] | null {
   const mode = getModelCapability(modelId)?.videoRequestMode
+  if (mode === 'seedance-2') {
+    return ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']
+  }
   if (mode === 'viduq3-fast' || mode === 'minimax-hailuo') {
     return ['16:9', '9:16', '1:1', '4:3']
   }
@@ -159,10 +167,16 @@ export function getSupportedAspectRatios(modelId: string | null | undefined): st
   return null
 }
 
+
 export function getSupportedVideoDurations(modelId: string | null | undefined): VideoDurationOption[] | null {
   const mode = getModelCapability(modelId)?.videoRequestMode
 
   switch (mode) {
+    case 'seedance-2':
+      return [
+        { value: 5, label: '5s' },
+        { value: 8, label: '8s' },
+      ]
     case 'kling-v26':
     case 'kling-v3':
     case 'kling-omni':
@@ -171,6 +185,7 @@ export function getSupportedVideoDurations(modelId: string | null | undefined): 
         { value: 5, label: '5s' },
         { value: 10, label: '10s' },
       ]
+
     case 'viduq3-fast':
     case 'minimax-hailuo':
       return [
@@ -193,7 +208,11 @@ const VIDEO_MODE_LABELS: Record<VideoGenerationMode, string> = {
   startEnd2video: '首尾帧生视频',
   subjectReference2video: '主体参考视频',
   motionControl2video: '动作控制',
+  multimodalReference2video: '多模态参考',
+  editVideo: '编辑视频',
 }
+
+
 
 function buildVideoModeOptions(modes: VideoGenerationMode[]): VideoModeOption[] {
   return modes.map((value) => ({ value, label: VIDEO_MODE_LABELS[value] }))
@@ -223,7 +242,15 @@ export function getSupportedVideoModes(modelId: string | null | undefined): Vide
     case 'kling-v26':
     case 'kling-v3':
       return buildVideoModeOptions(['text2video', 'image2video', 'motionControl2video'])
+    case 'seedance-2':
+      return buildVideoModeOptions([
+        'text2video',
+        'image2video',
+        'multimodalReference2video',
+        'editVideo',
+      ])
     default:
+
       return buildVideoModeOptions(['text2video', 'image2video'])
   }
 }
@@ -232,3 +259,19 @@ export function getSupportedVideoModes(modelId: string | null | undefined): Vide
 export function getModelsByMediaType(mediaType: MediaType, ids: string[]): string[] {
   return ids.filter((id) => !isHiddenModelAlias(id) && MODEL_CAPABILITIES[id]?.mediaType === mediaType)
 }
+
+/** seedance2.0 系列分组名称（三款 Doubao-Seedance-2.0 模型同属该组）。 */
+export const SEEDANCE_2_GROUP_LABEL = 'seedance2.0 系列'
+
+/**
+ * 白名单提示文案：seedance2.0 系列仅支持 AI Ping 白名单用户调用。
+ * 用户在简易模式 / 无限画布中选中该系列模型时弹窗提示。
+ */
+export const SEEDANCE_2_WHITELIST_NOTICE =
+  '该系列模型仅支持 AI Ping 白名单用户使用，若您已经是白名单用户则可以正常完成调用，反之则无法正常调用。尽请谅解。'
+
+/** 判断某个模型是否属于 seedance2.0 系列（基于 videoRequestMode）。 */
+export function isSeedance2Model(modelId: string | null | undefined): boolean {
+  return getModelCapability(modelId)?.videoRequestMode === 'seedance-2'
+}
+
