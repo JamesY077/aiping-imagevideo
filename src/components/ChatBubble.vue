@@ -137,7 +137,9 @@ const previewFiles = computed(() => props.message.uploadedFiles?.length ? props.
   line-height: 1.5;
   color: var(--color-text);
   word-break: break-word;
+  white-space: pre-wrap;
 }
+
 
 .message.user .content p,
 .message.user .time {

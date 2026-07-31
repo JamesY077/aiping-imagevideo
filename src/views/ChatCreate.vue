@@ -8,28 +8,36 @@
           </div>
         </div>
 
+        <div class="mode-intro-card">
+          <span class="mode-intro-badge">简易模式</span>
+          <p class="mode-intro-desc">
+            当前处于「简易模式」：通过对话即可快速生成图像与视频，适合灵感速写与单张创作。想要多画面协作、串联创作流程，可切换到下方的「无限画布」。
+          </p>
+        </div>
+
 
         <div class="sidebar-footer">
-          <button class="sidebar-secondary-btn canvas-entry-btn" type="button" @click="router.push('/canvas')">
-            无限画布
+          <button class="canvas-entry-btn" type="button" @click="router.push('/canvas')">
+            <span class="canvas-entry-text">无限画布</span>
+            <span class="canvas-entry-new" aria-label="全新功能">NEW</span>
           </button>
+
           <button class="sidebar-secondary-btn" type="button" @click="router.push('/settings')">
             设置
           </button>
-          <button class="sidebar-danger-btn" type="button" @click="handleClearConversation">
-            清空当前对话
-          </button>
         </div>
+
       </aside>
 
       <main class="workspace-main">
         <section class="chat-stage">
           <div class="chat-area" ref="chatAreaRef">
             <div v-if="activeMessages.length === 0" class="empty-state">
-              <p class="empty-kicker">Start with an idea</p>
+              <p class="empty-kicker">简易模式 · Start with an idea</p>
               <h1>把灵感写成一句清晰的创作指令。</h1>
-              <p class="empty-copy">你可以先描述主体、氛围、镜头语言，再根据结果继续迭代。</p>
+              <p class="empty-copy">这里是「简易模式」——用一句话描述主体、氛围、镜头语言，即可快速生成图像或视频。想要多画面并行、串联复杂创作流程？点击左侧「无限画布」体验全新玩法。</p>
             </div>
+
 
             <ChatBubble
               v-for="msg in activeMessages"
@@ -591,9 +599,22 @@ const canSend = computed(() => {
 function buildSessionWelcomeMessage(): Omit<Message, 'id' | 'timestamp'> {
   return {
     type: 'system',
-    content: '欢迎来到 ArtRealm AI。当前已切换为单会话模式。选择模式，输入创作描述，开始生成；如需 AI 润色，请先前往设置完成模型配置。',
+    content: [
+      '👋 欢迎来到 ArtRealm AI「简易模式」！这里专为快速出图、灵感速写而设计，一句话即可生成图像或视频。',
+      '',
+      '🖼️ 图像生成：支持「文生图」与「图生图」两种方式，快速把创意变成画面。',
+      '🎬 视频生成：覆盖文生视频、图生视频、首尾帧生视频、主体参考视频与动作控制等多种玩法。',
+      '📐 参数可调：可自由选择画面比例、视频时长，快速匹配不同创作场景。',
+      '✨ AI 润色：一键把简短描述扩写成更专业的提示词（需先在「设置」中配置润色模型）。',
+      '🧩 无限画布（NEW）：想要多画面并行、串联复杂创作流程？点击左侧「无限画布」体验节点式创作。',
+      '',
+      '💡 上手很简单：选择创作类型与模型 → 写下你的创意描述 → 点击发送即可开始生成。',
+    ].join('\n'),
+
+
   }
 }
+
 
 function ensureWelcomeMessage() {
   if (chatStore.messages.length > 0) return
@@ -945,17 +966,8 @@ function scrollChatToBottom() {
   chatAreaRef.value?.scrollTo({ top: chatAreaRef.value.scrollHeight, behavior: 'smooth' })
 }
 
-function handleClearConversation() {
-  removeUploadedFile({ revoke: false })
-  removeViduFrames({ revoke: false })
-  removeMotionControlFiles({ revoke: false })
-  referenceUrl.value = ''
-  inputText.value = ''
-  chatStore.clearMessages()
-  ensureWelcomeMessage()
-}
-
 onMounted(() => {
+
   settingsStore.loadFromStorage()
   ensureSupportedAspectRatio()
   ensureSupportedVideoDuration()
@@ -1200,6 +1212,82 @@ async function handleRegenerate(message: Message) {
 .single-session-card-head {
   margin-bottom: 10px;
 }
+
+/* 简易模式说明卡片 */
+.mode-intro-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 12px 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.86), rgba(246, 244, 239, 0.7));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.mode-intro-badge {
+  align-self: flex-start;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: linear-gradient(135deg, #171717 0%, #5f4b8b 55%, #c86b4a 100%);
+  box-shadow: 0 6px 16px rgba(95, 75, 139, 0.22);
+}
+
+.mode-intro-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.65;
+  color: rgba(71, 85, 105, 0.86);
+}
+
+/* 无限画布：黑色平面按钮 + NEW 标志 */
+.canvas-entry-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 16px;
+  cursor: pointer;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #f8fafc;
+  background: #171717;
+  transition: background var(--transition-base);
+}
+
+.canvas-entry-btn:hover {
+  background: #262233;
+}
+
+.canvas-entry-text {
+  position: relative;
+  z-index: 1;
+}
+
+.canvas-entry-new {
+  display: inline-flex;
+  align-items: center;
+  z-index: 2;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  color: #fff;
+  background: #ff5f6d;
+}
+
+
+
 
 .sidebar-secondary-btn,
 .sidebar-danger-btn,
