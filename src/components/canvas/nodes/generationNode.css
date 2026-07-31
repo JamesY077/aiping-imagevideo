@@ -1,0 +1,344 @@
+/**
+ * 生成型节点（文本 / 图片 / 扩图 / 视频）的共享样式。
+ *
+ * 说明：这些样式被 NodeShell.vue（外壳）与各具体节点组件（TextNode / ImageNode …）
+ * 共同使用。由于节点组件通过「具名插槽」把工具栏控件塞进 NodeShell 的 DOM 中，
+ * 插槽内容在「父组件（节点组件）」作用域下渲染，若使用 scoped 样式，外壳与插槽
+ * 内容的样式无法互相命中。因此这里统一放到一个「全局（非 scoped）」样式文件里，
+ * 类名均以 gen- 前缀命名，作用域隔离由命名约定保证。
+ */
+
+.gen-node {
+  width: 260px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #1c1c1e;
+  color: #f5f5f7;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  font-size: 13px;
+  cursor: pointer;
+  transition: width 0.2s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.gen-node--expanded {
+  width: 380px;
+  padding: 16px;
+  cursor: default;
+}
+.gen-node--selected {
+  box-shadow: 0 0 0 2px #0a84ff, 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+.gen-node--running {
+  border-color: #0a84ff;
+  box-shadow: 0 0 0 2px #0a84ff, 0 0 24px rgba(10, 132, 255, 0.6);
+}
+.gen-node--done {
+  border-color: rgba(48, 209, 88, 0.5);
+}
+.gen-node--failed {
+  border-color: #ff453a;
+}
+.gen-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.gen-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.gen-icon--text {
+  background: rgba(191, 90, 242, 0.2);
+  color: #bf5af2;
+}
+.gen-icon--image {
+  background: rgba(10, 132, 255, 0.2);
+  color: #0a84ff;
+}
+.gen-icon--video {
+  background: rgba(255, 159, 10, 0.2);
+  color: #ff9f0a;
+}
+.gen-icon--expand {
+  background: rgba(48, 209, 88, 0.2);
+  color: #30d158;
+}
+
+.gen-title {
+  font-weight: 600;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gen-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.gen-badge--idle {
+  background: rgba(255, 255, 255, 0.08);
+  color: #98989d;
+}
+.gen-badge--run {
+  background: rgba(10, 132, 255, 0.2);
+  color: #0a84ff;
+}
+.gen-badge--ok {
+  background: rgba(48, 209, 88, 0.2);
+  color: #30d158;
+}
+.gen-badge--err {
+  background: rgba(255, 69, 58, 0.2);
+  color: #ff453a;
+}
+.gen-gear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #98989d;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.gen-gear:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f5f5f7;
+}
+.gen-gear--active {
+  background: rgba(10, 132, 255, 0.2);
+  color: #0a84ff;
+}
+.gen-del {
+  border: none;
+  background: transparent;
+  color: #98989d;
+  cursor: pointer;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.gen-del:hover {
+  color: #ff453a;
+}
+.gen-settings {
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.gen-settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.gen-settings-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #f5f5f7;
+}
+.gen-settings-reset {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #98989d;
+  font-size: 11px;
+  cursor: pointer;
+}
+.gen-settings-reset:hover {
+  color: #f5f5f7;
+  border-color: rgba(255, 255, 255, 0.24);
+}
+.gen-settings-input {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.24);
+  color: #f5f5f7;
+  padding: 8px;
+  font-size: 12px;
+  font-family: inherit;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 96px;
+  max-height: 240px;
+  outline: none;
+  box-sizing: border-box;
+}
+.gen-settings-input:focus {
+  border-color: #0a84ff;
+}
+.gen-settings-input::placeholder {
+  color: #6b6b70;
+}
+.gen-settings-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #98989d;
+  line-height: 1.4;
+}
+
+.gen-preview {
+  margin-bottom: 8px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.gen-preview img,
+.gen-preview video {
+  width: 100%;
+  display: block;
+  border-radius: 10px;
+}
+.gen-result-text {
+  margin-bottom: 8px;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+.gen-result-text--clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-height: none;
+}
+.gen-collapsed-hint {
+  padding: 6px 2px;
+  font-size: 12px;
+  color: #98989d;
+}
+.gen-prompt-preview {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.5;
+}
+.gen-empty-hint {
+  font-style: italic;
+  opacity: 0.7;
+}
+.gen-error {
+  margin-bottom: 8px;
+  color: #ff453a;
+  font-size: 12px;
+}
+.gen-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.gen-progress-bar {
+  height: 100%;
+  background: #0a84ff;
+  transition: width 0.3s ease;
+}
+.gen-input {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #f5f5f7;
+  padding: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  /* 高度由 JS 自适应控制，禁用手动拖拽以免与自适应逻辑冲突导致布局错位 */
+  resize: none;
+  min-height: 60px;
+  outline: none;
+  box-sizing: border-box;
+  overflow-y: hidden;
+}
+
+.gen-input:focus {
+  border-color: #0a84ff;
+}
+.gen-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+}
+.gen-select {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f5f5f7;
+  font-size: 11px;
+  outline: none;
+}
+.gen-model {
+  flex: 1;
+  min-width: 100px;
+}
+.gen-chip {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f5f5f7;
+  font-size: 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.gen-chip--active {
+  background: rgba(10, 132, 255, 0.25);
+  border-color: #0a84ff;
+  color: #0a84ff;
+}
+.gen-upload {
+  cursor: pointer;
+}
+.gen-run {
+  margin-left: auto;
+  height: 28px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 8px;
+  background: #0a84ff;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.gen-run:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.gen-handle {
+  width: 10px;
+  height: 10px;
+  background: #0a84ff;
+  border: 2px solid #1c1c1e;
+}
+.gen-model .model-selector {
+  width: 100%;
+}

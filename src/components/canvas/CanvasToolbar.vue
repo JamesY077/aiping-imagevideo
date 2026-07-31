@@ -6,10 +6,18 @@
         添加节点 ▾
       </button>
       <div v-if="menuOpen" class="ct-menu" @click.stop>
-        <button type="button" class="ct-menu-item" @click="addGen('text')">文本节点</button>
-        <button type="button" class="ct-menu-item" @click="addGen('image')">图片节点</button>
-        <button type="button" class="ct-menu-item" @click="addGen('video')">视频节点</button>
+        <!-- 菜单项来源于节点注册表，新增节点无需改此处。 -->
+        <button
+          v-for="item in nodeMenu"
+          :key="item.kind"
+          type="button"
+          class="ct-menu-item"
+          @click="addGen(item.kind)"
+        >
+          {{ item.label }}
+        </button>
       </div>
+
     </div>
 
     <button
@@ -37,9 +45,14 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useCanvasStore, type CanvasNodeKind } from '@/stores/canvasStore'
+import { GENERATION_NODE_MENU } from '@/components/canvas/nodes'
 
 const canvasStore = useCanvasStore()
 const menuOpen = ref(false)
+
+// 可创建的节点菜单来源于节点注册表，新增节点无需改此处。
+const nodeMenu = GENERATION_NODE_MENU
+
 
 const emit = defineEmits<{ (e: 'add-node', kind: CanvasNodeKind): void }>()
 

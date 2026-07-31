@@ -22,10 +22,17 @@
       :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
       @click.stop
     >
-      <button type="button" class="canvas-create-item" @click="createNodeAt('text')">文本节点</button>
-      <button type="button" class="canvas-create-item" @click="createNodeAt('image')">图片节点</button>
-      <button type="button" class="canvas-create-item" @click="createNodeAt('video')">视频节点</button>
+      <button
+        v-for="item in nodeMenu"
+        :key="item.kind"
+        type="button"
+        class="canvas-create-item"
+        @click="createNodeAt(item.kind)"
+      >
+        {{ item.label }}
+      </button>
     </div>
+
 
     <div ref="canvasRootRef" class="canvas-root">
       <CanvasToolbar @add-node="handleAddNode" />
@@ -37,6 +44,8 @@
         :class="{ 'is-panning': isSpacePressed, 'is-grabbing': isGrabbing }"
         :nodes="canvasStore.nodes"
         :edges="canvasStore.edges"
+        :node-types="generationNodeTypes"
+
         :delete-key-code="null"
         :multi-selection-key-code="['Meta', 'Shift']"
         :selection-key-code="true"
@@ -120,28 +129,24 @@
 
 
 
+        <!-- 基础节点 / 分组节点通过具名插槽渲染；
+             生成型节点（文本/图片/扩图/视频…）统一由 :node-types 注册表动态渲染，
+             新增生成型节点无需在此登记。 -->
         <template #node-basicNode="nodeProps">
           <BasicNode v-bind="nodeProps" />
         </template>
         <template #node-groupNode="nodeProps">
           <GroupNode v-bind="nodeProps" />
         </template>
-        <template #node-textNode="nodeProps">
-          <GenerationNode v-bind="nodeProps" />
-        </template>
-        <template #node-imageNode="nodeProps">
-          <GenerationNode v-bind="nodeProps" />
-        </template>
-        <template #node-videoNode="nodeProps">
-          <GenerationNode v-bind="nodeProps" />
-        </template>
       </VueFlow>
+
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, markRaw, onBeforeUnmount, onMounted, ref } from 'vue'
+import type { Component } from 'vue'
 
 
 import { useRouter } from 'vue-router'
@@ -153,7 +158,20 @@ import { useCanvasStore, type CanvasNodeKind } from '@/stores/canvasStore'
 import CanvasToolbar from '@/components/canvas/CanvasToolbar.vue'
 import BasicNode from '@/components/canvas/BasicNode.vue'
 import GroupNode from '@/components/canvas/GroupNode.vue'
-import GenerationNode from '@/components/canvas/GenerationNode.vue'
+import {
+  GENERATION_NODE_COMPONENTS,
+  GENERATION_NODE_MENU,
+} from '@/components/canvas/nodes'
+
+// 双击创建 / 底部工具栏菜单项均来源于节点注册表，新增节点无需改此处。
+const nodeMenu = GENERATION_NODE_MENU
+
+// 生成型节点的 VueFlow type → 组件映射（markRaw 避免组件被响应式代理）。
+// 通过 :node-types 传给 VueFlow，新增节点只需在注册表登记即可自动渲染。
+const generationNodeTypes: Record<string, Component> = Object.fromEntries(
+  Object.entries(GENERATION_NODE_COMPONENTS).map(([type, comp]) => [type, markRaw(comp)]),
+)
+
 
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -637,35 +655,167 @@ onBeforeUnmount(() => {
 
 /* Group node */
 :deep(.group-node) {
+  position: relative;
   width: 100%;
   height: 100%;
   border-radius: 18px;
-  background: rgba(10, 132, 255, 0.06);
   border: 1px dashed rgba(10, 132, 255, 0.4);
+  background: rgba(10, 132, 255, 0.06);
 }
 
+
 :deep(.group-node--selected) {
-  border-color: var(--ac-accent);
+  border-style: solid;
 }
 
 :deep(.group-node-header) {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   padding: 8px 12px;
-  color: var(--ac-text-dim);
   font-size: 12px;
 }
 
-:deep(.group-node-ungroup) {
+:deep(.group-node-title) {
+  font-weight: 600;
+  cursor: text;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:deep(.group-node-input) {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  padding: 2px 6px;
+  color: var(--ac-text);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+}
+
+:deep(.group-node-actions) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+:deep(.group-node-btn) {
   border: none;
   border-radius: 8px;
-  padding: 2px 8px;
+  padding: 3px 9px;
   background: var(--ac-surface-hover);
   color: var(--ac-text);
   font-size: 11px;
+  line-height: 1.4;
   cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.12s ease;
 }
+
+:deep(.group-node-btn:hover) {
+  opacity: 0.88;
+}
+
+:deep(.group-node-btn:active) {
+  transform: scale(0.94);
+}
+
+:deep(.group-node-btn--run) {
+  color: #fff;
+  font-weight: 600;
+}
+
+:deep(.group-node-btn--run:disabled) {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+:deep(.group-node-color-wrap) {
+  position: relative;
+  display: flex;
+}
+
+:deep(.group-node-color-toggle) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+}
+
+:deep(.group-node-color-dot) {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+:deep(.group-node-color-menu) {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--ac-border);
+  background: rgba(28, 28, 30, 0.98);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+:deep(.group-node-color-item) {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+
+:deep(.group-node-color-item:hover) {
+  transform: scale(1.12);
+}
+
+:deep(.group-node-color-item.is-active) {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25);
+}
+
+/* 分组右下角调整大小手柄 */
+:deep(.group-node-resize) {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  z-index: 5;
+}
+
+:deep(.group-node-resize::after) {
+  content: '';
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid rgba(255, 255, 255, 0.5);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.5);
+  border-bottom-right-radius: 3px;
+}
+
+
 
 /* Controls — Apple-style floating vertical control (bottom-left) */
 .canvas-controls {

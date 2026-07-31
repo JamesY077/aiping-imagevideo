@@ -16,14 +16,24 @@ import { pollVideoStatus } from '@/features/generate/video'
 import { getModelCapability, getSupportedVideoModes } from '@/types/model'
 import type { VideoGenerationMode } from '@/types/model'
 
-import { buildTextExtraBody, DEFAULT_TEXT_MODEL_ID, getTextModelModule } from '@/models'
+import { buildTextExtraBody, getTextModelModule } from '@/models'
+import {
+  getNodeKindDef,
+  isGenerationNodeType,
+  type CanvasNodeKind,
+} from '@/components/canvas/nodes/nodeKinds'
+
+
 import {
   useSettingsStore,
   DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT,
   DEFAULT_TEXT_SYSTEM_PROMPT,
   DEFAULT_IMAGE_SYSTEM_PROMPT,
   DEFAULT_VIDEO_SYSTEM_PROMPT,
+  DEFAULT_EXPAND_SYSTEM_PROMPT,
+  EXPAND_IMAGE_INSTRUCTION,
 } from '@/stores/settingsStore'
+
 
 
 
@@ -31,14 +41,20 @@ import { normalizeErrorMessage } from '@/utils/errors'
 import type { ChatMessage, ChatMessageContentPart } from '@/types/api'
 import type { UploadedFile } from '@/types/chat'
 
-export type CanvasNodeKind = 'text' | 'image' | 'video'
+// CanvasNodeKind 现在统一在 @/components/canvas/nodes/nodeKinds 中定义，
+// 此处 re-export 以兼容既有从 canvasStore 引入该类型的调用方。
+export type { CanvasNodeKind }
 export type CanvasNodeRunStatus = 'idle' | 'running' | 'completed' | 'failed'
+
+
 
 export interface CanvasNodeData {
   label: string
   nodeKind?: CanvasNodeKind
   prompt?: string
   model?: string | null
+  // group：分组主题色（groupNode 专用），取值见 GROUP_COLORS
+  groupColor?: string
   // image
   imageMode?: 'text2image' | 'image2image'
   aspectRatio?: string
@@ -108,11 +124,25 @@ interface GraphSnapshot {
 
 const HISTORY_LIMIT = 100
 
-const NODE_KIND_LABEL: Record<CanvasNodeKind, string> = {
-  text: '文本节点',
-  image: '图片节点',
-  video: '视频节点',
+
+// 5 种可选分组主题色（用于边框 / 标题 / 背景着色）
+
+export interface GroupColorOption {
+  key: string
+  label: string
+  color: string
 }
+
+export const GROUP_COLORS: GroupColorOption[] = [
+  { key: 'blue', label: '蓝色', color: '#0a84ff' },
+  { key: 'purple', label: '紫色', color: '#bf5af2' },
+  { key: 'green', label: '绿色', color: '#30d158' },
+  { key: 'orange', label: '橙色', color: '#ff9f0a' },
+  { key: 'pink', label: '粉色', color: '#ff375f' },
+]
+
+export const DEFAULT_GROUP_COLOR = GROUP_COLORS[0].color
+
 
 function generateId(prefix: string): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -145,6 +175,9 @@ export const useCanvasStore = defineStore('canvas', () => {
   const runTotal = ref(0)
   const runDone = ref(0)
   const runningNodeId = ref<string | null>(null)
+  // 当前正在运行的分组 id（用于分组“运行”按钮显示 loading）
+  const runningGroupId = ref<string | null>(null)
+
 
   function commitHistory() {
     const snapshot = cloneGraph(nodes.value, edges.value)
@@ -226,42 +259,33 @@ export const useCanvasStore = defineStore('canvas', () => {
   }
 
 
-  // 创建生成型节点（文本/图片/视频）
+  // 创建生成型节点（文本/图片/扩图/视频）。
+  // 节点的标题、VueFlow type、默认 data 字段全部来自节点注册表（nodeKinds），
+  // 因此新增节点类型时无需修改本函数，只需在注册表中追加一条配置。
   function addGenerationNode(kind: CanvasNodeKind, position?: { x: number; y: number }) {
     commitHistory()
     const id = generateId('node')
+    const def = getNodeKindDef(kind)
     const data: CanvasNodeData = {
-      label: NODE_KIND_LABEL[kind],
+      label: def.label,
       nodeKind: kind,
       prompt: '',
       model: null,
       status: 'idle',
-    }
-    if (kind === 'text') {
-      data.model = DEFAULT_TEXT_MODEL_ID
-      // 文本节点默认开启 AI 润色；关闭后直接把用户输入透传给下游节点。
-      data.polish = true
-    } else if (kind === 'image') {
-
-      data.imageMode = 'text2image'
-      data.aspectRatio = '1:1'
-      data.polish = false
-    } else if (kind === 'video') {
-      data.videoMode = 'text2video'
-      data.aspectRatio = '16:9'
-      data.duration = 5
-      data.polish = false
+      // 该类型节点的默认字段（模型 / 模式 / 比例 / 时长 / 润色开关等）
+      ...def.createData(),
     }
 
     const node: CanvasNode = {
       id,
-      type: `${kind}Node`,
+      type: def.vueFlowType,
       position: position ?? {
         x: 160 + (nextNodeId.value % 6) * 48,
         y: 140 + (nextNodeId.value % 6) * 48,
       },
       data,
     }
+
     // 就地追加，避免替换整个数组导致 VueFlow 用旧 position 重置所有已存在节点。
     nodes.value.push(node)
     nextNodeId.value += 1
@@ -377,47 +401,89 @@ export const useCanvasStore = defineStore('canvas', () => {
 
     commitHistory()
     const padding = 32
+    // 顶部标题栏高度：为标题/按钮预留空间，避免子节点压住工具条
+    const headerHeight = 16
     const minX = Math.min(...selected.map((node) => node.position.x))
     const minY = Math.min(...selected.map((node) => node.position.y))
     const maxX = Math.max(
-      ...selected.map((node) => node.position.x + (node.dimensions?.width || 200)),
+      ...selected.map((node) => node.position.x + (node.dimensions?.width || 260)),
     )
     const maxY = Math.max(
-      ...selected.map((node) => node.position.y + (node.dimensions?.height || 80)),
+      ...selected.map((node) => node.position.y + (node.dimensions?.height || 120)),
     )
+
+    const groupWidth = Math.round(maxX - minX + padding * 2)
+    const groupHeight = Math.round(maxY - minY + padding * 2 + headerHeight)
+    const groupX = minX - padding
+    const groupY = minY - padding - headerHeight
 
     const groupId = `group-${nextGroupId.value}`
     const groupNode: CanvasNode = {
       id: groupId,
       type: 'groupNode',
-      position: { x: minX - padding, y: minY - padding },
-      data: { label: `分组 ${nextGroupId.value}` },
+      position: { x: groupX, y: groupY },
+      data: { label: `分组 ${nextGroupId.value}`, groupColor: DEFAULT_GROUP_COLOR },
+      // 同时提供 style 与 dimensions：VueFlow 计算子节点 extent='parent'
+      // 依赖父节点尺寸，缺失 dimensions 会导致子节点定位异常（Ctrl+G 位置错乱）。
       style: {
-        width: `${maxX - minX + padding * 2}px`,
-        height: `${maxY - minY + padding * 2}px`,
+        width: `${groupWidth}px`,
+        height: `${groupHeight}px`,
       },
+      dimensions: { width: groupWidth, height: groupHeight },
+      selected: false,
     }
 
     const selectedIds = new Set(selected.map((node) => node.id))
-    const reparented = nodes.value.map((node) => {
-      if (!selectedIds.has(node.id)) return node
-      return {
-        ...node,
-        parentNode: groupId,
-        extent: 'parent' as const,
-        selected: false,
-        position: {
-          x: node.position.x - (minX - padding),
-          y: node.position.y - (minY - padding),
-        },
+    // 就地更新选中节点的父子关系与相对坐标，保留节点对象引用，避免整体替换
+    // nodes 数组触发 VueFlow 重建导致的位置重置/闪跳。
+    nodes.value.forEach((node) => {
+      if (!selectedIds.has(node.id)) return
+      node.parentNode = groupId
+      node.extent = 'parent'
+      node.selected = false
+      node.position = {
+        x: node.position.x - groupX,
+        y: node.position.y - groupY,
       }
     })
 
-    nodes.value = [groupNode, ...reparented]
+    // VueFlow 要求父节点在数组中位于子节点之前，故插入到数组头部。
+    nodes.value.unshift(groupNode)
     nextGroupId.value += 1
   }
 
+
+  // 更新分组主题色
+  function updateGroupColor(groupId: string, color: string) {
+    const group = nodes.value.find(
+      (node) => node.id === groupId && node.type === 'groupNode',
+    )
+    if (!group) return
+    group.data.groupColor = color
+  }
+
+  // 更新分组尺寸（手动拖拽右下角调整大小）。就地更新 style，保留节点引用。
+  function updateGroupSize(groupId: string, width: number, height: number) {
+    const group = nodes.value.find(
+      (node) => node.id === groupId && node.type === 'groupNode',
+    )
+    if (!group) return
+    const w = Math.max(120, Math.round(width))
+    const h = Math.max(80, Math.round(height))
+    group.style = { ...(group.style || {}), width: `${w}px`, height: `${h}px` }
+    group.dimensions = { width: w, height: h }
+  }
+
+
+  // 取分组内的所有子节点 id（parentNode 指向该分组）
+  function getGroupChildIds(groupId: string): string[] {
+    return nodes.value
+      .filter((node) => node.parentNode === groupId)
+      .map((node) => node.id)
+  }
+
   function ungroup(groupId: string) {
+
     const group = nodes.value.find(
       (node) => node.id === groupId && node.type === 'groupNode',
     )
@@ -481,18 +547,24 @@ export const useCanvasStore = defineStore('canvas', () => {
   // ============ 生成引擎 ============
 
   const generationNodes = computed(() =>
-    nodes.value.filter((node) => ['textNode', 'imageNode', 'videoNode'].includes(node.type)),
+    nodes.value.filter((node) => isGenerationNodeType(node.type)),
   )
+
+
 
   const hasGenerationNodes = computed(() => generationNodes.value.length > 0)
 
   /**
    * 依据连线做拓扑排序，从左到右决定执行顺序。
    * 无连线的节点按 x 坐标从左到右排序。
+   * 可传入 subsetIds 仅对指定节点子集（如某个分组内的节点）排序。
    */
-  function resolveExecutionOrder(): string[] {
-    const genNodes = generationNodes.value
+  function resolveExecutionOrder(subsetIds?: Set<string>): string[] {
+    const genNodes = subsetIds
+      ? generationNodes.value.filter((node) => subsetIds.has(node.id))
+      : generationNodes.value
     const genIds = new Set(genNodes.map((node) => node.id))
+
 
     // 仅保留生成型节点之间的连线
     const relevantEdges = edges.value.filter(
@@ -791,7 +863,54 @@ export const useCanvasStore = defineStore('canvas', () => {
         return
       }
 
+
+      if (kind === 'expand') {
+        // 扩图节点：本质是「保持原图不变、向外扩展」的图生图（outpainting）。
+        // 必须存在参考图：用户在本节点上传，或连接一个已生成图片的上游图片节点。
+        const model = node.data.model
+        if (!model) throw new Error('请先选择图片模型。')
+        if (!referenceImage) {
+          throw new Error('扩图需要上传原始图片，或连接一个已生成图片的上游节点。')
+        }
+
+        // 作为参考图传入图片模型。
+        referenceFile = {
+          name: node.data.referenceFileName || 'reference',
+          type: 'image',
+          url: referenceImage,
+          size: 0,
+        }
+
+        // 扩图提示词：始终以扩图指令为前缀，明确要求保持原图内容不变、仅向外扩展；
+        // 用户自定义描述作为对新扩展区域的补充说明拼接在后面。
+        // 开启 AI 润色时，用扩图系统提示词对「用户描述部分」做优化，再拼接扩图指令。
+        const userPrompt = node.data.polish
+          ? await maybePolish(prompt, node.data.systemPrompt || DEFAULT_EXPAND_SYSTEM_PROMPT)
+          : prompt
+        const finalPrompt = [EXPAND_IMAGE_INSTRUCTION, userPrompt].filter(Boolean).join('\n')
+
+        const capability = getModelCapability(model)
+        const params = await buildImageParams(
+          finalPrompt,
+          model,
+          referenceFile,
+          node.data.aspectRatio || '16:9',
+          capability?.imageRequestMode,
+        )
+        const result = await generateImage(params)
+        const url = result.data?.[0]?.url
+        if (!url) throw new Error('扩图完成但未返回有效地址。')
+        updateNodeData(nodeId, {
+          status: 'completed',
+          progress: 100,
+          resultUrl: url,
+          resultType: 'image',
+        })
+        return
+      }
+
       // video
+
       const model = node.data.model
       if (!model) throw new Error('请先选择视频模型。')
 
@@ -969,7 +1088,49 @@ export const useCanvasStore = defineStore('canvas', () => {
     }
   }
 
+  // 运行某个分组：仅按拓扑顺序依次执行该分组内的生成型节点。
+  async function runGroup(groupId: string) {
+    if (isRunning.value) return
+    const childIds = new Set(getGroupChildIds(groupId))
+    if (childIds.size === 0) return
+    const order = resolveExecutionOrder(childIds)
+    if (order.length === 0) return
+
+    isRunning.value = true
+    runningGroupId.value = groupId
+    runTotal.value = order.length
+    runDone.value = 0
+    runProgress.value = 0
+
+    // 重置分组内节点运行状态
+    order.forEach((id) => updateNodeData(id, { status: 'idle', progress: 0, error: undefined }))
+
+    try {
+      for (const nodeId of order) {
+        try {
+          await executeNode(nodeId)
+        } catch {
+          // 单节点失败不阻断整体，继续后续节点
+        } finally {
+          runDone.value += 1
+          runProgress.value = Math.round((runDone.value / runTotal.value) * 100)
+        }
+      }
+    } finally {
+      isRunning.value = false
+      runningNodeId.value = null
+      runningGroupId.value = null
+    }
+  }
+
   return {
+    runningGroupId,
+    updateGroupColor,
+    updateGroupSize,
+    getGroupChildIds,
+    runGroup,
+
+
     nodes,
     edges,
     clipboard,
