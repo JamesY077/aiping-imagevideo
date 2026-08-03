@@ -89,8 +89,12 @@ export function buildKlingMultimodalVideoRequestBody(
     body.aspect_ratio = params.aspect_ratio || params.ratio || '1:1'
   }
 
+  // Kling 系列「是否生成声音」：native 生成带声音的视频，off 无声音（默认）。
+  if (params.klingAudio) body.audio = params.klingAudio
+
   return body
 }
+
 
 type KlingOmniImageListItem = {
   image_url: string
@@ -144,8 +148,12 @@ export function buildKlingOmniVideoRequestBody(
     body.image_list = imageList
   }
 
+  // Kling 系列「是否生成声音」：native 生成带声音的视频，off 无声音（默认）。
+  if (params.klingAudio) body.audio = params.klingAudio
+
   return body
 }
+
 
 export function getKlingMultimodalVideoEndpoint(body: Record<string, unknown>): string {
   if (body.video_url && body.image_url) {
@@ -179,3 +187,17 @@ export function normalizeKlingMultimodalVideoGenerateResponse(data: any): VideoG
     model,
   }
 }
+
+/**
+ * Kling Omni（Kling-V3-Omni / Kling-Video-O1）系列的任务创建结果归一化。
+ * 这些模型走 /multimodal/kling/videos/omni-video 接口，但任务状态查询接口是通用的
+ * /videos/{taskId}，而非 /multimodal/kling/videos/{taskId}。这里返回独立的
+ * provider 标识 'kling-omni'，让轮询逻辑直接命中正确接口，避免注定 404 的请求。
+ */
+export function normalizeKlingOmniVideoGenerateResponse(data: any): VideoGenerateResponse {
+  return {
+    ...normalizeKlingMultimodalVideoGenerateResponse(data),
+    provider: 'kling-omni',
+  }
+}
+

@@ -57,8 +57,11 @@ export async function buildVideoParams(
   uploadedFile: UploadInput,
   aspectRatio: string,
   duration: number,
-  videoRequestMode: ModelCapability['videoRequestMode']
+  videoRequestMode: ModelCapability['videoRequestMode'],
+  // Kling 系列「是否生成声音」：native 生成带声音的视频，off 无声音（默认）。
+  klingAudio: 'native' | 'off' = 'off'
 ): Promise<VideoGenerateRequest> {
+
   const uploadedFiles = (Array.isArray(uploadedFile) ? uploadedFile : uploadedFile ? [uploadedFile] : [])
   const uploadValues = await Promise.all(
     uploadedFiles.map(async (file) => (file.file ? fileToBase64(file.file) : file.url))
@@ -103,7 +106,13 @@ export async function buildVideoParams(
         break
       }
 
-      if (uploadValue) {
+      if (uploadValues.length >= 2) {
+        // 首尾帧生视频：首帧作为 image，尾帧作为 image_tail。
+        videoParams.image = uploadValues[0]
+        videoParams.image_tail = uploadValues[1]
+        videoParams.sound = 'off'
+        deleteVideoRatio(videoParams)
+      } else if (uploadValue) {
         videoParams.image = uploadValue
         videoParams.sound = 'off'
         deleteVideoRatio(videoParams)
@@ -112,21 +121,45 @@ export async function buildVideoParams(
         setVideoRatio(videoParams, getKlingAspectRatio(aspectRatio))
       }
       videoParams.model_name = model || undefined
+      // Kling 系列「是否生成声音」：native 生成带声音的视频，off 无声音（默认）。
+      videoParams.klingAudio = klingAudio
       break
-    case 'kling-omni':
+
+
+    case 'kling-omni': {
+      // Kling V3-Omni / Video-O1：omni-video 接口。
+      // - 首尾帧生视频：image_list 中带 first_frame / end_frame 标记。
+      // - 参考生视频：多张参考图作为无 type 的 image_list（多图主体，上限 7）。
       videoParams.model_name = model || undefined
       videoParams.mode = 'pro'
       setVideoRatio(videoParams, getKlingAspectRatio(aspectRatio))
-      if (uploadValues.length >= 2) {
-        videoParams.image_list = [
-          { image_url: uploadValues[0], type: 'first_frame' },
-          { image_url: uploadValues[1], type: 'end_frame' },
-        ]
+
+      const startFrameIndex = uploadedFiles.findIndex((file) => file.purpose === 'start-frame')
+      const endFrameIndex = uploadedFiles.findIndex((file) => file.purpose === 'end-frame')
+      const hasFrameUploads = startFrameIndex >= 0 || endFrameIndex >= 0
+
+      if (hasFrameUploads) {
+        const frameImages: Array<{ image_url: string; type: 'first_frame' | 'end_frame' }> = []
+        if (startFrameIndex >= 0 && uploadValues[startFrameIndex]) {
+          frameImages.push({ image_url: uploadValues[startFrameIndex] as string, type: 'first_frame' })
+        }
+        if (endFrameIndex >= 0 && uploadValues[endFrameIndex]) {
+          frameImages.push({ image_url: uploadValues[endFrameIndex] as string, type: 'end_frame' })
+        }
+        videoParams.image_list = frameImages
       } else if (uploadValues.length) {
-        videoParams.images = uploadValues
+        // 参考生视频：参考图片列表（多图主体）。
+        videoParams.image_list = uploadValues
+          .filter((value): value is string => !!value)
+          .map((value) => ({ image_url: value }))
       }
       delete videoParams.resolution
+      // Kling 系列「是否生成声音」：native 生成带声音的视频，off 无声音（默认）。
+      videoParams.klingAudio = klingAudio
       break
+    }
+
+
     case 'kling-o1':
       if (primaryFile?.type === 'image' && uploadValue) {
         videoParams.first_frame_url = primaryFile.file ? toRawBase64(uploadValue) : uploadValue

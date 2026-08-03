@@ -85,12 +85,13 @@
       <video :src="data.resultUrl" controls />
     </div>
     <div
-      v-else-if="data.resultType === 'text' && data.resultText"
+      v-else-if="data.resultType === 'text' && data.resultText && !(editableResult && expanded)"
       class="gen-result-text"
       :class="{ 'gen-result-text--clamp': !expanded }"
     >
       {{ data.resultText }}
     </div>
+
 
     <!-- 未展开且尚无结果时，显示 prompt 摘要 / 提示 -->
     <div v-if="!expanded && !hasResult && data.status !== 'running'" class="gen-collapsed-hint">
@@ -156,10 +157,31 @@
 
       <!-- 工具栏下方的扩展区（如视频节点的多模态素材缩略图） -->
       <slot name="below" />
+
+      <!-- 发送框：节点实际向下游节点传输的内容（可编辑）。
+           当前仅文本节点启用（editableResult）。运行 / 润色后写入这里，用户可继续修改。 -->
+      <div v-if="editableResult" class="gen-send nodrag" @mousedown.stop @wheel.stop>
+        <div class="gen-send-head">
+          <span class="gen-send-title">发送框</span>
+          <span class="gen-send-hint">下游节点实际接收的内容，可编辑</span>
+        </div>
+        <textarea
+          class="gen-send-input"
+
+          :value="data.resultText ?? ''"
+          placeholder="运行或润色后，结果会显示在这里；可直接修改，修改后的内容将传给下游节点。"
+          rows="3"
+          @input="onSendInput"
+          @mousedown.stop
+          @dblclick.stop
+          @wheel.stop
+        />
+      </div>
     </template>
 
 
     <Handle class="gen-handle" type="source" :position="Position.Right" />
+
   </div>
 </template>
 
@@ -186,7 +208,11 @@ const props = defineProps<{
   title: string
   placeholder: string
   defaultSystemPrompt: string
+  // 是否启用可编辑的「发送框」：展开时把节点结果文本（resultText）渲染为可编辑区域，
+  // 该内容即下游节点实际接收到的内容（当前仅文本节点使用）。
+  editableResult?: boolean
 }>()
+
 
 const store = useCanvasStore()
 
@@ -209,6 +235,17 @@ const hasResult = computed(
 function onSystemPromptInput(e: Event) {
   store.updateNodeData(props.id, { systemPrompt: (e.target as HTMLTextAreaElement).value })
 }
+
+// 发送框：把用户手动修改的内容写回 resultText（即传给下游节点的实际内容）。
+function onSendInput(e: Event) {
+
+  const value = (e.target as HTMLTextAreaElement).value
+  store.updateNodeData(props.id, {
+    resultText: value,
+    resultType: 'text',
+  })
+}
+
 
 // 输入框自适应高度：随内容增减撑高/收缩，超过上限出现内部滚动条，
 // 避免润色后文字过多导致节点/拖拽框溢出错位。

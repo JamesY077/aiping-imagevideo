@@ -61,6 +61,9 @@ export interface CanvasNodeData {
   // video
   videoMode?: VideoGenerationMode
   duration?: number
+  // Kling 系列「是否生成声音」：true 生成带声音的视频（audio=native），false 无声音（默认）。
+  klingSound?: boolean
+
   // reference image (data url), used by image2image / image2video / subjectReference2video
   referenceImage?: string
   referenceFileName?: string
@@ -720,8 +723,10 @@ export const useCanvasStore = defineStore('canvas', () => {
     })
   }
 
-  // 文本节点“润色”按钮：对当前 prompt 进行润色，并直接覆盖回 prompt 输入框（可继续修改）。
-  // 不改动下游节点，仅更新本节点的输入内容。
+  // 文本节点“润色”按钮：对当前输入框（prompt）的文字进行 AI 润色，
+  // 结果写入「发送框」（resultText）而非覆盖输入框：
+  //  - 输入框（prompt）保留用户原始创作内容，可反复润色；
+  //  - 发送框（resultText）即下游节点实际接收到的内容，用户可在其上继续手动修改。
   async function polishTextNode(nodeId: string) {
     const node = nodes.value.find((n) => n.id === nodeId)
     if (!node || node.data.nodeKind !== 'text') return
@@ -741,9 +746,12 @@ export const useCanvasStore = defineStore('canvas', () => {
     updateNodeData(nodeId, { polishing: true, error: undefined })
     try {
       const polished = await polishTextWith(model, prompt, undefined, node.data.systemPrompt)
-      // 直接覆盖 prompt（在原始输入基础上润色），用户可继续修改
-      updateNodeData(nodeId, { prompt: polished })
-
+      // 润色结果写入发送框（resultText），供下游节点消费；用户可继续修改发送框内容。
+      updateNodeData(nodeId, {
+        resultText: polished,
+        resultType: 'text',
+        status: 'completed',
+      })
     } catch (error) {
       updateNodeData(nodeId, { error: normalizeErrorMessage(error, '润色失败，请重试') })
     } finally {
@@ -970,18 +978,21 @@ export const useCanvasStore = defineStore('canvas', () => {
           { name: node.data.editImageName || '图片1', type: 'image', url: editImageUrl, size: 0, purpose: 'multimodal-image' },
         ]
       } else if (videoMode === 'startEnd2video') {
-        // 首尾帧生视频：需要首帧 + 尾帧两张图片。
-
+        // 首尾帧生视频：首帧必填，尾帧可选（仅首帧时等价于图生视频的起始帧）。
         const startFrame = node.data.startFrameImage
         const endFrame = node.data.endFrameImage
-        if (!startFrame || !endFrame) {
-          throw new Error('首尾帧生视频需要同时上传首帧和尾帧图片。')
+        if (!startFrame) {
+          throw new Error('首尾帧生视频需要上传首帧图片，尾帧可选。')
         }
-        videoInput = [
-          { name: node.data.startFrameName || 'first-frame', type: 'image', url: startFrame, size: 0 },
-          { name: node.data.endFrameName || 'end-frame', type: 'image', url: endFrame, size: 0 },
+        const frameFiles: UploadedFile[] = [
+          { name: node.data.startFrameName || 'first-frame', type: 'image', url: startFrame, size: 0, purpose: 'start-frame' },
         ]
+        if (endFrame) {
+          frameFiles.push({ name: node.data.endFrameName || 'end-frame', type: 'image', url: endFrame, size: 0, purpose: 'end-frame' })
+        }
+        videoInput = frameFiles
       } else if (videoMode === 'subjectReference2video') {
+
         // 主体参考视频：需要一张主体参考图（本节点上传或上游图片）。
         if (!referenceImage) {
           throw new Error('主体参考视频需要上传主体参考图片，或连接一个已生成图片的上游节点。')
@@ -1053,7 +1064,10 @@ export const useCanvasStore = defineStore('canvas', () => {
         node.data.aspectRatio || '16:9',
         node.data.duration || 5,
         capability?.videoRequestMode,
+        // Kling 系列「是否生成声音」：开启则 audio=native，否则 off（默认）。
+        node.data.klingSound ? 'native' : 'off',
       )
+
 
       const task = await generateVideo(params)
       if (!task.id) throw new Error('视频任务创建成功但未返回任务 ID。')

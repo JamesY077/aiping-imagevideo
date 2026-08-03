@@ -40,12 +40,14 @@ import type { Model } from '@/types/api'
 import type { MediaType } from '@/types/model'
 import {
   BUILT_IN_MODELS,
-  getModelAvailabilityLabel,
   getModelsByMediaType,
+
   isSeedance2Model,
+  pickPreferredDefaultModelId,
   SEEDANCE_2_GROUP_LABEL,
   SEEDANCE_2_WHITELIST_NOTICE,
 } from '@/types/model'
+
 
 const props = defineProps<{
   mediaType: MediaType
@@ -68,13 +70,13 @@ watch(() => props.modelValue, (v) => {
   selectedModel.value = v
 })
 
-// 选择默认模型：优先选择非 seedance2.0 系列（seedance 为白名单专属，
-// 不应作为节点新建时的默认模型），无非 seedance 模型时才退回第一个。
+// 选择默认模型：按媒体类型的首选默认模型优先级挑选（均为非 seedance2.0 系列，
+// seedance 为白名单专属，不应作为简易模式 / 节点新建时的默认模型）；
+// 命中不到首选时退回第一个非 seedance 模型，仍无则退回列表第一个。
 function pickDefaultModelId(): string | null {
-  if (models.value.length === 0) return null
-  const firstNormal = models.value.find((m) => !isSeedance2Model(m.id))
-  return (firstNormal || models.value[0]).id
+  return pickPreferredDefaultModelId(props.mediaType, models.value.map((m) => m.id))
 }
+
 
 watch(() => props.mediaType, () => {
   filterModels()
@@ -163,9 +165,10 @@ function closeSeedanceNotice() {
 }
 
 function formatModelLabel(modelId: string): string {
-  const label = getModelAvailabilityLabel(modelId)
-  return label ? `${modelId} · ${label}` : modelId
+  // 仅展示模型 ID，去掉后面的可用性说明文案。
+  return modelId
 }
+
 </script>
 
 <style scoped>

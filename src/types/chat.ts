@@ -50,6 +50,10 @@ export type UploadedFilePurpose =
   | 'multimodal-image'
   | 'multimodal-video'
   | 'multimodal-audio'
+  | 'start-frame'
+  | 'end-frame'
+  | 'reference-image'
+
 
 export interface UploadedFile {
   name: string

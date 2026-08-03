@@ -50,6 +50,18 @@
         AI润色
       </button>
 
+      <!-- 是否生成声音（仅 Kling 系列支持 audio=native/off，默认关闭） -->
+      <button
+        v-if="showKlingSound"
+        class="gen-chip"
+        :class="{ 'gen-chip--active': data.klingSound }"
+        :title="data.klingSound ? '生成的视频含有与画面适配的声音' : '生成的视频不含有声音'"
+        @click="store.updateNodeData(id, { klingSound: !data.klingSound })"
+      >
+        {{ data.klingSound ? '声音开' : '声音关' }}
+      </button>
+
+
       <!-- 图生视频：上传参考图 -->
       <label v-if="showUpload" class="gen-chip gen-upload">
         {{ data.referenceFileName ? '已选图' : '参考图' }}
@@ -69,9 +81,10 @@
           <input type="file" accept="image/*" hidden @change="onStartFrame" />
         </label>
         <label class="gen-chip gen-upload">
-          {{ data.endFrameName ? '已选尾帧' : '尾帧' }}
+          {{ data.endFrameName ? '已选尾帧' : '尾帧(可选)' }}
           <input type="file" accept="image/*" hidden @change="onEndFrame" />
         </label>
+
       </template>
 
       <!-- 动作控制：上传参考图像 + 参考视频 -->
@@ -200,7 +213,9 @@ const {
   showMotionUpload,
   showMultimodalUpload,
   showEditVideoUpload,
+  showKlingSound,
   MULTIMODAL_LIMITS,
+
   onVideoMode,
   onRatio,
   onDuration,

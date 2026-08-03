@@ -19,7 +19,8 @@
         <div class="sidebar-footer">
           <button class="canvas-entry-btn" type="button" @click="router.push('/canvas')">
             <span class="canvas-entry-text">无限画布</span>
-            <span class="canvas-entry-new" aria-label="全新功能">NEW</span>
+            <span class="canvas-entry-new" aria-label="测试版功能">BETA</span>
+
           </button>
 
           <button class="sidebar-secondary-btn" type="button" @click="router.push('/settings')">
@@ -162,7 +163,25 @@
                   </div>
                 </div>
               </div>
+
+              <!-- 是否生成声音（仅 Kling 系列支持 audio=native/off，默认关闭） -->
+              <div v-if="showKlingSound" class="meta-pill meta-pill-sound">
+                <span class="meta-pill-label">声音</span>
+                <button
+                  type="button"
+                  class="sound-toggle"
+                  :class="{ active: klingSound }"
+                  role="switch"
+                  :aria-checked="klingSound"
+                  :title="klingSound ? '生成的视频含有与画面适配的声音' : '生成的视频不含有声音'"
+                  @click="klingSound = !klingSound"
+                >
+                  <span class="sound-toggle-track"><span class="sound-toggle-thumb" /></span>
+                  <span class="sound-toggle-text">{{ klingSound ? '开' : '关' }}</span>
+                </button>
+              </div>
             </div>
+
 
             <div v-if="showReferenceField" class="reference-strip">
               <template v-if="usesViduLikeVideoMode">
@@ -276,15 +295,46 @@
                       +
                     </button>
                     <div class="upload-copy">
-                      <span class="upload-label">尾帧</span>
-                      <span class="upload-hint">视频结束画面</span>
+                      <span class="upload-label">尾帧（可选）</span>
+                      <span class="upload-hint">视频结束画面，可不上传</span>
+
                     </div>
                     <span v-if="viduEndFrame" class="pill-filename">{{ viduEndFrame.name }}</span>
                     <button v-if="viduEndFrame" class="text-btn" type="button" @click="removeViduFrame('end')">移除</button>
                   </div>
                 </div>
 
+                <div v-else-if="videoMode === 'referenceImage2video'" class="multimodal-panel">
+                  <p class="multimodal-note">
+                    参考生视频
+                    <small>上传参考图片（多图主体，最多 {{ KLING_REFERENCE_IMAGE_LIMIT }} 张），模型会参考图中的主体生成视频。上传后可在文本中输入 <b>@</b> 精确指定素材位置，例如「让 @图片1 中的角色走进 @图片2 的场景」。</small>
+                  </p>
+                  <div class="multimodal-group">
+                    <div class="multimodal-group-head">
+                      <span class="multimodal-group-title">参考图片</span>
+                      <span class="multimodal-group-count">{{ multimodalImages.length }}/{{ KLING_REFERENCE_IMAGE_LIMIT }}</span>
+                    </div>
+                    <div class="multimodal-thumb-row">
+                      <div v-for="item in multimodalImages" :key="item.url" class="multimodal-thumb">
+                        <img :src="item.url" :alt="item.refLabel" />
+                        <span class="multimodal-thumb-tag">{{ item.refLabel }}</span>
+                        <button class="multimodal-thumb-remove" type="button" aria-label="移除" @click="removeMultimodalAsset('image', item)">×</button>
+                      </div>
+                      <button
+                        v-if="multimodalImages.length < KLING_REFERENCE_IMAGE_LIMIT"
+                        class="multimodal-add-btn"
+                        type="button"
+                        aria-label="添加参考图"
+                        @click="multimodalImageInput?.click()"
+                      >+</button>
+                    </div>
+                    <input ref="multimodalImageInput" type="file" accept="image/*" multiple class="file-input" @change="handleMultimodalFileChange($event, 'image')" />
+                  </div>
+                </div>
+
+
                 <div v-else-if="videoMode === 'subjectReference2video'" class="subject-reference-card" :class="{ 'has-file': !!uploadedFile || !!referenceUrl }">
+
                   <input
                     ref="fileInput"
                     type="file"
@@ -619,10 +669,13 @@ const motionControlImage = ref<UploadedFile | null>(null)
 const motionControlVideo = ref<UploadedFile | null>(null)
 const motionControlKeepOriginalSound = ref<'yes' | 'no'>('yes')
 const motionControlCharacterOrientation = ref<'image' | 'video'>('image')
+
 const referenceUrl = ref('')
+
 const inputText = ref('')
 type ImageMode = 'text2image' | 'image2image'
-type VideoMode = 'text2video' | 'image2video' | 'startEnd2video' | 'subjectReference2video' | 'motionControl2video' | 'multimodalReference2video' | 'editVideo'
+type VideoMode = 'text2video' | 'image2video' | 'referenceImage2video' | 'startEnd2video' | 'subjectReference2video' | 'motionControl2video' | 'multimodalReference2video' | 'editVideo'
+
 
 interface ImageDimensions {
   width: number
@@ -630,9 +683,15 @@ interface ImageDimensions {
 }
 const imageMode = ref<ImageMode>('text2image')
 const videoMode = ref<VideoMode>('text2video')
+// Kling 系列「是否生成声音」：true 生成带声音的视频（audio=native），false 无声音（默认关闭）。
+const klingSound = ref(false)
+
 
 // 多模态参考（Seedance 2.0 系列）：图片 0~9 / 视频 0~3 / 音频 0~3
 const MULTIMODAL_LIMITS = { image: 9, video: 3, audio: 3 } as const
+// Kling V3-Omni / Video-O1「参考生视频」：多图主体，参考图片上限 7 张（复用 multimodalImages 承载）。
+const KLING_REFERENCE_IMAGE_LIMIT = 7
+
 const multimodalImages = ref<UploadedFile[]>([])
 const multimodalVideos = ref<UploadedFile[]>([])
 const multimodalAudios = ref<UploadedFile[]>([])
@@ -666,9 +725,18 @@ const minimaxHailuoVideoModeOptions: Array<{ value: VideoMode; label: string }> 
 ]
 const klingMotionControlVideoModeOptions: Array<{ value: VideoMode; label: string }> = [
   { value: 'text2video', label: '文生视频' },
-  { value: 'image2video', label: '图生视频' },
+  { value: 'startEnd2video', label: '首尾帧生视频' },
   { value: 'motionControl2video', label: '动作控制' },
 ]
+
+// Kling V3-Omni / Video-O1：支持「参考生视频（多图主体）」与「首尾帧生视频」。
+const klingOmniVideoModeOptions: Array<{ value: VideoMode; label: string }> = [
+  { value: 'text2video', label: '文生视频' },
+  { value: 'referenceImage2video', label: '参考生视频' },
+  { value: 'startEnd2video', label: '首尾帧生视频' },
+]
+
+
 const seedanceVideoModeOptions: Array<{ value: VideoMode; label: string }> = [
   { value: 'text2video', label: '文生视频' },
   { value: 'image2video', label: '图生视频' },
@@ -693,19 +761,33 @@ const isKlingMotionControlVideoModel = computed(() => {
   const mode = modelCapability.value?.videoRequestMode
   return settingsStore.mediaType === 'video' && (mode === 'kling-v26' || mode === 'kling-v3')
 })
+// Kling 系列「是否生成声音」开关：仅 Kling 系列（v26 / v3 / omni）视频模型支持 audio=native/off。
+const showKlingSound = computed(() => {
+  const mode = modelCapability.value?.videoRequestMode
+  return settingsStore.mediaType === 'video' && (mode === 'kling-v26' || mode === 'kling-v3' || mode === 'kling-omni')
+})
+
+const isKlingOmniVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'kling-omni')
+// Kling 参考生视频：复用多模态图片素材面板 + @ 引用
+const isKlingReferenceMode = computed(() => isKlingOmniVideoModel.value && videoMode.value === 'referenceImage2video')
+
+
 const isSeedanceVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'seedance-2')
 const isMultimodalReferenceMode = computed(() => isSeedanceVideoModel.value && videoMode.value === 'multimodalReference2video')
 const isEditVideoMode = computed(() => isSeedanceVideoModel.value && videoMode.value === 'editVideo')
-// 多模态参考与编辑视频都使用「图片/视频/音频 + @ 引用」的素材面板
-const isSeedanceMentionMode = computed(() => isMultimodalReferenceMode.value || isEditVideoMode.value)
+// 多模态参考、编辑视频、Kling 参考生视频都使用「素材 + @ 引用」的面板
+const isSeedanceMentionMode = computed(() => isMultimodalReferenceMode.value || isEditVideoMode.value || isKlingReferenceMode.value)
+
 
 const usesViduLikeVideoMode = computed(() => isViduVideoModel.value || isMinimaxHailuoVideoModel.value || isKlingMultimodalVideoModel.value || isSeedanceVideoModel.value)
 const activeVideoModeOptions = computed(() => {
   if (isMinimaxHailuoVideoModel.value) return minimaxHailuoVideoModeOptions
   if (isKlingMotionControlVideoModel.value) return klingMotionControlVideoModeOptions
+  if (isKlingOmniVideoModel.value) return klingOmniVideoModeOptions
   if (isSeedanceVideoModel.value) return seedanceVideoModeOptions
   if (isKlingMultimodalVideoModel.value) return viduVideoModeOptions
   return viduVideoModeOptions
+
 })
 const mentionableAssets = computed<UploadedFile[]>(() => {
   // 编辑视频：固定「视频1 + 图片1」，用于 @ 引用与彩色标签
@@ -818,11 +900,17 @@ const canSend = computed(() => {
     if (videoMode.value === 'multimodalReference2video') return true
     // 编辑视频：需上传待编辑视频 + 替换图片
     if (videoMode.value === 'editVideo') return !!editVideoFile.value && !!editImageFile.value
+    // 参考生视频（Kling Omni / O1）：至少 1 张参考图片（复用 multimodalImages）
+    if (videoMode.value === 'referenceImage2video') return multimodalImages.value.length > 0
+
 
     if (videoMode.value === 'image2video') return !!uploadedFile.value
 
+
     if (videoMode.value === 'motionControl2video') return !!motionControlImage.value && !!motionControlVideo.value
-    if (videoMode.value === 'startEnd2video') return !!viduStartFrame.value && !!viduEndFrame.value
+    // 首尾帧生视频：首帧必填，尾帧可选。
+    if (videoMode.value === 'startEnd2video') return !!viduStartFrame.value
+
     return !!uploadedFile.value || !!referenceUrl.value.trim()
   }
 
@@ -846,7 +934,8 @@ function buildSessionWelcomeMessage(): Omit<Message, 'id' | 'timestamp'> {
       '🎬 视频生成：覆盖文生视频、图生视频、首尾帧生视频、主体参考视频与动作控制等多种玩法。',
       '📐 参数可调：可自由选择画面比例、视频时长，快速匹配不同创作场景。',
       '✨ AI 润色：一键把简短描述扩写成更专业的提示词（需先在「设置」中配置润色模型）。',
-      '🧩 无限画布（NEW）：想要多画面并行、串联复杂创作流程？点击左侧「无限画布」体验节点式创作。',
+      '🧩 无限画布（BETA）：想要多画面并行、串联复杂创作流程？点击左侧「无限画布」体验节点式创作。',
+
       '',
       '💡 上手很简单：选择创作类型与模型 → 写下你的创意描述 → 点击发送即可开始生成。',
     ].join('\n'),
@@ -865,13 +954,18 @@ function handleMediaTypeChange(nextType: MediaType) {
   settingsStore.setMediaType(nextType)
   ensureSupportedAspectRatio()
   imageMode.value = 'text2image'
+  videoMode.value = 'text2video'
   removeUploadedFile()
   removeViduFrames()
   removeMotionControlFiles()
+  clearMultimodalAssets()
+  clearEditFiles()
   referenceUrl.value = ''
 }
 
+
 function setImageMode(mode: ImageMode) {
+
   if (mode === 'image2image' && !supportsImageReferenceMode.value) return
   if (imageMode.value === mode) return
   imageMode.value = mode
@@ -893,7 +987,9 @@ function setVideoMode(mode: VideoMode) {
 
 
 
+
 function selectAspectRatio(value: string) {
+
   if (!aspectRatioOptions.value.some((option) => option.value === value)) return
   settingsStore.aspectRatio = value
   settingsStore.saveToStorage()
@@ -1126,6 +1222,8 @@ async function handleViduFrameChange(e: Event, position: 'start' | 'end') {
 
   removeViduFrame(position)
   const uploaded = createUploadedFile(file, 'image', dimensions)
+  // 标记首/尾帧用途，供 buildParams（尤其是 kling-omni 首尾帧）区分帧图与参考图。
+  uploaded.purpose = position === 'start' ? 'start-frame' : 'end-frame'
   if (position === 'start') {
     viduStartFrame.value = uploaded
   } else {
@@ -1134,6 +1232,7 @@ async function handleViduFrameChange(e: Event, position: 'start' | 'end') {
 }
 
 function handleMotionControlFileChange(e: Event, type: 'image' | 'video') {
+
   const target = e.target as HTMLInputElement
   const file = target.files?.[0]
   if (!file) return
@@ -1496,10 +1595,15 @@ async function handleSend() {
             },
             motionControlVideo.value,
           ]
-      : videoMode.value === 'startEnd2video' && viduStartFrame.value && viduEndFrame.value
-        ? [viduStartFrame.value, viduEndFrame.value]
+      : videoMode.value === 'startEnd2video' && viduStartFrame.value
+        ? (viduEndFrame.value ? [viduStartFrame.value, viduEndFrame.value] : [viduStartFrame.value])
+
+        : videoMode.value === 'referenceImage2video'
+          ? (multimodalImages.value.length ? [...multimodalImages.value] : null)
         : videoMode.value === 'multimodalReference2video' || videoMode.value === 'editVideo'
+
           ? (mentionableAssets.value.length ? [...mentionableAssets.value] : null)
+
 
         : videoMode.value === 'subjectReference2video'
           ? (uploadedFile.value ? { ...uploadedFile.value, name: 'Subject Reference' } : null) ||
@@ -1529,13 +1633,16 @@ async function handleSend() {
   clearMultimodalAssets({ revoke: false })
   showMentionMenu.value = false
   referenceUrl.value = ''
+
   const primaryFile = Array.isArray(file) ? file[0] : file
+
 
   const ioType = resolveGenerateIoType(settingsStore.mediaType, primaryFile)
 
   await nextTick()
   scrollChatToBottom()
-  await generate(prompt, ioType, settingsStore.selectedModel, file, settingsStore.aspectRatio, settingsStore.videoDuration)
+  await generate(prompt, ioType, settingsStore.selectedModel, file, settingsStore.aspectRatio, settingsStore.videoDuration, klingSound.value)
+
   settingsStore.saveToStorage()
   await nextTick()
   scrollChatToBottom()
@@ -2155,6 +2262,63 @@ async function handleRegenerate(message: Message) {
   width: 100%;
   align-items: stretch;
 }
+
+/* 是否生成声音（仅 Kling 系列）：胶囊内嵌开关 */
+.meta-pill-sound {
+  flex: 0 0 auto;
+}
+
+.sound-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(100, 116, 139, 0.42);
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.92);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(15, 23, 42, 0.7);
+}
+
+.sound-toggle-track {
+  position: relative;
+  display: inline-block;
+  width: 30px;
+  height: 16px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.5);
+  transition: background var(--transition-base);
+}
+
+.sound-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.24);
+  transition: transform var(--transition-base);
+}
+
+.sound-toggle.active {
+  border-color: rgba(95, 75, 139, 0.5);
+  color: rgba(95, 75, 139, 0.95);
+}
+
+.sound-toggle.active .sound-toggle-track {
+  background: linear-gradient(135deg, #5f4b8b, #c86b4a);
+}
+
+.sound-toggle.active .sound-toggle-thumb {
+  transform: translateX(14px);
+}
+
 
 .video-mode-switch {
   display: inline-flex;

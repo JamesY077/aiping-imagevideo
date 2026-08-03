@@ -516,19 +516,28 @@ export async function getVideoStatusWithProvider(taskId: string, provider?: stri
     }
   }
 
+  // Kling Omni 系列（Kling-V3-Omni / Kling-Video-O1）走 omni-video 接口，
+  // 其任务状态查询走通用的 /videos/{taskId}，直接命中即可，避免 /multimodal/kling/videos/{taskId} 的 404。
   const endpoints = normalizedProvider === 'vidu'
     ? [`/videos/vidu/tasks/${taskId}/creations`, `/videos/${taskId}`]
+    : normalizedProvider === 'kling-omni'
+      ? [`/videos/${taskId}`, `/multimodal/kling/videos/${taskId}`]
     : normalizedProvider === 'kling'
       ? [`/multimodal/kling/videos/${taskId}`, `/videos/${taskId}`]
     : [`/videos/${taskId}`]
+
+
+  // Kling Omni 对外展示仍归一为 kling，避免 UI 上出现内部路由标识。
+  const displayProvider = normalizedProvider === 'kling-omni' ? 'kling' : provider
 
   let lastError: any
   for (const endpoint of endpoints) {
     try {
       debugLog(`getVideoStatus provider=${provider || 'default'} endpoint=${endpoint}`)
       const response = await client.get(endpoint)
-      return normalizeVideoStatus(response.data, taskId, provider)
+      return normalizeVideoStatus(response.data, taskId, displayProvider)
     } catch (error: any) {
+
 
       lastError = error
       debugLog('getVideoStatus error:', {

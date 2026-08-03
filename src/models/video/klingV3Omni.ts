@@ -1,8 +1,9 @@
 import {
   buildKlingOmniVideoRequestBody,
   getKlingOmniVideoEndpoint,
-  normalizeKlingMultimodalVideoGenerateResponse,
+  normalizeKlingOmniVideoGenerateResponse,
 } from '@/api/providers/video/common'
+
 import type { VideoModelModule } from '../types'
 import { createModelExample } from '../types'
 
@@ -21,7 +22,8 @@ export const klingV3OmniModel: VideoModelModule = {
     models: ['Kling-V3-Omni'],
     buildRequestBody: (params) => buildKlingOmniVideoRequestBody(params, 'Kling-V3-Omni'),
     getEndpoint: getKlingOmniVideoEndpoint,
-    normalizeResponse: normalizeKlingMultimodalVideoGenerateResponse,
+    normalizeResponse: normalizeKlingOmniVideoGenerateResponse,
+
   },
   example: createModelExample({
     title: 'Kling V3 Omni 视频生成示例',

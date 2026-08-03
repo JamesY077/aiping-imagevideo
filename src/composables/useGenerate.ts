@@ -71,8 +71,11 @@ async function buildVideoParams(
   uploadedFile: UploadInput,
   aspectRatio: string,
   duration: number,
-  videoRequestMode: ModelCapability['videoRequestMode']
+  videoRequestMode: ModelCapability['videoRequestMode'],
+  // Kling 系列「是否生成声音」：native 生成带声音的视频，off 无声音（默认）。
+  klingAudio: 'native' | 'off' = 'off'
 ): Promise<VideoGenerateRequest> {
+
   const uploadedFiles = (Array.isArray(uploadedFile) ? uploadedFile : uploadedFile ? [uploadedFile] : [])
   const uploadValues = await Promise.all(
     uploadedFiles.map(async (file) => (file.file ? fileToBase64(file.file) : file.url))
@@ -126,6 +129,8 @@ async function buildVideoParams(
         setVideoRatio(videoParams, getKlingAspectRatio(aspectRatio))
       }
       videoParams.model_name = model || undefined
+      // Kling 系列「是否生成声音」：native 生成带声音的视频，off 无声音（默认）。
+      videoParams.klingAudio = klingAudio
       break
     case 'kling-omni':
       videoParams.model_name = model || undefined
@@ -140,7 +145,10 @@ async function buildVideoParams(
         videoParams.images = uploadValues
       }
       delete videoParams.resolution
+      // Kling 系列「是否生成声音」：native 生成带声音的视频，off 无声音（默认）。
+      videoParams.klingAudio = klingAudio
       break
+
     case 'kling-o1':
       if (primaryFile?.type === 'image' && uploadValue) {
         videoParams.first_frame_url = primaryFile.file ? toRawBase64(uploadValue) : uploadValue
@@ -274,8 +282,11 @@ export function useGenerate() {
     model: string | null,
     uploadedFile?: UploadInput,
     aspectRatio = '1:1',
-    duration = 6
+    duration = 6,
+    // Kling 系列「是否生成声音」：true 生成带声音的视频（audio=native），false 无声音（默认）。
+    klingSound = false
   ) {
+
     validatePromptOrThrow(prompt)
 
     chatStore.isGenerating = true
@@ -337,8 +348,11 @@ export function useGenerate() {
         uploadedFile,
         aspectRatio,
         duration,
-        capability?.videoRequestMode
+        capability?.videoRequestMode,
+        // Kling 系列「是否生成声音」：开启则 audio=native，否则 off（默认）。
+        klingSound ? 'native' : 'off'
       )
+
 
       const task = await generateVideo(videoParams)
       if (!task.id) {

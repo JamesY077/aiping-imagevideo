@@ -6,6 +6,7 @@
     title="文本节点"
     placeholder="输入想创作的话语或方向…"
     :default-system-prompt="DEFAULT_TEXT_SYSTEM_PROMPT"
+    editable-result
   >
     <template #icon>
       <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
@@ -43,12 +44,12 @@
         </option>
       </select>
 
-      <!-- 润色按钮（仅开启 AI 润色时显示），润色结果直接覆盖到发送框 -->
+      <!-- 润色按钮（仅开启 AI 润色时显示），润色结果写入下方「发送框」 -->
       <button
         v-if="data.polish"
         class="gen-chip gen-polish"
         :disabled="data.polishing || isRunning"
-        title="用所选模型润色当前文字，结果会覆盖到输入框，可继续修改"
+        title="用所选模型润色输入框中的文字，结果会写入下方「发送框」，可继续修改后传给下游节点"
         @click="store.polishTextNode(id)"
       >
         {{ data.polishing ? '润色中…' : '润色' }}

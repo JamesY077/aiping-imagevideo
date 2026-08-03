@@ -1,32 +1,8 @@
 <template>
   <div class="canvas-page">
     <button class="canvas-back-btn" type="button" @click="router.push('/studio')">
-      ← 返回
+      ← 返回生成
     </button>
-
-
-    <!-- 无限画布功能介绍弹窗 -->
-    <transition name="intro-fade">
-      <div v-if="showIntro" class="canvas-intro-overlay" @click.self="closeIntro">
-        <div class="canvas-intro-modal" role="dialog" aria-modal="true" aria-labelledby="canvas-intro-title">
-          <button class="canvas-intro-close" type="button" aria-label="关闭介绍" @click="closeIntro">×</button>
-          <span class="canvas-intro-badge">无限画布 · NEW</span>
-          <h2 id="canvas-intro-title" class="canvas-intro-title">在一块无限画布上自由创作</h2>
-          <p class="canvas-intro-lead">
-            相比简易模式的单次对话，这里可以把多个创作步骤铺开在同一画布上，边生成边编排，串联出完整的创作流程。
-          </p>
-          <ul class="canvas-intro-list">
-            <li><span class="intro-emoji">🧩</span><span><strong>节点式创作：</strong>双击空白处或使用底部工具栏，即可添加文本、图片、扩图、视频等节点。</span></li>
-            <li><span class="intro-emoji">🔗</span><span><strong>连线串联：</strong>拖动节点端口连线，把上一步的产出作为下一步的输入，搭建生成流水线。</span></li>
-            <li><span class="intro-emoji">🖼️</span><span><strong>多画面并行：</strong>同屏对比多个方案、多种风格，灵感一览无余。</span></li>
-            <li><span class="intro-emoji">▶️</span><span><strong>一键运行：</strong>批量执行整条链路，实时查看进度与结果。</span></li>
-            <li><span class="intro-emoji">🖱️</span><span><strong>自由浏览：</strong>滚轮缩放、按住空格拖动画布，右下角小地图快速定位。</span></li>
-          </ul>
-          <button class="canvas-intro-cta" type="button" @click="closeIntro">开始创作</button>
-        </div>
-      </div>
-    </transition>
-
 
     <!-- 顶部整体进度条 -->
     <div v-if="canvasStore.isRunning" class="canvas-progress">
@@ -221,13 +197,6 @@ const {
 
 // 画布容器引用：用于监听尺寸变化并保持视口内容不丢失
 const canvasRootRef = ref<HTMLElement | null>(null)
-
-// 无限画布功能介绍弹窗：每次进入页面都会展示，可手动关闭
-const showIntro = ref(true)
-function closeIntro() {
-  showIntro.value = false
-}
-
 
 // 默认箭头（选择/框选）模式；按住空格切换为抓手拖动画布模式
 const isSpacePressed = ref(false)
@@ -915,145 +884,6 @@ onBeforeUnmount(() => {
 :deep(.canvas-minimap svg) {
   background: var(--ac-surface-solid);
 }
-
-/* 无限画布功能介绍弹窗 */
-.canvas-intro-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(6, 6, 8, 0.62);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-}
-
-.canvas-intro-modal {
-  position: relative;
-  width: min(520px, 100%);
-  max-height: calc(100dvh - 48px);
-  overflow-y: auto;
-  padding: 28px 28px 24px;
-  border-radius: 24px;
-  border: 1px solid var(--ac-border);
-  background: linear-gradient(165deg, rgba(32, 32, 36, 0.98), rgba(18, 18, 22, 0.98));
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
-  color: var(--ac-text);
-}
-
-.canvas-intro-close {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--ac-text-dim);
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.canvas-intro-close:hover {
-  background: rgba(255, 255, 255, 0.16);
-  color: var(--ac-text);
-}
-
-.canvas-intro-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 12px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  color: #fff;
-  background: linear-gradient(135deg, #0a84ff, #bf5af2);
-}
-
-.canvas-intro-title {
-  margin: 14px 0 10px;
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
-
-.canvas-intro-lead {
-  margin: 0 0 16px;
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--ac-text-dim);
-}
-
-.canvas-intro-list {
-  list-style: none;
-  margin: 0 0 22px;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.canvas-intro-list li {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  font-size: 13px;
-  line-height: 1.55;
-  color: rgba(245, 245, 247, 0.9);
-}
-
-.canvas-intro-list strong {
-  color: #fff;
-  font-weight: 700;
-}
-
-.intro-emoji {
-  flex-shrink: 0;
-  font-size: 16px;
-  line-height: 1.4;
-}
-
-.canvas-intro-cta {
-  width: 100%;
-  min-height: 44px;
-  border: 0;
-  border-radius: 14px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 700;
-  color: #fff;
-  background: linear-gradient(135deg, #0a84ff, #bf5af2);
-  box-shadow: 0 14px 30px rgba(10, 132, 255, 0.28);
-  transition: filter 0.15s ease, transform 0.15s ease;
-}
-
-.canvas-intro-cta:hover {
-  filter: brightness(1.08);
-}
-
-.canvas-intro-cta:active {
-  transform: scale(0.98);
-}
-
-.intro-fade-enter-active,
-.intro-fade-leave-active {
-  transition: opacity 0.22s ease;
-}
-
-.intro-fade-enter-from,
-.intro-fade-leave-to {
-  opacity: 0;
-}
 </style>
-
 
 

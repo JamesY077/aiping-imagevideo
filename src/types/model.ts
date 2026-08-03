@@ -46,11 +46,13 @@ export interface VideoDurationOption {
 export type VideoGenerationMode =
   | 'text2video'
   | 'image2video'
+  | 'referenceImage2video'
   | 'startEnd2video'
   | 'subjectReference2video'
   | 'motionControl2video'
   | 'multimodalReference2video'
   | 'editVideo'
+
 
 
 
@@ -205,12 +207,14 @@ export function getDefaultVideoDuration(modelId: string | null | undefined): num
 const VIDEO_MODE_LABELS: Record<VideoGenerationMode, string> = {
   text2video: '文生视频',
   image2video: '图生视频',
+  referenceImage2video: '参考生视频',
   startEnd2video: '首尾帧生视频',
   subjectReference2video: '主体参考视频',
   motionControl2video: '动作控制',
   multimodalReference2video: '多模态参考',
   editVideo: '编辑视频',
 }
+
 
 
 
@@ -222,16 +226,17 @@ function buildVideoModeOptions(modes: VideoGenerationMode[]): VideoModeOption[] 
  * 返回指定视频模型支持的所有生成模式。
  * - viduq3-fast（Vidu Q3）：文生 / 图生 / 首尾帧
  * - minimax-hailuo（MiniMax Hailuo）：文生 / 图生 / 首尾帧 / 主体参考
- * - kling-v26 / kling-v3：文生 / 图生 / 动作控制
- * - kling-omni：文生 / 图生 / 首尾帧
+ * - kling-v26 / kling-v3：文生 / 首尾帧 / 动作控制（图生视频统一走首尾帧）
+ * - kling-omni（含 V3-Omni / Video-O1）：文生 / 参考生视频（多图 image_list）/ 首尾帧
  * - 其他（含默认）：文生 / 图生
  */
 export function getSupportedVideoModes(modelId: string | null | undefined): VideoModeOption[] {
   const mode = getModelCapability(modelId)?.videoRequestMode
   switch (mode) {
     case 'viduq3-fast':
-    case 'kling-omni':
       return buildVideoModeOptions(['text2video', 'image2video', 'startEnd2video'])
+    case 'kling-omni':
+      return buildVideoModeOptions(['text2video', 'referenceImage2video', 'startEnd2video'])
     case 'minimax-hailuo':
       return buildVideoModeOptions([
         'text2video',
@@ -241,7 +246,9 @@ export function getSupportedVideoModes(modelId: string | null | undefined): Vide
       ])
     case 'kling-v26':
     case 'kling-v3':
-      return buildVideoModeOptions(['text2video', 'image2video', 'motionControl2video'])
+      return buildVideoModeOptions(['text2video', 'startEnd2video', 'motionControl2video'])
+
+
     case 'seedance-2':
       return buildVideoModeOptions([
         'text2video',
@@ -274,4 +281,46 @@ export const SEEDANCE_2_WHITELIST_NOTICE =
 export function isSeedance2Model(modelId: string | null | undefined): boolean {
   return getModelCapability(modelId)?.videoRequestMode === 'seedance-2'
 }
+
+/**
+ * 判断某个模型是否属于 Kling 系列（基于 videoRequestMode）。
+ * Kling 系列支持通过 `audio: native/off` 生成带声音的视频，
+ * 因此视频节点会针对该系列展示「是否生成声音」开关。
+ */
+export function isKlingVideoModel(modelId: string | null | undefined): boolean {
+  const mode = getModelCapability(modelId)?.videoRequestMode
+  return mode === 'kling-v26' || mode === 'kling-v3' || mode === 'kling-omni' || mode === 'kling-o1'
+}
+
+
+/**
+ * 各媒体类型的「首选默认模型」优先级列表（均为非 seedance2.0 系列）。
+ * 简易模式 / 无限画布在没有已选模型时，会按此顺序挑选默认模型，
+ * 确保默认永远不落到白名单专属的 seedance2.0 系列上。
+ */
+export const PREFERRED_DEFAULT_MODEL_IDS: Record<MediaType, string[]> = {
+  image: ['Qwen-Image-2.0-Pro', 'Doubao-Seedream-5.0-lite'],
+  video: ['Kling-V2.6', 'Kling-V3', 'ViduQ3-Pro-Fast', 'MiniMax-Hailuo-2.3'],
+}
+
+/**
+ * 从候选模型 id 列表中挑选默认模型：
+ * 1. 优先命中该媒体类型的首选默认模型（非 seedance）；
+ * 2. 否则退回第一个非 seedance 模型；
+ * 3. 仍无则退回列表第一个。
+ */
+export function pickPreferredDefaultModelId(
+  mediaType: MediaType,
+  candidateIds: string[]
+): string | null {
+  if (candidateIds.length === 0) return null
+  const lowerToId = new Map(candidateIds.map((id) => [id.toLowerCase(), id]))
+  for (const preferred of PREFERRED_DEFAULT_MODEL_IDS[mediaType]) {
+    const hit = lowerToId.get(preferred.toLowerCase())
+    if (hit) return hit
+  }
+  const firstNormal = candidateIds.find((id) => !isSeedance2Model(id))
+  return firstNormal ?? candidateIds[0]
+}
+
 
