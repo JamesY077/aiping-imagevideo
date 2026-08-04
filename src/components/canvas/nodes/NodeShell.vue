@@ -393,6 +393,30 @@ defineExpose({
       autoResize()
     })
   },
+  // 供外部（具体节点）在光标处插入任意文本，例如运镜指令 [上升]。
+  insertText(text: string) {
+    const el = promptRef.value
+    const current = props.data.prompt || ''
+    if (!el) {
+      const next = current && !current.endsWith(' ') ? `${current} ${text}` : `${current}${text}`
+      store.updateNodeData(props.id, { prompt: next })
+      return
+    }
+    const start = el.selectionStart ?? current.length
+    const end = el.selectionEnd ?? current.length
+    const before = current.slice(0, start)
+    const after = current.slice(end)
+    const needsLeadingSpace = before.length > 0 && !before.endsWith(' ')
+    const insert = needsLeadingSpace ? ` ${text}` : text
+    const next = `${before}${insert}${after}`
+    store.updateNodeData(props.id, { prompt: next })
+    nextTick(() => {
+      el.focus()
+      const caret = before.length + insert.length
+      el.setSelectionRange(caret, caret)
+      autoResize()
+    })
+  },
 })
 </script>
 

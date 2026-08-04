@@ -50,6 +50,10 @@
         AI润色
       </button>
 
+      <!-- 运镜指令（MiniMax 海螺系列：文生 / 图生 / 首尾帧） -->
+      <CameraMovementGuide v-if="showCameraGuide" compact @insert="insertCameraCommand" />
+
+
       <!-- 是否生成声音（仅 Kling 系列支持 audio=native/off，默认关闭） -->
       <button
         v-if="showKlingSound"
@@ -63,7 +67,9 @@
 
 
       <!-- 图生视频：上传参考图 -->
+
       <label v-if="showUpload" class="gen-chip gen-upload">
+
         {{ data.referenceFileName ? '已选图' : '参考图' }}
         <input type="file" accept="image/*" hidden @change="onFile" />
       </label>
@@ -193,7 +199,9 @@ import { computed, ref } from 'vue'
 import NodeShell from './NodeShell.vue'
 
 import ModelSelector from '@/components/ModelSelector.vue'
+import CameraMovementGuide from '@/components/CameraMovementGuide.vue'
 import { useGenerationNode, type GenerationNodeProps } from './useGenerationNode'
+import { getModelCapability } from '@/types/model'
 import { DEFAULT_VIDEO_SYSTEM_PROMPT } from '@/stores/settingsStore'
 
 const props = defineProps<GenerationNodeProps>()
@@ -216,6 +224,8 @@ const {
   showKlingSound,
   MULTIMODAL_LIMITS,
 
+
+
   onVideoMode,
   onRatio,
   onDuration,
@@ -231,6 +241,29 @@ const {
   onEditVideo,
   onEditImage,
 } = useGenerationNode(props)
+
+// 运镜指令提示：仅 MiniMax 海螺系列（minimax-hailuo）在文生 / 图生 / 首尾帧模式下展示。
+const showCameraGuide = computed(() => {
+  const mode = getModelCapability(props.data.model)?.videoRequestMode
+  if (mode !== 'minimax-hailuo') return false
+  const videoMode = props.data.videoMode || 'text2video'
+  return ['text2video', 'image2video', 'startEnd2video'].includes(videoMode)
+})
+
+/**
+ * 插入运镜指令 / 示例到 prompt（MiniMax 海螺系列）。
+ * 优先调用 NodeShell 暴露的 insertText（在光标处插入），否则退化为末尾追加。
+ */
+function insertCameraCommand(text: string) {
+  const shell = shellRef.value as unknown as { insertText?: (text: string) => void } | null
+  if (shell?.insertText) {
+    shell.insertText(text)
+    return
+  }
+  const current = props.data.prompt || ''
+  const next = current && !current.endsWith(' ') ? `${current} ${text}` : `${current}${text}`
+  store.updateNodeData(props.id, { prompt: next })
+}
 
 // 是否已有任意多模态素材（用于决定是否展示缩略图区）。
 const hasMultimodalAssets = computed(

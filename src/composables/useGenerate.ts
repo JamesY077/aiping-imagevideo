@@ -122,10 +122,12 @@ async function buildVideoParams(
 
       if (uploadValue) {
         videoParams.image = uploadValue
-        videoParams.sound = 'off'
+        // 声音字段跟随开关：开启则 on，否则 off（与 audio=native/off 保持一致）。
+        videoParams.sound = klingAudio === 'native' ? 'on' : 'off'
         deleteVideoRatio(videoParams)
       } else {
-        videoParams.sound = 'on'
+        // 声音字段跟随开关：开启则 on，否则 off（与 audio=native/off 保持一致）。
+        videoParams.sound = klingAudio === 'native' ? 'on' : 'off'
         setVideoRatio(videoParams, getKlingAspectRatio(aspectRatio))
       }
       videoParams.model_name = model || undefined

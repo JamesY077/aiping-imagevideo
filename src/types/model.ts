@@ -188,10 +188,15 @@ export function getSupportedVideoDurations(modelId: string | null | undefined): 
         { value: 10, label: '10s' },
       ]
 
-    case 'viduq3-fast':
     case 'minimax-hailuo':
+      // MiniMax-Hailuo-2.3 支持 6s / 10s 两档时长。
       return [
-        { value: mode === 'viduq3-fast' ? 5 : 6, label: mode === 'viduq3-fast' ? '5s' : '6s' },
+        { value: 6, label: '6s' },
+        { value: 10, label: '10s' },
+      ]
+    case 'viduq3-fast':
+      return [
+        { value: 5, label: '5s' },
       ]
     default:
       return [

@@ -180,11 +180,20 @@
                   <span class="sound-toggle-text">{{ klingSound ? '开' : '关' }}</span>
                 </button>
               </div>
+
             </div>
 
 
+
+            <!-- 运镜指令（MiniMax 海螺系列：文生 / 图生 / 首尾帧）单独一行，避免挤压上方胶囊 -->
+            <div v-if="showCameraGuide" class="camera-guide-row">
+              <CameraMovementGuide compact @insert="insertCameraCommand" />
+            </div>
+
             <div v-if="showReferenceField" class="reference-strip">
+
               <template v-if="usesViduLikeVideoMode">
+
                 <div v-if="videoMode === 'image2video'" class="upload-mini-row upload-card-row" :class="{ 'has-file': !!uploadedFile }">
                   <input
                     ref="fileInput"
@@ -333,7 +342,7 @@
                 </div>
 
 
-                <div v-else-if="videoMode === 'subjectReference2video'" class="subject-reference-card" :class="{ 'has-file': !!uploadedFile || !!referenceUrl }">
+                <div v-else-if="videoMode === 'subjectReference2video'" class="subject-reference-card" :class="{ 'has-file': !!uploadedFile }">
 
                   <input
                     ref="fileInput"
@@ -348,18 +357,12 @@
                   </button>
                   <div class="subject-reference-copy">
                     <span class="upload-label">主体参考</span>
-                    <span class="upload-hint">上传人物主体图片，或粘贴图片链接生成 S2V 视频</span>
+                    <span class="upload-hint">上传人物主体图片生成 S2V 视频</span>
                   </div>
                   <span v-if="uploadedFile" class="pill-filename">{{ uploadedFile.name }}</span>
                   <button v-if="uploadedFile" class="text-btn" type="button" @click="() => removeUploadedFile()">移除</button>
-                  <input
-                    v-else
-                    v-model.trim="referenceUrl"
-                    type="url"
-                    class="reference-input subject-reference-url"
-                    placeholder="或粘贴主体图片 URL"
-                  />
                 </div>
+
 
                 <div v-else-if="videoMode === 'editVideo'" class="multimodal-panel edit-video-panel">
                   <p class="multimodal-note">
@@ -626,6 +629,7 @@ import { ref, nextTick, onMounted, computed, watch, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import ChatBubble from '@/components/ChatBubble.vue'
 import ModelSelector from '@/components/ModelSelector.vue'
+import CameraMovementGuide from '@/components/CameraMovementGuide.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT } from '@/stores/settingsStore'
 import { useGenerate } from '@/composables/useGenerate'
@@ -688,6 +692,8 @@ const klingSound = ref(false)
 
 
 // 多模态参考（Seedance 2.0 系列）：图片 0~9 / 视频 0~3 / 音频 0~3
+
+
 const MULTIMODAL_LIMITS = { image: 9, video: 3, audio: 3 } as const
 // Kling V3-Omni / Video-O1「参考生视频」：多图主体，参考图片上限 7 张（复用 multimodalImages 承载）。
 const KLING_REFERENCE_IMAGE_LIMIT = 7
@@ -765,6 +771,16 @@ const isKlingMotionControlVideoModel = computed(() => {
 const showKlingSound = computed(() => {
   const mode = modelCapability.value?.videoRequestMode
   return settingsStore.mediaType === 'video' && (mode === 'kling-v26' || mode === 'kling-v3' || mode === 'kling-omni')
+})
+
+// 运镜指令提示：仅 MiniMax 海螺系列（minimax-hailuo）在文生 / 图生 / 首尾帧模式下展示。
+
+const showCameraGuide = computed(() => {
+
+  return (
+    isMinimaxHailuoVideoModel.value &&
+    ['text2video', 'image2video', 'startEnd2video'].includes(videoMode.value)
+  )
 })
 
 const isKlingOmniVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'kling-omni')
@@ -1487,6 +1503,31 @@ async function handleCopyPrompt(prompt: string) {
   promptInputRef.value?.focus()
 }
 
+/**
+ * 插入运镜指令 / 示例到提示词（MiniMax 海螺系列）。
+ * 优先在光标处插入，否则追加到末尾，并自动处理空格。
+ */
+function insertCameraCommand(text: string) {
+  const textarea = promptInputRef.value
+  if (!textarea) {
+    const current = inputText.value
+    inputText.value = current && !current.endsWith(' ') ? `${current} ${text}` : `${current}${text}`
+    return
+  }
+  const start = textarea.selectionStart
+  const end = textarea.selectionEnd
+  const before = inputText.value.slice(0, start)
+  const after = inputText.value.slice(end)
+  const needsLeadingSpace = before.length > 0 && !before.endsWith(' ')
+  const insert = needsLeadingSpace ? ` ${text}` : text
+  inputText.value = `${before}${insert}${after}`
+  nextTick(() => {
+    const caret = before.length + insert.length
+    textarea.focus()
+    textarea.setSelectionRange(caret, caret)
+  })
+}
+
 async function toggleComposerExpanded() {
   isComposerExpanded.value = !isComposerExpanded.value
   await nextTick()
@@ -1606,16 +1647,9 @@ async function handleSend() {
 
 
         : videoMode.value === 'subjectReference2video'
-          ? (uploadedFile.value ? { ...uploadedFile.value, name: 'Subject Reference' } : null) ||
-            (referenceUrl.value.trim()
-              ? {
-                  name: 'Subject Reference',
-                  type: 'image' as const,
-                  url: referenceUrl.value.trim(),
-                  size: 0,
-                }
-              : null)
+          ? (uploadedFile.value ? { ...uploadedFile.value, name: 'Subject Reference' } : null)
           : null
+
     : uploadedFile.value ||
 
       (referenceUrl.value.trim()
@@ -1643,7 +1677,9 @@ async function handleSend() {
   scrollChatToBottom()
   await generate(prompt, ioType, settingsStore.selectedModel, file, settingsStore.aspectRatio, settingsStore.videoDuration, klingSound.value)
 
+
   settingsStore.saveToStorage()
+
   await nextTick()
   scrollChatToBottom()
 }
@@ -2263,6 +2299,16 @@ async function handleRegenerate(message: Message) {
   align-items: stretch;
 }
 
+/* 运镜指令：独占一行，弹出框向上展开，不再挤压上方胶囊行 */
+.camera-guide-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+
 /* 是否生成声音（仅 Kling 系列）：胶囊内嵌开关 */
 .meta-pill-sound {
   flex: 0 0 auto;
@@ -2319,70 +2365,17 @@ async function handleRegenerate(message: Message) {
   transform: translateX(14px);
 }
 
+.motion-control-note strong {
 
-.video-mode-switch {
-  display: inline-flex;
-  gap: 2px;
-  border: 1px solid rgba(148, 163, 184, 0.34);
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.84),
-    0 1px 2px rgba(15, 23, 42, 0.04);
-}
-
-.mode-switch-btn {
-  min-width: 72px;
-}
-
-.upload-card-row {
-  min-height: 48px;
-  padding: 6px 10px;
-  border-radius: 16px;
-  background: rgba(248, 250, 252, 0.88);
-}
-
-.upload-card-row.has-file {
-  border-color: rgba(95, 75, 139, 0.38);
-  background: rgba(95, 75, 139, 0.07);
-}
-
-.subject-reference-card {
-  width: 100%;
-  min-height: 58px;
-  display: grid;
-  grid-template-columns: auto minmax(120px, 1fr) auto auto;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border: 1px solid rgba(148, 163, 184, 0.34);
-  border-radius: 18px;
-  background: rgba(248, 250, 252, 0.9);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.84),
-    0 1px 2px rgba(15, 23, 42, 0.04);
-}
-
-.subject-reference-card.has-file {
-  border-color: rgba(95, 75, 139, 0.38);
-  background: rgba(95, 75, 139, 0.07);
-}
-
-.motion-control-panel {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.motion-control-note {
-  margin: 0;
   padding: 0 2px;
   font-size: 12px;
   font-weight: 800;
   color: rgba(15, 23, 42, 0.9);
 }
 
+
 .motion-control-note small {
+
   margin-left: 6px;
   font-size: 10px;
   font-weight: 500;
@@ -2422,9 +2415,25 @@ async function handleRegenerate(message: Message) {
   color: rgba(15, 23, 42, 0.88);
 }
 
+/* 主体参考视频：上传主体图卡片（上传按钮 + 说明 + 文件名/URL） */
+.subject-reference-card {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.86);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
 .subject-upload-btn {
   min-height: 38px;
   display: inline-flex;
+
   align-items: center;
   gap: 8px;
   padding: 0 14px;
@@ -2962,9 +2971,14 @@ async function handleRegenerate(message: Message) {
   }
 
   .subject-reference-card {
-    grid-template-columns: 1fr;
+    flex-direction: column;
     align-items: stretch;
   }
+
+  .subject-reference-url {
+    min-width: 100%;
+  }
+
 
   .video-mode-switch,
   .video-mode-switch .switch-btn {

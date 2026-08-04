@@ -382,7 +382,8 @@ export async function generateVideo(params: VideoGenerateRequest): Promise<Video
       if (fullBody.ratio) minimalBody.ratio = fullBody.ratio
       if (fullBody.size) minimalBody.size = fullBody.size
       if (fullBody.resolution) minimalBody.resolution = fullBody.resolution
-      if (typeof fullBody.audio === 'boolean') minimalBody.audio = fullBody.audio
+      // Kling 系列的 audio 是字符串（native/off），Seedance 等是布尔值，两种都需保留。
+      if (typeof fullBody.audio === 'boolean' || typeof fullBody.audio === 'string') minimalBody.audio = fullBody.audio
       if (fullBody.movement_amplitude) minimalBody.movement_amplitude = fullBody.movement_amplitude
       if (typeof fullBody.off_peak === 'boolean') minimalBody.off_peak = fullBody.off_peak
       if (typeof fullBody.watermark === 'boolean') minimalBody.watermark = fullBody.watermark
