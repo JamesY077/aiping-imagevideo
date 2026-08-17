@@ -80,6 +80,9 @@ async function handleSubmit() {
 .setup-page {
   min-height: 100dvh;
   padding: 24px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(10, 132, 255, 0.10), transparent 30%),
+    linear-gradient(180deg, #fbfbfd 0%, #f5f5f7 55%, #eef0f3 100%);
 }
 
 .setup-shell {
@@ -175,7 +178,8 @@ label {
 }
 
 .text-input:focus {
-  border-color: var(--color-border-strong);
+  border-color: rgba(10, 132, 255, 0.38);
+  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.10);
 }
 
 .tips {
@@ -196,8 +200,9 @@ label {
   width: 100%;
   margin-top: 20px;
   border: none;
-  background: #111;
+  background: var(--color-theme-gradient);
   color: #fff;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.18);
 }
 
 .submit-btn:disabled {

@@ -239,7 +239,7 @@ function handleClear() {
   if (confirm('确定要清除配置并退出吗？')) {
     apiStore.clear()
     chatStore.clearMessages()
-    router.push('/landing')
+    router.replace('/setup')
   }
 }
 
@@ -261,6 +261,9 @@ function resetPolishPrompt() {
 .settings-page {
   min-height: 100dvh;
   padding: 20px;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(10, 132, 255, 0.10), transparent 30%),
+    linear-gradient(180deg, #fbfbfd 0%, #f5f5f7 55%, #eef0f3 100%);
 }
 
 .topbar-inner,
@@ -336,7 +339,7 @@ h1 {
   gap: 18px;
   align-items: end;
   background:
-    linear-gradient(135deg, rgba(37, 99, 235, 0.12), transparent 26%),
+    linear-gradient(135deg, rgba(10, 132, 255, 0.10), transparent 28%),
     rgba(255, 255, 255, 0.82);
 }
 
@@ -468,8 +471,9 @@ h1 {
 
 .primary-btn {
   border: none;
-  background: linear-gradient(135deg, #0f172a, #2563eb);
+  background: var(--color-theme-gradient);
   color: #fff;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.18);
 }
 
 .danger-btn {
@@ -554,8 +558,8 @@ label {
 .text-input:focus,
 .text-area:focus {
   outline: none;
-  border-color: rgba(37, 99, 235, 0.34);
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+  border-color: rgba(10, 132, 255, 0.40);
+  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.10);
   background: rgba(255, 255, 255, 0.96);
 }
 

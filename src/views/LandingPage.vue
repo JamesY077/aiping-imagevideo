@@ -142,9 +142,9 @@ onBeforeUnmount(() => {
   min-height: 100dvh;
   padding: 14px 20px 20px;
   background:
-    radial-gradient(circle at top left, rgba(218, 227, 255, 0.72), transparent 34%),
-    radial-gradient(circle at right center, rgba(255, 230, 214, 0.65), transparent 30%),
-    linear-gradient(180deg, #f7f3ee 0%, #f2ede7 100%);
+    radial-gradient(circle at 10% 0%, rgba(10, 132, 255, 0.10), transparent 32%),
+    radial-gradient(circle at 90% 8%, rgba(0, 0, 0, 0.06), transparent 26%),
+    linear-gradient(180deg, #fbfbfd 0%, #f5f5f7 55%, #eef0f3 100%);
 }
 
 .page-content,
@@ -166,7 +166,13 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 24px;
   min-height: 56px;
-  padding: 8px 0;
+  padding: 8px 10px 8px 16px;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
 }
 
 .brand-lockup {
@@ -192,7 +198,7 @@ onBeforeUnmount(() => {
   line-height: 1;
   font-family: "Georgia", "Times New Roman", serif;
   font-style: italic;
-  background: linear-gradient(135deg, #171717 0%, #5f4b8b 45%, #c86b4a 100%);
+  background: linear-gradient(135deg, #000000 0%, #1d1d1f 60%, #0a84ff 130%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -225,9 +231,9 @@ onBeforeUnmount(() => {
 .nav-primary,
 .hero-primary {
   border: none;
-  background: linear-gradient(135deg, #171717 0%, #5f4b8b 45%, #c86b4a 100%);
+  background: var(--color-theme-gradient);
   color: #fff;
-  box-shadow: 0 12px 28px rgba(95, 75, 139, 0.22);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.20);
 }
 
 .nav-secondary,
@@ -321,10 +327,10 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-rows: auto 1fr auto;
   gap: 12px;
-  border: 1px solid rgba(30, 41, 59, 0.08);
-  background: rgba(255, 255, 255, 0.58);
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(14px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.66);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(24px);
   margin-left: -22px;
 }
 
@@ -361,9 +367,9 @@ onBeforeUnmount(() => {
   overflow: hidden;
   border-radius: 24px;
   background:
-    radial-gradient(circle at top left, rgba(210, 220, 255, 0.56), transparent 32%),
-    linear-gradient(180deg, rgba(250, 249, 246, 0.92), rgba(241, 236, 229, 0.92));
-  border: 1px solid rgba(30, 41, 59, 0.08);
+    radial-gradient(circle at top left, rgba(10, 132, 255, 0.16), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(238, 240, 243, 0.94));
+  border: 1px solid rgba(0, 0, 0, 0.08);
   min-height: 316px;
 }
 
@@ -372,9 +378,9 @@ onBeforeUnmount(() => {
   max-width: 260px;
   padding: 16px;
   border-radius: 18px;
-  border: 1px solid rgba(30, 41, 59, 0.08);
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.90);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.07);
 }
 
 .visual-card-output {
@@ -405,8 +411,8 @@ onBeforeUnmount(() => {
   width: 100%;
   padding: 14px 16px;
   border-radius: 18px;
-  border: 1px solid rgba(30, 41, 59, 0.08);
-  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.78);
 }
 
 .dialogue-prefix {
@@ -444,7 +450,7 @@ onBeforeUnmount(() => {
   height: 1.2em;
   margin-left: 2px;
   border-radius: 999px;
-  background: rgba(95, 75, 139, 0.8);
+  background: #0a84ff;
   animation: caretBlink 0.9s step-end infinite;
 }
 

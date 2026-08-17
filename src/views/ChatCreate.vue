@@ -642,9 +642,9 @@
                     <path d="M10.75 13.25L19.5 4.5" :stroke="canSend && !activeSessionGenerating ? 'currentColor' : 'url(#chatSendGradient)'" stroke-width="1.8" stroke-linecap="round" />
                     <defs>
                       <linearGradient id="chatSendGradient" x1="4" y1="4.5" x2="19.5" y2="19.5" gradientUnits="userSpaceOnUse">
-                        <stop offset="0" stop-color="#171717" />
-                        <stop offset="0.45" stop-color="#5f4b8b" />
-                        <stop offset="1" stop-color="#c86b4a" />
+                        <stop offset="0" stop-color="#000000" />
+                        <stop offset="0.55" stop-color="#1d1d1f" />
+                        <stop offset="1" stop-color="#0a84ff" />
                       </linearGradient>
                     </defs>
                   </svg>
@@ -1787,8 +1787,8 @@ async function handleRegenerate(message: Message) {
   pointer-events: none;
   background:
     radial-gradient(circle at 18% 14%, rgba(255, 255, 255, 0.72), transparent 0 20%),
-    radial-gradient(circle at 78% 22%, rgba(142, 165, 255, 0.18), transparent 0 18%),
-    linear-gradient(180deg, rgba(246, 244, 239, 0.76), rgba(238, 236, 232, 0.92));
+    radial-gradient(circle at 78% 22%, rgba(10, 132, 255, 0.12), transparent 0 18%),
+    linear-gradient(180deg, rgba(251, 251, 253, 0.82), rgba(238, 240, 243, 0.94));
 }
 
 .workspace-shell,
@@ -1822,10 +1822,10 @@ async function handleRegenerate(message: Message) {
   min-height: 0;
   padding: 16px 14px 14px;
   border-radius: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.86);
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(22px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(24px);
 }
 
 .single-session-sidebar {
@@ -1853,7 +1853,7 @@ async function handleRegenerate(message: Message) {
   line-height: 1;
   font-family: "Georgia", "Times New Roman", serif;
   font-style: italic;
-  background: linear-gradient(135deg, #171717 0%, #5f4b8b 45%, #c86b4a 100%);
+  background: linear-gradient(135deg, #000000 0%, #1d1d1f 58%, #0a84ff 135%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -1874,8 +1874,8 @@ async function handleRegenerate(message: Message) {
   gap: 8px;
   padding: 12px 12px 14px;
   border-radius: 18px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.86), rgba(246, 244, 239, 0.7));
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.92), rgba(240, 242, 245, 0.78));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
@@ -1887,8 +1887,8 @@ async function handleRegenerate(message: Message) {
   font-weight: 800;
   letter-spacing: 0.02em;
   color: #fff;
-  background: linear-gradient(135deg, #171717 0%, #5f4b8b 55%, #c86b4a 100%);
-  box-shadow: 0 6px 16px rgba(95, 75, 139, 0.22);
+  background: var(--color-theme-gradient);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
 }
 
 .mode-intro-desc {
@@ -1912,14 +1912,14 @@ async function handleRegenerate(message: Message) {
   font-weight: 700;
   letter-spacing: 0.02em;
   color: #fff;
-  background: linear-gradient(135deg, #5f4b8b, #c86b4a);
-  box-shadow: 0 14px 28px rgba(95, 75, 139, 0.2);
+  background: var(--color-theme-gradient);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
   transition: transform var(--transition-base), box-shadow var(--transition-base);
 }
 
 .skill-create-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 18px 34px rgba(95, 75, 139, 0.26);
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.24);
 }
 
 .skill-create-icon {
@@ -1944,12 +1944,12 @@ async function handleRegenerate(message: Message) {
   font-weight: 700;
   letter-spacing: 0.02em;
   color: #f8fafc;
-  background: #171717;
+  background: #111113;
   transition: background var(--transition-base);
 }
 
 .canvas-entry-btn:hover {
-  background: #262233;
+  background: #2c2c2e;
 }
 
 .canvas-entry-text {
@@ -2005,10 +2005,10 @@ async function handleRegenerate(message: Message) {
 .chat-stage,
 .composer-dock,
 .session-card {
-  border: 1px solid rgba(255, 255, 255, 0.88);
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.05);
-  backdrop-filter: blur(18px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(24px);
   background-clip: padding-box;
 }
 
@@ -2224,9 +2224,9 @@ async function handleRegenerate(message: Message) {
 }
 
 .switch-btn.active {
-  background: linear-gradient(135deg, rgba(23, 23, 23, 0.96), rgba(95, 75, 139, 0.94), rgba(200, 107, 74, 0.9));
+  background: var(--color-theme-gradient);
   color: #fff;
-  box-shadow: 0 14px 28px rgba(95, 75, 139, 0.18);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.16);
 }
 
 .ratio-selector {
@@ -2243,10 +2243,10 @@ async function handleRegenerate(message: Message) {
 .ratio-selector:focus-within,
 .duration-selector:focus-within,
 .media-switch:focus-within {
-  border-color: rgba(95, 75, 139, 0.42);
+  border-color: rgba(10, 132, 255, 0.42);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.92),
-    0 0 0 3px rgba(95, 75, 139, 0.08),
+    0 0 0 3px rgba(10, 132, 255, 0.08),
     0 8px 18px rgba(15, 23, 42, 0.06);
 }
 
@@ -2333,7 +2333,7 @@ async function handleRegenerate(message: Message) {
 }
 
 .ratio-dropdown-item.active {
-  background: rgba(95, 75, 139, 0.1);
+  background: rgba(10, 132, 255, 0.10);
 }
 
 .ratio-option-preview {
@@ -2448,12 +2448,12 @@ async function handleRegenerate(message: Message) {
 }
 
 .sound-toggle.active {
-  border-color: rgba(95, 75, 139, 0.5);
-  color: rgba(95, 75, 139, 0.95);
+  border-color: rgba(10, 132, 255, 0.50);
+  color: rgba(10, 132, 255, 0.95);
 }
 
 .sound-toggle.active .sound-toggle-track {
-  background: linear-gradient(135deg, #5f4b8b, #c86b4a);
+  background: var(--color-theme-gradient);
 }
 
 .sound-toggle.active .sound-toggle-thumb {
@@ -2534,7 +2534,7 @@ async function handleRegenerate(message: Message) {
   padding: 0 14px;
   border: 0;
   border-radius: 14px;
-  background: linear-gradient(135deg, rgba(23, 23, 23, 0.94), rgba(95, 75, 139, 0.9));
+  background: var(--color-theme-gradient);
   color: #fff;
   font-weight: 700;
   cursor: pointer;
@@ -2612,7 +2612,7 @@ async function handleRegenerate(message: Message) {
 }
 
 .multimodal-note b {
-  color: rgba(95, 75, 139, 0.95);
+  color: var(--color-accent-strong);
 }
 
 .multimodal-groups {
@@ -2714,17 +2714,17 @@ async function handleRegenerate(message: Message) {
 .multimodal-add-btn {
   width: 52px;
   height: 52px;
-  border: 1px dashed rgba(95, 75, 139, 0.5);
+  border: 1px dashed rgba(10, 132, 255, 0.42);
   border-radius: 12px;
-  background: rgba(95, 75, 139, 0.06);
-  color: rgba(95, 75, 139, 0.9);
+  background: rgba(10, 132, 255, 0.06);
+  color: rgba(10, 132, 255, 0.90);
   font-size: 22px;
   line-height: 1;
   cursor: pointer;
 }
 
 .multimodal-add-btn:hover {
-  background: rgba(95, 75, 139, 0.12);
+  background: rgba(10, 132, 255, 0.12);
 }
 
 /* @ 引用菜单 */
@@ -2760,7 +2760,7 @@ async function handleRegenerate(message: Message) {
 
 .mention-item:hover,
 .mention-item.active {
-  background: rgba(95, 75, 139, 0.14);
+  background: rgba(10, 132, 255, 0.14);
 }
 
 .mention-item-tag {
@@ -2770,7 +2770,7 @@ async function handleRegenerate(message: Message) {
   font-size: 10px;
   font-weight: 800;
   color: #fff;
-  background: linear-gradient(135deg, #5f4b8b, #c86b4a);
+  background: var(--color-theme-gradient);
 }
 
 .mention-item-name {
@@ -2906,17 +2906,17 @@ async function handleRegenerate(message: Message) {
 
 /* 图片：紫色系 */
 .referenced-chip-image {
-  background: linear-gradient(135deg, #5f4b8b, #8b6cd6);
+  background: linear-gradient(135deg, #111113, #4b5563);
 }
 
 /* 视频：橙红色系 */
 .referenced-chip-video {
-  background: linear-gradient(135deg, #c86b4a, #e4805a);
+  background: linear-gradient(135deg, #111113, #0a84ff);
 }
 
 /* 音频：青绿色系 */
 .referenced-chip-audio {
-  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  background: linear-gradient(135deg, #111113, #22c1dc);
 }
 
 .composer-actions {
@@ -2931,10 +2931,10 @@ async function handleRegenerate(message: Message) {
   min-height: 34px;
   max-width: 150px;
   padding: 0 12px;
-  border: 1px solid rgba(95, 75, 139, 0.35);
+  border: 1px solid rgba(10, 132, 255, 0.30);
   border-radius: 14px;
-  background: rgba(95, 75, 139, 0.08);
-  color: rgba(95, 75, 139, 0.95);
+  background: rgba(10, 132, 255, 0.08);
+  color: rgba(10, 132, 255, 0.95);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -2944,13 +2944,13 @@ async function handleRegenerate(message: Message) {
 }
 
 .skill-upload-btn-inline:hover {
-  background: rgba(95, 75, 139, 0.16);
+  background: rgba(10, 132, 255, 0.16);
 }
 
 .skill-upload-btn-inline.active {
   color: #fff;
   border-color: transparent;
-  background: linear-gradient(135deg, #5f4b8b, #c86b4a);
+  background: var(--color-theme-gradient);
 }
 
 .skill-clear-inline {
@@ -3004,7 +3004,7 @@ async function handleRegenerate(message: Message) {
 .send-btn.ready {
   background: var(--color-theme-gradient);
   color: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 16px 30px rgba(95, 75, 139, 0.2);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.20);
 }
 
 .send-btn.ready .send-gradient-icon {

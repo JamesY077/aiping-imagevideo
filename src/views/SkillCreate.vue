@@ -262,8 +262,8 @@ function goBack() {
   height: 100vh;
   color: var(--color-text);
   background:
-    radial-gradient(circle at 12% 0%, rgba(119, 142, 255, 0.14), transparent 30%),
-    radial-gradient(circle at 92% 4%, rgba(255, 219, 188, 0.4), transparent 26%),
+    radial-gradient(circle at 12% 0%, rgba(10, 132, 255, 0.10), transparent 30%),
+    radial-gradient(circle at 92% 4%, rgba(0, 0, 0, 0.05), transparent 26%),
     linear-gradient(180deg, #fdfcf8 0%, #f6f4ef 52%, #f2f0eb 100%);
 }
 .sc-header {
@@ -295,7 +295,7 @@ function goBack() {
 }
 .sc-back:hover {
   background: #ffffff;
-  border-color: rgba(90, 115, 255, 0.34);
+  border-color: rgba(10, 132, 255, 0.38);
   transform: translateY(-1px);
 }
 .sc-model {
@@ -332,7 +332,7 @@ function goBack() {
   transition: border-color var(--transition-base), color var(--transition-base), background var(--transition-base), transform var(--transition-base);
 }
 .sc-template:hover {
-  border-color: rgba(90, 115, 255, 0.4);
+  border-color: rgba(10, 132, 255, 0.40);
   color: var(--color-accent-strong);
   background: #ffffff;
   transform: translateY(-1px);
@@ -403,7 +403,7 @@ function goBack() {
   transition: border-color var(--transition-base), box-shadow var(--transition-base);
 }
 .sc-composer:focus-within {
-  border-color: rgba(90, 115, 255, 0.48);
+  border-color: rgba(10, 132, 255, 0.48);
   box-shadow: 0 0 0 4px var(--color-accent-soft);
 }
 .sc-composer textarea {
@@ -497,7 +497,7 @@ function goBack() {
 }
 .sc-editor-actions button:hover:not(:disabled) {
   background: #ffffff;
-  border-color: rgba(90, 115, 255, 0.4);
+  border-color: rgba(10, 132, 255, 0.40);
   color: var(--color-accent-strong);
   transform: translateY(-1px);
 }
@@ -521,7 +521,7 @@ function goBack() {
   transition: border-color var(--transition-base), box-shadow var(--transition-base);
 }
 .sc-md:focus {
-  border-color: rgba(90, 115, 255, 0.48);
+  border-color: rgba(10, 132, 255, 0.48);
   box-shadow: 0 0 0 4px var(--color-accent-soft);
 }
 .sc-test {
@@ -542,7 +542,7 @@ function goBack() {
 }
 .sc-test-toggle:hover {
   background: #ffffff;
-  border-color: rgba(90, 115, 255, 0.4);
+  border-color: rgba(10, 132, 255, 0.40);
   color: var(--color-accent-strong);
 }
 .sc-test-panel {
@@ -581,7 +581,7 @@ function goBack() {
   transition: border-color var(--transition-base), box-shadow var(--transition-base);
 }
 .sc-test-input input:focus {
-  border-color: rgba(90, 115, 255, 0.48);
+  border-color: rgba(10, 132, 255, 0.48);
   box-shadow: 0 0 0 4px var(--color-accent-soft);
 }
 .sc-test-input button {

@@ -57,7 +57,8 @@ input {
 }
 
 input:focus {
-  border-color: var(--color-border-strong);
+  border-color: rgba(10, 132, 255, 0.40);
+  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.10);
 }
 
 input::placeholder {
