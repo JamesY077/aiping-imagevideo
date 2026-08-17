@@ -42,29 +42,30 @@ function getConnectionErrorMessage(error: any): string {
   }
 
   if (error?.response?.status === 404) {
-    return 'Base URL 无法访问 /models 接口，请确认服务地址是否正确。'
+    return '无法连接到 AI 服务，请确认服务地址是否正确。'
   }
 
   if (error?.response?.status >= 500) {
-    return '服务端暂时不可用，请稍后重试。'
+    return 'AI 服务暂时开小差了，请稍后重试。'
   }
 
   if (error?.code === 'ECONNABORTED') {
-    return '连接超时，请检查网络或服务地址。'
+    return '连接超时了，请检查网络后重试。'
   }
 
   if (error?.message?.includes('Network Error')) {
-    return '网络请求失败，可能是服务地址不可达、跨域限制或代理未配置。'
+    return '网络连接失败，请检查服务地址、网络或代理设置。'
   }
 
-  return '连接验证失败，请检查 Base URL 和 API Key。'
+  return '连接没有成功，请检查服务地址和 API Key 后重试。'
 }
 
 function getApiErrorMessage(error: any, fallback = '请求失败，请稍后重试。'): string {
   const data = error?.response?.data
   const detail = data?.detail
   const detailMessage = typeof detail === 'string' ? detail : detail?.message || detail?.error
-  const message = detailMessage || data?.message || data?.error || error?.message
+  const rawMessage = detailMessage || data?.message || data?.error || error?.message
+  const message = typeof rawMessage === 'string' ? rawMessage : ''
 
   if (!message) return fallback
 
@@ -72,8 +73,22 @@ function getApiErrorMessage(error: any, fallback = '请求失败，请稍后重�
     return '当前模型的上游供应商暂不可用，前端已尝试多种参数格式仍失败。请稍后重试，或先切换到 Qwen-Image-2.0-Pro、Doubao-Seedream-5.0-lite 等其他图片模型。'
   }
 
-  if (error?.response?.status === 400) {
-    return `请求参数不被当前模型接受：${message}`
+  const normalizedMessage = message.toLowerCase()
+  if (
+    message.includes('版权') ||
+    message.includes('copyright') ||
+    normalizedMessage.includes('copyright restriction') ||
+    message.includes('content policy') ||
+    message.includes('safety policy') ||
+    message.includes('审核')
+  ) {
+    return '内容可能涉及版权或平台审核限制，请移除品牌名、真实人物、受保护角色或未授权素材后重试。'
+  }
+
+  if (error?.response?.status === 400 || error?.response?.status === 422) {
+    return fallback !== '请求失败，请稍后重试。'
+      ? fallback
+      : '当前模型暂时无法处理这个请求，请调整提示词、参考图、比例、时长或模型后重试。'
   }
 
   if (error?.response?.status === 401 || error?.response?.status === 403) {
@@ -85,9 +100,7 @@ function getApiErrorMessage(error: any, fallback = '请求失败，请稍后重�
   }
 
   if (error?.response?.status >= 500) {
-    return message && message !== error?.message
-      ? `生成服务暂时不可用：${message}`
-      : '生成服务暂时不可用，请稍后再试。'
+    return '生成服务暂时开小差了，请稍后重试；如果仍失败，可以切换其他模型。'
   }
 
   if (error?.code === 'ECONNABORTED') {
@@ -98,7 +111,7 @@ function getApiErrorMessage(error: any, fallback = '请求失败，请稍后重�
     return '网络异常，无法连接生成服务，请检查网络或 Base URL 配置。'
   }
 
-  return message
+  return '生成没有成功，请稍后重试；如果多次失败，可尝试更换模型或调整提示词。'
 }
 
 function parseImageSize(size: unknown): { width: number; height: number } | null {
@@ -192,6 +205,9 @@ export async function chatCompletion(params: ChatCompletionRequest): Promise<str
   }
   if (typeof params.temperature === 'number') {
     body.temperature = params.temperature
+  }
+  if (typeof params.max_tokens === 'number') {
+    body.max_tokens = params.max_tokens
   }
   if (params.extra_body) {
     body.extra_body = params.extra_body

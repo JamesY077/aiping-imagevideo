@@ -19,10 +19,18 @@ const { generate } = useGenerate()
 
 // —— 模版例子专区 ——
 const templates = [
-  { title: '影视风格 Skill', prompt: '帮我创作一个影视风格的 skill，用于生成电影质感的画面。' },
-  { title: '短视频带货 Skill', prompt: '帮我创作一个短视频带货口播的 skill，输出脚本与分镜。' },
-  { title: '产品宣传片 Skill', prompt: '帮我创作一个产品宣传片的 skill，强调质感与卖点呈现。' },
-  { title: '国风插画 Skill', prompt: '帮我创作一个国风插画风格的 skill，用于图片生成。' },
+  { title: '电影质感剧照', prompt: '帮我创作一个影视风格的 skill，用于生成电影质感的剧照、关键帧和短片镜头。' },
+  { title: '短视频带货', prompt: '帮我创作一个短视频带货口播的 skill，输出开场钩子、卖点脚本与分镜。' },
+  { title: '产品宣传片', prompt: '帮我创作一个产品宣传片的 skill，强调质感、使用场景与卖点呈现。' },
+  { title: '国风插画', prompt: '帮我创作一个国风插画风格的 skill，用于生成角色、场景和装饰性插画。' },
+  { title: '品牌视觉 VI', prompt: '帮我创作一个品牌视觉规范 skill，输出标志延展、主视觉、色彩与版式规则。' },
+  { title: '3D 卡通角色', prompt: '帮我创作一个 3D 卡通角色设计 skill，生成三视图、表情和动作参考。' },
+  { title: '游戏场景概念', prompt: '帮我创作一个游戏场景概念设计 skill，强调世界观、光影、氛围和镜头叙事。' },
+  { title: '电商产品主图', prompt: '帮我创作一个电商产品主图 skill，突出卖点、质感、背景和促销构图。' },
+  { title: '美食摄影', prompt: '帮我创作一个美食摄影 skill，用于生成高质感菜品、食材和餐桌场景。' },
+  { title: '建筑室内空间', prompt: '帮我创作一个室内设计提案 skill，生成空间效果图、材质与灯光方案。' },
+  { title: '漫剧分镜', prompt: '帮我创作一个漫剧分镜 skill，输出章节镜头、台词和画面连续性规范。' },
+  { title: '儿童绘本', prompt: '帮我创作一个儿童绘本 skill，生成温暖治愈的插画、角色与跨页叙事。' },
 ]
 
 // —— 对话 ——
@@ -169,14 +177,21 @@ function goBack() {
           </div>
         </div>
         <div class="sc-input">
-          <textarea
-            v-model="input"
-            placeholder="描述你想要的 skill，例如：帮我创作一个影视风格的 skill"
-            @keydown.enter.exact.prevent="send"
-          />
-          <button class="sc-send" :disabled="isGenerating || !input.trim()" @click="send">
-            发送
-          </button>
+          <div class="sc-composer">
+            <textarea
+              v-model="input"
+              rows="2"
+              placeholder="描述你想要的 skill，例如：帮我创作一个影视风格的 skill"
+              @keydown.enter.exact.prevent="send"
+            ></textarea>
+            <div class="sc-composer-footer">
+              <span class="sc-composer-hint">Enter 发送 · Shift + Enter 换行</span>
+              <button class="sc-send" :disabled="isGenerating || !input.trim()" @click="send">
+                <span>{{ isGenerating ? '生成中…' : '发送' }}</span>
+                <span class="sc-send-icon">↑</span>
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -245,43 +260,60 @@ function goBack() {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #0f1115;
-  color: #e6e8eb;
+  color: var(--color-text);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(119, 142, 255, 0.14), transparent 30%),
+    radial-gradient(circle at 92% 4%, rgba(255, 219, 188, 0.4), transparent 26%),
+    linear-gradient(180deg, #fdfcf8 0%, #f6f4ef 52%, #f2f0eb 100%);
 }
 .sc-header {
   display: flex;
   align-items: center;
   gap: 16px;
   padding: 14px 24px;
-  border-bottom: 1px solid #232733;
+  border-bottom: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 .sc-header h1 {
   font-size: 18px;
+  font-weight: 700;
   margin: 0;
   flex: 1;
+  letter-spacing: -0.01em;
 }
 .sc-back {
-  background: transparent;
-  border: 1px solid #2c3140;
-  color: #cbd0d8;
-  padding: 6px 12px;
-  border-radius: 8px;
+  background: var(--color-surface-strong);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text);
+  padding: 7px 13px;
+  border-radius: 12px;
   cursor: pointer;
+  box-shadow: var(--color-shadow-soft);
+  transition: border-color var(--transition-base), background var(--transition-base), transform var(--transition-base);
+}
+.sc-back:hover {
+  background: #ffffff;
+  border-color: rgba(90, 115, 255, 0.34);
+  transform: translateY(-1px);
 }
 .sc-model {
   font-size: 13px;
-  color: #8a92a3;
+  color: var(--color-text-secondary);
 }
 .sc-templates {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 12px 24px;
-  border-bottom: 1px solid #232733;
+  border-bottom: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.42);
 }
 .sc-templates-label {
   font-size: 13px;
-  color: #8a92a3;
+  color: var(--color-text-hint);
+  white-space: nowrap;
 }
 .sc-templates-list {
   display: flex;
@@ -289,16 +321,21 @@ function goBack() {
   flex-wrap: wrap;
 }
 .sc-template {
-  background: #1a1e27;
-  border: 1px solid #2c3140;
-  color: #cbd0d8;
-  padding: 6px 12px;
-  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-secondary);
+  padding: 7px 13px;
+  border-radius: 999px;
   cursor: pointer;
   font-size: 13px;
+  box-shadow: var(--color-shadow-soft);
+  transition: border-color var(--transition-base), color var(--transition-base), background var(--transition-base), transform var(--transition-base);
 }
 .sc-template:hover {
-  border-color: #4c6ef5;
+  border-color: rgba(90, 115, 255, 0.4);
+  color: var(--color-accent-strong);
+  background: #ffffff;
+  transform: translateY(-1px);
 }
 .sc-body {
   flex: 1;
@@ -309,8 +346,9 @@ function goBack() {
 .sc-chat {
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #232733;
+  border-right: 1px solid var(--color-border);
   min-height: 0;
+  background: rgba(255, 255, 255, 0.44);
 }
 .sc-messages {
   flex: 1;
@@ -319,7 +357,7 @@ function goBack() {
 }
 .sc-empty,
 .sc-test-empty {
-  color: #6b7280;
+  color: var(--color-text-hint);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -328,53 +366,108 @@ function goBack() {
 }
 .sc-msg-role {
   font-size: 12px;
-  color: #8a92a3;
+  color: var(--color-text-hint);
 }
 .sc-msg p {
   margin: 4px 0 0;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: #1a1e27;
+  padding: 10px 13px;
+  border-radius: 14px;
+  background: var(--color-surface-strong);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
   line-height: 1.5;
   white-space: pre-wrap;
+  box-shadow: var(--color-shadow-soft);
 }
 .sc-msg.user p {
-  background: #24304d;
+  background: var(--color-user-bubble);
+  border-color: transparent;
+  color: var(--color-text-inverse);
 }
 .sc-input {
-  display: flex;
-  gap: 8px;
-  padding: 12px;
-  border-top: 1px solid #232733;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
-.sc-input textarea {
+.sc-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--color-surface-strong);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 16px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+.sc-composer:focus-within {
+  border-color: rgba(90, 115, 255, 0.48);
+  box-shadow: 0 0 0 4px var(--color-accent-soft);
+}
+.sc-composer textarea {
+  width: 100%;
   flex: 1;
   resize: none;
-  height: 56px;
-  background: #1a1e27;
-  border: 1px solid #2c3140;
-  border-radius: 8px;
-  color: #e6e8eb;
-  padding: 8px 10px;
+  min-height: 58px;
+  max-height: 140px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--color-text);
+  padding: 2px;
   font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.sc-composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.sc-composer-hint {
+  font-size: 12px;
+  color: var(--color-text-hint);
 }
 .sc-send {
-  background: #4c6ef5;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--color-accent);
   border: none;
   color: #fff;
-  border-radius: 8px;
-  padding: 0 18px;
+  border-radius: 12px;
+  padding: 8px 14px;
   cursor: pointer;
+  font-weight: 600;
+  box-shadow: 0 10px 24px rgba(77, 101, 255, 0.2);
+  transition: background var(--transition-base), transform var(--transition-base), opacity var(--transition-base);
+}
+.sc-send:hover:not(:disabled) {
+  background: var(--color-accent-strong);
+  transform: translateY(-1px);
 }
 .sc-send:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
+}
+.sc-send-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 14px;
+  line-height: 1;
 }
 .sc-editor {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 16px;
+  padding: 18px;
 }
 .sc-editor-toolbar {
   display: flex;
@@ -384,62 +477,93 @@ function goBack() {
 }
 .sc-editor-title {
   font-size: 14px;
-  color: #cbd0d8;
+  font-weight: 700;
+  color: var(--color-text);
 }
 .sc-editor-actions {
   display: flex;
   gap: 8px;
 }
 .sc-editor-actions button {
-  background: #1a1e27;
-  border: 1px solid #2c3140;
-  color: #cbd0d8;
-  border-radius: 8px;
-  padding: 6px 12px;
+  background: var(--color-surface-strong);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-secondary);
+  border-radius: 12px;
+  padding: 8px 13px;
   cursor: pointer;
   font-size: 13px;
+  box-shadow: var(--color-shadow-soft);
+  transition: border-color var(--transition-base), color var(--transition-base), background var(--transition-base), transform var(--transition-base);
+}
+.sc-editor-actions button:hover:not(:disabled) {
+  background: #ffffff;
+  border-color: rgba(90, 115, 255, 0.4);
+  color: var(--color-accent-strong);
+  transform: translateY(-1px);
 }
 .sc-editor-actions button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 .sc-md {
   flex: 1;
   min-height: 200px;
-  background: #12151c;
-  border: 1px solid #2c3140;
-  border-radius: 8px;
-  color: #e6e8eb;
-  padding: 12px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 14px;
+  color: var(--color-text);
+  padding: 14px;
   font-family: 'SFMono-Regular', Menlo, monospace;
   font-size: 13px;
   line-height: 1.6;
   resize: none;
+  box-shadow: var(--color-shadow-soft);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+.sc-md:focus {
+  border-color: rgba(90, 115, 255, 0.48);
+  box-shadow: 0 0 0 4px var(--color-accent-soft);
 }
 .sc-test {
   margin-top: 12px;
 }
 .sc-test-toggle {
-  background: #1a1e27;
-  border: 1px solid #2c3140;
-  color: #cbd0d8;
-  border-radius: 8px;
-  padding: 8px 14px;
+  background: var(--color-surface-strong);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-secondary);
+  border-radius: 12px;
+  padding: 10px 14px;
   cursor: pointer;
   width: 100%;
   text-align: left;
+  font-weight: 600;
+  box-shadow: var(--color-shadow-soft);
+  transition: border-color var(--transition-base), color var(--transition-base), background var(--transition-base);
+}
+.sc-test-toggle:hover {
+  background: #ffffff;
+  border-color: rgba(90, 115, 255, 0.4);
+  color: var(--color-accent-strong);
 }
 .sc-test-panel {
-  border: 1px solid #232733;
+  border: 1px solid var(--color-border);
   border-top: none;
-  border-radius: 0 0 8px 8px;
+  border-radius: 0 0 12px 12px;
   padding: 12px;
+  background: rgba(255, 255, 255, 0.58);
 }
 .sc-test-type {
   display: flex;
   gap: 16px;
   margin-bottom: 10px;
   font-size: 13px;
+  color: var(--color-text-secondary);
+}
+.sc-test-type label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
 }
 .sc-test-input {
   display: flex;
@@ -448,22 +572,34 @@ function goBack() {
 }
 .sc-test-input input {
   flex: 1;
-  background: #1a1e27;
-  border: 1px solid #2c3140;
-  border-radius: 8px;
-  color: #e6e8eb;
-  padding: 8px 10px;
+  background: var(--color-surface-strong);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 12px;
+  color: var(--color-text);
+  padding: 9px 11px;
+  box-shadow: var(--color-shadow-soft);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+.sc-test-input input:focus {
+  border-color: rgba(90, 115, 255, 0.48);
+  box-shadow: 0 0 0 4px var(--color-accent-soft);
 }
 .sc-test-input button {
-  background: #4c6ef5;
+  background: var(--color-accent);
   border: none;
   color: #fff;
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 0 16px;
   cursor: pointer;
+  box-shadow: 0 10px 24px rgba(77, 101, 255, 0.2);
+  transition: background var(--transition-base), transform var(--transition-base), opacity var(--transition-base);
+}
+.sc-test-input button:hover:not(:disabled) {
+  background: var(--color-accent-strong);
+  transform: translateY(-1px);
 }
 .sc-test-input button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 .sc-test-results {
@@ -474,7 +610,30 @@ function goBack() {
 .sc-test-media {
   max-width: 160px;
   max-height: 160px;
-  border-radius: 8px;
-  border: 1px solid #2c3140;
+  border-radius: 12px;
+  border: 1px solid var(--color-border-strong);
+  object-fit: cover;
+  background: #fff;
+  box-shadow: var(--color-shadow-soft);
+}
+.sc-composer textarea::placeholder,
+.sc-md::placeholder,
+.sc-test-input input::placeholder {
+  color: var(--color-text-hint);
+}
+
+@media (max-width: 760px) {
+  .sc-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: 46% 1fr;
+  }
+  .sc-chat {
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .sc-templates {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 </style>

@@ -57,6 +57,7 @@ export interface ChatCompletionRequest {
   model: string
   messages: ChatMessage[]
   temperature?: number
+  max_tokens?: number
   extra_body?: Record<string, unknown>
 }
 
