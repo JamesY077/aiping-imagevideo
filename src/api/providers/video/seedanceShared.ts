@@ -11,7 +11,7 @@ import type { VideoProviderAdapter } from './types'
 
 // contents/generations 任务接口（相对 /api/v1，与 axios baseURL 拼接）。
 export const SEEDANCE_TASKS_ENDPOINT = '/multimodal/sd/videos/contents/generations/tasks'
-// 素材接口：用于把参考图 URL 转换成 asset://{id}。
+// 素材接口：保留用于排查/对接历史版本；当前主流程直接使用公网 URL，避免网关素材查询异常。
 export const SEEDANCE_ASSETS_ENDPOINT = '/multimodal/sd/assets?Action=CreateAsset&Version=2024-01-01'
 
 // 三款 Seedance 2.0 模型名称（同属「seedance2.0 系列」分组）。
@@ -84,7 +84,7 @@ export interface SeedanceReferenceAssets {
 
 /**
  * 把多模态参考素材（图片 / 视频 / 音频）转换成 Seedance content 数组。
- * assetUrls 已经过素材接口转换（asset://{id}），否则原样传入。
+ * urls 必须是可直接公网访问的 http/https 地址。
  * 顺序：text → 图片 → 视频 → 音频，与官方示例一致。
  */
 export function buildSeedanceContent(
@@ -109,8 +109,8 @@ export function buildSeedanceContent(
 }
 
 /**
- * 同步构造请求体（适配器兜底路径）。主流程在 aiping.ts 中会先异步创建素材，
- * 再复用同样的字段结构；此处不做素材转换，直接使用原始地址。
+ * 同步构造请求体（适配器兜底路径）。主流程在 aiping.ts 中会先把本地 base64
+ * 参考图换成公网 URL，再复用同样的字段结构。
  */
 export function buildSeedanceRequestBody(params: VideoGenerateRequest, canonicalModel: string): Record<string, unknown> {
   const referenceImages = collectSeedanceReferenceImages(params)

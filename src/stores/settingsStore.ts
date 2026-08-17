@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { getDefaultVideoDuration, type MediaType } from '@/types/model'
+import {
+  getDefaultVideoDuration,
+  isSeedance2Model,
+  PREFERRED_DEFAULT_MODEL_IDS,
+  type MediaType,
+} from '@/types/model'
 
 export const DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT = `你是一名专业的 AI 图像与视频提示词优化助手。
 请在保留用户原意的前提下，补全主体、场景、构图、镜头、光线、风格、材质、色彩、细节和质量描述。
@@ -87,6 +92,15 @@ export const useSettingsStore = defineStore('settings', () => {
     saveToStorage()
   }
 
+  /** 新登录/退出登录时调用：避免沿用上一次会话可能选中的 Seedance 2.0 视频模型。 */
+  function resetSeedanceVideoModelForNewSession() {
+    loadFromStorage()
+    if (mediaType.value === 'video' && isSeedance2Model(selectedModel.value)) {
+      selectedModel.value = PREFERRED_DEFAULT_MODEL_IDS.video[0] || 'Kling-V2.6'
+      saveToStorage()
+    }
+  }
+
   return {
     mediaType,
     selectedModel,
@@ -98,5 +112,6 @@ export const useSettingsStore = defineStore('settings', () => {
     loadFromStorage,
     saveToStorage,
     setMediaType,
+    resetSeedanceVideoModelForNewSession,
   }
 })

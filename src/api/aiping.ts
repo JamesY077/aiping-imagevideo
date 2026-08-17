@@ -13,7 +13,6 @@ import type {
 import { getImageProvider } from '@/api/providers/image'
 import { getVideoProvider } from '@/api/providers/video'
 import {
-  SEEDANCE_ASSETS_ENDPOINT,
   SEEDANCE_TASKS_ENDPOINT,
   buildSeedanceContent,
   collectSeedanceReferenceImages,
@@ -23,6 +22,9 @@ import {
 } from '@/api/providers/video/seedanceShared'
 
 import { AppError } from '@/utils/errors'
+import { uploadDataUriToPublicUrl } from '@/features/generate/upload'
+
+
 
 
 const client = axios.create({
@@ -259,44 +261,82 @@ export async function generateImage(params: ImageGenerateRequest): Promise<Image
 
 type SeedanceAssetType = 'Image' | 'Video' | 'Audio'
 
-/**
- * 通过素材接口把单个参考素材（URL / base64 dataURI）转换成 asset://{id}。
- * 参考 seedance2.0 api 文档：CreateAsset 中 ProjectName 固定 default，GroupId 可任填。
- * AssetType 支持 Image / Video / Audio，对应多模态参考的三类素材。
- */
-async function createSeedanceAsset(url: string, assetType: SeedanceAssetType = 'Image'): Promise<string> {
-  const response = await client.post(SEEDANCE_ASSETS_ENDPOINT, {
-    GroupId: `group-${Date.now()}`,
-    URL: url,
-    Name: `aidraw-${Date.now()}`,
-    AssetType: assetType,
-    ProjectName: 'default',
-  })
-  const assetId = response.data?.Result?.Id || response.data?.Id || response.data?.result?.id
-  if (!assetId) {
-    throw new AppError('素材上传失败：未获取到素材 ID，请稍后重试。')
+/** 判断当前配置的服务地址是否为 AI Ping 官方地址。 */
+function isAipingApiConfigured(): boolean {
+  const baseUrl = getApiBaseUrl()
+  if (!baseUrl) return false
+  if (baseUrl === '/api/v1') return true
+  try {
+    const url = new URL(baseUrl, window.location.origin)
+    return url.hostname === 'aiping.cn'
+  } catch {
+    return false
   }
-  return `asset://${assetId}`
 }
 
-/** 批量把某一类素材地址转换成 asset://{id}，保持顺序。 */
-async function createSeedanceAssets(urls: string[], assetType: SeedanceAssetType): Promise<string[]> {
-  const assetUrls: string[] = []
-  for (const url of urls) {
-    try {
-      assetUrls.push(await createSeedanceAsset(url, assetType))
-    } catch (error: any) {
-      if (error instanceof AppError) throw error
-      throw new AppError(getApiErrorMessage(error, 'Seedance 素材上传失败，请确认账号已完成白名单接入后重试。'))
+/** 把 Seedance 2.0 的上游错误转换成普通用户能理解的提示。 */
+function resolveSeedanceCreateError(error: any): AppError | null {
+  const status = error?.response?.status
+  const data = error?.response?.data
+  const msg = typeof data?.msg === 'string' ? data.msg : ''
+
+  if (status === 401 || status === 403) {
+    return new AppError('Seedance 2.0 系列仅支持已开通白名单的账号调用。当前 API Key 未开通白名单权限，请联系服务商开通后重试。')
+  }
+
+  if (status === 404 && /model参数.*不在支持列表/.test(msg)) {
+    return new AppError('当前 API Key 未开放 Seedance 2.0 视频模型，请先到服务商处开通该模型后重试。')
+  }
+
+  if (status === 500 && msg === '创建任务失败' && !isAipingApiConfigured()) {
+    return new AppError('当前服务地址暂不支持 Seedance 2.0。请到「设置 → 编辑配置」把服务地址改为 https://aiping.cn/api/v1 后重试。')
+  }
+
+  return null
+}
+
+/** 判断一个字符串是否为 base64 dataURI（data:xxx;base64,...）。 */
+function isDataUri(value: string): boolean {
+  return /^data:[^;]+;base64,/.test(value)
+}
+
+/** 图片类素材允许上传本地 base64（会先转成公网 URL）；视频/音频暂不支持本地上传。 */
+function assertRemoteAssetUrl(url: string, assetType: SeedanceAssetType): void {
+  if (isDataUri(url)) {
+    throw new AppError(
+      `Seedance 2.0 的参考${assetType === 'Video' ? '视频' : '音频'}目前需要公网 URL，暂不支持本地上传。请改用公网可访问的地址。`,
+    )
+  }
+}
+
+/**
+ * 把某一类参考素材整理成任务接口可直接使用的公网 URL：
+ * - 图片 base64：先上传到图片服务换成公网 URL。
+ * - 视频/音频 base64：暂不支持，直接给出中文提示。
+ * - 其他 http/https 地址：原样返回。
+ */
+async function prepareSeedanceReferenceUrls(urls: string[], assetType: SeedanceAssetType): Promise<string[]> {
+  const preparedUrls: string[] = []
+  for (const rawUrl of urls) {
+    if (isDataUri(rawUrl)) {
+      if (assetType === 'Image') {
+        preparedUrls.push(await uploadDataUriToPublicUrl(rawUrl))
+      } else {
+        assertRemoteAssetUrl(rawUrl, assetType)
+        preparedUrls.push(rawUrl)
+      }
+    } else {
+      preparedUrls.push(rawUrl)
     }
   }
-  return assetUrls
+  return preparedUrls
 }
+
 
 /**
  * Seedance 2.0 系列专用生成流程：
- * 1. 先把参考图 / 参考视频 / 参考音频逐个走素材接口转换成 asset://{id}。
- * 2. 再调用 contents/generations/tasks 创建视频任务。
+ * 1. 把本地 base64 参考图上传成公网 URL（视频/音频必须已是公网 URL）。
+ * 2. 直接用公网 URL 调用 contents/generations/tasks 创建视频任务。
  * 仅 AI Ping 白名单账号生成的 API Key 才能成功，否则上游返回鉴权类报错。
  */
 async function generateSeedanceVideo(params: VideoGenerateRequest, canonicalModel: string): Promise<VideoGenerateResponse> {
@@ -304,16 +344,16 @@ async function generateSeedanceVideo(params: VideoGenerateRequest, canonicalMode
   const referenceVideos = collectSeedanceReferenceVideos(params)
   const referenceAudios = collectSeedanceReferenceAudios(params)
 
-  const imageAssets = await createSeedanceAssets(referenceImages, 'Image')
-  const videoAssets = await createSeedanceAssets(referenceVideos, 'Video')
-  const audioAssets = await createSeedanceAssets(referenceAudios, 'Audio')
+  const imageUrls = await prepareSeedanceReferenceUrls(referenceImages, 'Image')
+  const videoUrls = await prepareSeedanceReferenceUrls(referenceVideos, 'Video')
+  const audioUrls = await prepareSeedanceReferenceUrls(referenceAudios, 'Audio')
 
   const body: Record<string, unknown> = {
     model: params.model || canonicalModel,
     content: buildSeedanceContent(params.prompt, {
-      images: imageAssets,
-      videos: videoAssets,
-      audios: audioAssets,
+      images: imageUrls,
+      videos: videoUrls,
+      audios: audioUrls,
     }),
     generate_audio: typeof params.audio === 'boolean' ? params.audio : true,
     ratio: params.aspect_ratio || params.ratio || '16:9',
@@ -331,9 +371,8 @@ async function generateSeedanceVideo(params: VideoGenerateRequest, canonicalMode
       status: error.response?.status,
       data: error.response?.data,
     })
-    if (error.response?.status === 401 || error.response?.status === 403) {
-      throw new AppError('Seedance 2.0 系列仅支持 AI Ping 白名单用户调用。当前 API Key 未开通白名单权限，请联系 AI Ping 完成开白后重试。')
-    }
+    const resolvedError = resolveSeedanceCreateError(error)
+    if (resolvedError) throw resolvedError
     throw new AppError(getApiErrorMessage(error, 'Seedance 2.0 视频生成失败，请确认账号已完成白名单接入后重试。'))
   }
 }

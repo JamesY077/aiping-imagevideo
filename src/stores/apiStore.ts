@@ -11,6 +11,7 @@ import {
 } from '@/api/config'
 import { testConnectionWithDetail } from '@/api/aiping'
 import { restartApiSessionGuard, stopApiSessionGuard } from '@/utils/sessionGuard'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 export const useApiStore = defineStore('api', () => {
   const apiKey = ref<string | null>(getApiKey())
@@ -36,6 +37,7 @@ export const useApiStore = defineStore('api', () => {
         markApiSessionReady()
         restartApiSessionGuard()
         isConnected.value = true
+        useSettingsStore().resetSeedanceVideoModelForNewSession()
         return true
       } else {
         connectionError.value = result.message || '连接验证失败，请检查 Base URL 和 API Key。'
@@ -63,6 +65,7 @@ export const useApiStore = defineStore('api', () => {
     clearApiBaseUrl()
     clearApiSessionReady()
     stopApiSessionGuard()
+    useSettingsStore().resetSeedanceVideoModelForNewSession()
     apiKey.value = null
     apiBaseUrl.value = getApiBaseUrlInputValue()
     isConnected.value = false

@@ -17,7 +17,12 @@
 
 
         <div class="sidebar-footer">
+          <button class="skill-create-btn" type="button" @click="router.push('/skill')">
+            <span class="skill-create-icon" aria-hidden="true">✦</span>
+            创作 Skill
+          </button>
           <button class="canvas-entry-btn" type="button" @click="router.push('/canvas')">
+
             <span class="canvas-entry-text">无限画布</span>
             <span class="canvas-entry-new" aria-label="测试版功能">BETA</span>
 
@@ -27,6 +32,7 @@
             设置
           </button>
         </div>
+
 
       </aside>
 
@@ -576,12 +582,40 @@
 
 
             <div class="composer-actions">
+              <template v-if="settingsStore.mediaType === 'video'">
+                <input
+                  ref="skillFileInput"
+                  type="file"
+                  accept=".md,text/markdown"
+                  class="file-input"
+                  @change="handleSkillFileChange"
+                />
+                <button
+                  class="skill-upload-btn-inline"
+                  type="button"
+                  :class="{ active: !!skillStore.activeSkill }"
+                  :title="skillStore.activeSkill ? `已应用 Skill：${skillStore.activeSkill.name}（点击更换）` : '上传 .md Skill，生成时将严格遵循其规范'"
+                  @click="skillFileInput?.click()"
+                >
+                  {{ skillStore.activeSkill ? `Skill：${skillStore.activeSkill.name}` : '上传 Skill' }}
+                </button>
+                <button
+                  v-if="skillStore.activeSkill"
+                  class="skill-clear-inline"
+                  type="button"
+                  title="移除已应用的 Skill"
+                  @click="skillStore.clearActiveSkill()"
+                >
+                  ×
+                </button>
+              </template>
               <button
                 class="icon-btn"
                 :title="isComposerExpanded ? '收起输入框' : '展开输入框'"
                 :aria-label="isComposerExpanded ? '收起输入框' : '展开输入框'"
                 @click="toggleComposerExpanded"
               >
+
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M8 16L16 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
                   <path d="M9 8H16V15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -634,6 +668,9 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT } from '@/stores/settingsStore'
 import { useGenerate } from '@/composables/useGenerate'
 import { useChatStore } from '@/stores/chatStore'
+import { useSkillStore } from '@/stores/skillStore'
+import { readSkillFile } from '@/features/skill/parse'
+
 import { polishPrompt } from '@/api/aiping'
 import {
   ASPECT_RATIO_OPTIONS,
@@ -654,7 +691,31 @@ import { resolveGenerateIoType } from '@/features/generate/media'
 const router = useRouter()
 const settingsStore = useSettingsStore()
 const chatStore = useChatStore()
+const skillStore = useSkillStore()
 const { generate } = useGenerate()
+
+// Skill 上传入口（简易模式，非必填）：上传后生成会携带该 skill 规范。
+const skillFileInput = ref<HTMLInputElement | null>(null)
+
+async function handleSkillFileChange(e: Event) {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+  if (!file.name.toLowerCase().endsWith('.md')) {
+    showErrorMessage('Skill 文件需为 .md（Markdown）格式。')
+    target.value = ''
+    return
+  }
+  try {
+    const content = await readSkillFile(file)
+    skillStore.setActiveSkillFromContent(content, file.name)
+  } catch (error) {
+    showErrorMessage(getReadableErrorMessage(error, 'Skill 文件读取失败，请重试。'))
+  } finally {
+    target.value = ''
+  }
+}
+
 
 const chatAreaRef = ref<HTMLElement | null>(null)
 const promptInputRef = ref<HTMLTextAreaElement | null>(null)
@@ -1675,7 +1736,8 @@ async function handleSend() {
 
   await nextTick()
   scrollChatToBottom()
-  await generate(prompt, ioType, settingsStore.selectedModel, file, settingsStore.aspectRatio, settingsStore.videoDuration, klingSound.value)
+  await generate(prompt, ioType, settingsStore.selectedModel, file, settingsStore.aspectRatio, settingsStore.videoDuration, klingSound.value, skillStore.activeSkill?.content || null)
+
 
 
   settingsStore.saveToStorage()
@@ -1698,6 +1760,8 @@ async function handleRegenerate(message: Message) {
       userMsg.uploadedFiles || userMsg.uploadedFile || null,
       aspectRatio,
       duration,
+      klingSound.value,
+      skillStore.activeSkill?.content || null,
     )
     await nextTick()
     scrollChatToBottom()
@@ -1834,8 +1898,39 @@ async function handleRegenerate(message: Message) {
   color: rgba(71, 85, 105, 0.86);
 }
 
+/* 侧边栏「创作 Skill」独立按钮（位于无限画布按钮上方） */
+.skill-create-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 16px;
+  cursor: pointer;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: linear-gradient(135deg, #5f4b8b, #c86b4a);
+  box-shadow: 0 14px 28px rgba(95, 75, 139, 0.2);
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.skill-create-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 34px rgba(95, 75, 139, 0.26);
+}
+
+.skill-create-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
 /* 无限画布：黑色平面按钮 + NEW 标志 */
+
 .canvas-entry-btn {
+
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -2830,6 +2925,46 @@ async function handleRegenerate(message: Message) {
   gap: 6px;
   align-self: flex-end;
 }
+
+/* 视频模式：对话框内「上传 Skill」按钮 */
+.skill-upload-btn-inline {
+  min-height: 34px;
+  max-width: 150px;
+  padding: 0 12px;
+  border: 1px solid rgba(95, 75, 139, 0.35);
+  border-radius: 14px;
+  background: rgba(95, 75, 139, 0.08);
+  color: rgba(95, 75, 139, 0.95);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-upload-btn-inline:hover {
+  background: rgba(95, 75, 139, 0.16);
+}
+
+.skill-upload-btn-inline.active {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(135deg, #5f4b8b, #c86b4a);
+}
+
+.skill-clear-inline {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  color: rgba(153, 27, 27, 0.9);
+  background: rgba(153, 27, 27, 0.1);
+}
+
 
 .icon-btn svg,
 .send-gradient-icon svg {

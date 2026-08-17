@@ -31,12 +31,19 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/skill',
+    name: 'SkillCreate',
+    component: () => import('@/views/SkillCreate.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/settings',
     name: 'Settings',
     component: () => import('@/views/Settings.vue'),
     meta: { requiresAuth: true },
   },
 ]
+
 
 const router = createRouter({
   history: createWebHistory(),
