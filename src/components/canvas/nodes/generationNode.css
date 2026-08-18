@@ -314,8 +314,44 @@
   border-color: #0a84ff;
   color: #0a84ff;
 }
+.gen-chip--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .gen-upload {
   cursor: pointer;
+}
+.gen-skill-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 180px;
+  height: 28px;
+  padding: 0 6px 0 10px;
+  border: 1px solid rgba(10, 132, 255, 0.5);
+  border-radius: 8px;
+  background: rgba(10, 132, 255, 0.12);
+  color: #0a84ff;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gen-skill-remove {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: rgba(10, 132, 255, 0.18);
+  color: #0a84ff;
+  font-size: 11px;
+  line-height: 18px;
+  cursor: pointer;
+}
+.gen-skill-remove:hover {
+  background: rgba(10, 132, 255, 0.32);
 }
 .gen-run {
   margin-left: auto;
@@ -333,12 +369,32 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
-.gen-handle {
-  width: 10px;
-  height: 10px;
+.vue-flow__handle.gen-handle {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
   background: #0a84ff;
-  border: 2px solid #1c1c1e;
+  border: 3px solid #1c1c1e;
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.18);
 }
+
+/* 连接线更粗更明显，便于在画布上快速识别工作流流向 */
+.vue-flow__edge .vue-flow__edge-path {
+  stroke: #0a84ff;
+  stroke-width: 3;
+}
+
+.vue-flow__edge.selected .vue-flow__edge-path,
+.vue-flow__edge:hover .vue-flow__edge-path {
+  stroke: #64d2ff;
+  stroke-width: 4;
+}
+
+.vue-flow__connection .vue-flow__connection-path {
+  stroke: #0a84ff;
+  stroke-width: 3;
+}
+
 .gen-model .model-selector {
   width: 100%;
 }
@@ -426,4 +482,3 @@
   background: #0a84ff;
   color: #fff;
 }
-

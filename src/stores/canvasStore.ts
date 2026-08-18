@@ -13,6 +13,7 @@ import { buildImageParams, buildVideoParams } from '@/features/generate/buildPar
 import type { UploadInput } from '@/features/generate/buildParams'
 
 import { pollVideoStatus } from '@/features/generate/video'
+import { buildEffectivePrompt } from '@/features/skill/apply'
 import { getModelCapability, getSupportedVideoModes } from '@/types/model'
 import type { VideoGenerationMode } from '@/types/model'
 
@@ -98,6 +99,9 @@ export interface CanvasNodeData {
 
   // 文本节点：润色进行中（供“润色”按钮显示 loading，与整体运行状态区分）
   polishing?: boolean
+  // 文本节点上传的 Skill 规范（.md 原文），会随链路传播到图片/视频生成。
+  skillContent?: string
+  skillName?: string
   // runtime state
   status?: CanvasNodeRunStatus
 
@@ -476,19 +480,6 @@ export const useCanvasStore = defineStore('canvas', () => {
     group.data.groupColor = color
   }
 
-  // 更新分组尺寸（手动拖拽右下角调整大小）。就地更新 style，保留节点引用。
-  function updateGroupSize(groupId: string, width: number, height: number) {
-    const group = nodes.value.find(
-      (node) => node.id === groupId && node.type === 'groupNode',
-    )
-    if (!group) return
-    const w = Math.max(120, Math.round(width))
-    const h = Math.max(80, Math.round(height))
-    group.style = { ...(group.style || {}), width: `${w}px`, height: `${h}px` }
-    group.dimensions = { width: w, height: h }
-  }
-
-
   // 取分组内的所有子节点 id（parentNode 指向该分组）
   function getGroupChildIds(groupId: string): string[] {
     return nodes.value
@@ -787,6 +778,11 @@ export const useCanvasStore = defineStore('canvas', () => {
         .map((n) => n.data.resultText as string)
         .reverse()
 
+      const upstreamSkills = ancestorNodes
+        .filter((n) => n.data.nodeKind === 'text' && !!n.data.skillContent)
+        .map((n) => n.data.skillContent as string)
+        .reverse()
+
       let prompt = (node.data.prompt || '').trim()
       if (upstreamTexts.length > 0) {
         prompt = [...upstreamTexts, prompt].filter(Boolean).join('\n')
@@ -833,6 +829,15 @@ export const useCanvasStore = defineStore('canvas', () => {
           resultType: 'text',
         })
         return
+      }
+
+      const hasDirectTextUpstream =
+        (kind === 'image' || kind === 'video') &&
+        upstreamIds.some((uid) => nodes.value.find((n) => n.id === uid)?.data.nodeKind === 'text')
+      const ownSkillContent = hasDirectTextUpstream ? '' : node.data.skillContent?.trim()
+      const skillContent = ownSkillContent || upstreamSkills.join('\n\n')
+      if (skillContent) {
+        prompt = await buildEffectivePrompt(prompt, skillContent)
       }
 
 
@@ -1186,7 +1191,6 @@ export const useCanvasStore = defineStore('canvas', () => {
   return {
     runningGroupId,
     updateGroupColor,
-    updateGroupSize,
     getGroupChildIds,
     runGroup,
 
@@ -1224,4 +1228,3 @@ export const useCanvasStore = defineStore('canvas', () => {
     polishTextNode,
   }
 })
-

@@ -12,7 +12,6 @@ import {
   getSupportedAspectRatios,
   getSupportedVideoDurations,
   getSupportedVideoModes,
-  isKlingVideoModel,
   type MediaType,
 } from '@/types/model'
 
@@ -72,12 +71,6 @@ export function useGenerationNode(props: GenerationNodeProps) {
   const showEditVideoUpload = computed(
     () => kind.value === 'video' && props.data.videoMode === 'editVideo',
   )
-  // Kling 系列「是否生成声音」开关：仅 Kling 系列模型支持 audio=native/off。
-  const showKlingSound = computed(
-    () => kind.value === 'video' && isKlingVideoModel(props.data.model),
-  )
-
-
   // 多模态参考各模态的数量上限。
   const MULTIMODAL_LIMITS = { image: 9, video: 3, audio: 3 } as const
 
@@ -209,7 +202,6 @@ export function useGenerationNode(props: GenerationNodeProps) {
     showMotionUpload,
     showMultimodalUpload,
     showEditVideoUpload,
-    showKlingSound,
     MULTIMODAL_LIMITS,
 
     onImageMode,
@@ -230,4 +222,3 @@ export function useGenerationNode(props: GenerationNodeProps) {
     onEditImage,
   }
 }
-

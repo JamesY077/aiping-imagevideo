@@ -219,8 +219,8 @@ const store = useCanvasStore()
 const kind = computed(() => props.data.nodeKind || 'text')
 const isRunning = computed(() => store.runningNodeId === props.id)
 
-// 选中即展开：用户点击某个节点后才出现输入框与操作
-const expanded = computed(() => !!props.selected)
+// 节点始终展开，避免“选中才展开 / 未选中缩略”的操作割裂。
+const expanded = computed(() => true)
 
 // 节点"设置"面板：显示 / 隐藏自定义系统提示词编辑区
 const showSettings = ref(false)
@@ -324,9 +324,13 @@ function detectMention() {
     mentionOpen.value = false
     return
   }
-  mentionStart.value = at
-  mentionQuery.value = between
-  mentionActive.value = 0
+  const nextStart = at
+  const nextQuery = between
+  if (nextStart !== mentionStart.value || nextQuery !== mentionQuery.value) {
+    mentionActive.value = 0
+  }
+  mentionStart.value = nextStart
+  mentionQuery.value = nextQuery
   mentionOpen.value = true
 }
 

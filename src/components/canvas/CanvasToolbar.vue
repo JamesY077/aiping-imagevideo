@@ -85,7 +85,7 @@ const buttons = [
 }
 .ct-menu {
   position: absolute;
-  bottom: calc(100% + 8px);
+  top: calc(100% + 8px);
   left: 0;
   display: flex;
   flex-direction: column;
