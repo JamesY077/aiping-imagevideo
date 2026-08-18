@@ -72,22 +72,12 @@
       </div>
     </div>
 
-    <!-- 右下角拖拽手柄：手动调整分组大小（nodrag 阻止 VueFlow 节点拖拽） -->
-    <div
-      ref="resizeHandleRef"
-      class="group-node-resize nodrag nopan"
-      title="拖拽调整分组大小"
-      @mousedown.stop.prevent="startResize"
-    />
-
-
   </div>
 </template>
 
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useVueFlow } from '@vue-flow/core'
 import {
   useCanvasStore,
   GROUP_COLORS,
@@ -103,8 +93,6 @@ const props = defineProps<{
 }>()
 
 const canvasStore = useCanvasStore()
-const { getViewport, findNode } = useVueFlow()
-const resizeHandleRef = ref<HTMLElement | null>(null)
 const label = computed(() => props.data?.label ?? '分组')
 const color = computed(() => props.data?.groupColor || DEFAULT_GROUP_COLOR)
 
@@ -164,83 +152,6 @@ function pickColor(next: string) {
 function closeColorMenu() {
   colorMenuOpen.value = false
 }
-
-// ------- 拖拽调整大小 -------
-// 关键点：VueFlow 会把外部 nodes 复制到内部状态，直接改 store 或内部节点对象的
-// style 都不一定能触发 DOM 立即重绘（VueFlow 用 transform + inline 尺寸渲染）。
-// 因此拖拽过程中直接修改真实 DOM 包裹元素（.vue-flow__node）的 width/height，
-// 保证视觉即时跟手；拖拽结束再写回 VueFlow 内部节点与 store，做状态同步与持久化。
-function startResize(event: MouseEvent) {
-  const vfNode = findNode(props.id) as any
-  // 找到当前分组对应的 DOM 包裹元素
-  const nodeEl =
-    (resizeHandleRef.value?.closest('.vue-flow__node') as HTMLElement | null) ||
-    (document.querySelector(`.vue-flow__node[data-id="${props.id}"]`) as HTMLElement | null)
-
-  const rect = nodeEl?.getBoundingClientRect()
-  const zoom0 = getViewport().zoom || 1
-  const startWidth =
-    vfNode?.dimensions?.width ||
-    (rect ? rect.width / zoom0 : 0) ||
-    parseFloat(String(vfNode?.style?.width || '')) ||
-    320
-  const startHeight =
-    vfNode?.dimensions?.height ||
-    (rect ? rect.height / zoom0 : 0) ||
-    parseFloat(String(vfNode?.style?.height || '')) ||
-    200
-  const startX = event.clientX
-  const startY = event.clientY
-  const zoom = getViewport().zoom || 1
-  let lastW = startWidth
-  let lastH = startHeight
-  let rafId = 0
-  let pendingW = startWidth
-  let pendingH = startHeight
-
-  // 用 rAF 节流：mousemove 只记录目标尺寸，真正写 DOM 合并到下一帧执行，
-  // 避免每次移动都触发同步重排（layout thrashing）导致的卡顿。
-  function flush() {
-    rafId = 0
-    lastW = pendingW
-    lastH = pendingH
-    if (nodeEl) {
-      nodeEl.style.width = `${lastW}px`
-      nodeEl.style.height = `${lastH}px`
-    }
-  }
-
-  function onMove(e: MouseEvent) {
-    // 缩放级别在拖拽开始时锁定，避免每帧读取触发额外 layout。
-    pendingW = Math.max(120, Math.round(startWidth + (e.clientX - startX) / zoom))
-    pendingH = Math.max(80, Math.round(startHeight + (e.clientY - startY) / zoom))
-    if (!rafId) rafId = requestAnimationFrame(flush)
-  }
-
-  function onUp() {
-    window.removeEventListener('mousemove', onMove)
-    window.removeEventListener('mouseup', onUp)
-    if (rafId) {
-      cancelAnimationFrame(rafId)
-      flush()
-    }
-
-    // 同步 VueFlow 内部节点尺寸（供内部布局/连线计算使用）
-    if (vfNode) {
-      vfNode.style = { ...(vfNode.style || {}), width: `${lastW}px`, height: `${lastH}px` }
-      vfNode.dimensions = { width: lastW, height: lastH }
-    }
-    // 写回 store：持久化尺寸并支持撤销/重做
-    canvasStore.updateGroupSize(props.id, lastW, lastH)
-  }
-
-  window.addEventListener('mousemove', onMove)
-  window.addEventListener('mouseup', onUp)
-}
-
-
-
-
 
 onMounted(() => window.addEventListener('click', closeColorMenu))
 onBeforeUnmount(() => window.removeEventListener('click', closeColorMenu))

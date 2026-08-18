@@ -170,23 +170,6 @@
                 </div>
               </div>
 
-              <!-- 是否生成声音（仅 Kling 系列支持 audio=native/off，默认关闭） -->
-              <div v-if="showKlingSound" class="meta-pill meta-pill-sound">
-                <span class="meta-pill-label">声音</span>
-                <button
-                  type="button"
-                  class="sound-toggle"
-                  :class="{ active: klingSound }"
-                  role="switch"
-                  :aria-checked="klingSound"
-                  :title="klingSound ? '生成的视频含有与画面适配的声音' : '生成的视频不含有声音'"
-                  @click="klingSound = !klingSound"
-                >
-                  <span class="sound-toggle-track"><span class="sound-toggle-thumb" /></span>
-                  <span class="sound-toggle-text">{{ klingSound ? '开' : '关' }}</span>
-                </button>
-              </div>
-
             </div>
 
 
@@ -748,10 +731,6 @@ interface ImageDimensions {
 }
 const imageMode = ref<ImageMode>('text2image')
 const videoMode = ref<VideoMode>('text2video')
-// Kling 系列「是否生成声音」：true 生成带声音的视频（audio=native），false 无声音（默认关闭）。
-const klingSound = ref(false)
-
-
 // 多模态参考（Seedance 2.0 系列）：图片 0~9 / 视频 0~3 / 音频 0~3
 
 
@@ -828,12 +807,6 @@ const isKlingMotionControlVideoModel = computed(() => {
   const mode = modelCapability.value?.videoRequestMode
   return settingsStore.mediaType === 'video' && (mode === 'kling-v26' || mode === 'kling-v3')
 })
-// Kling 系列「是否生成声音」开关：仅 Kling 系列（v26 / v3 / omni）视频模型支持 audio=native/off。
-const showKlingSound = computed(() => {
-  const mode = modelCapability.value?.videoRequestMode
-  return settingsStore.mediaType === 'video' && (mode === 'kling-v26' || mode === 'kling-v3' || mode === 'kling-omni')
-})
-
 // 运镜指令提示：仅 MiniMax 海螺系列（minimax-hailuo）在文生 / 图生 / 首尾帧模式下展示。
 
 const showCameraGuide = computed(() => {
@@ -1736,7 +1709,7 @@ async function handleSend() {
 
   await nextTick()
   scrollChatToBottom()
-  await generate(prompt, ioType, settingsStore.selectedModel, file, settingsStore.aspectRatio, settingsStore.videoDuration, klingSound.value, skillStore.activeSkill?.content || null)
+  await generate(prompt, ioType, settingsStore.selectedModel, file, settingsStore.aspectRatio, settingsStore.videoDuration, false, skillStore.activeSkill?.content || null)
 
 
 
@@ -1760,7 +1733,7 @@ async function handleRegenerate(message: Message) {
       userMsg.uploadedFiles || userMsg.uploadedFile || null,
       aspectRatio,
       duration,
-      klingSound.value,
+      false,
       skillStore.activeSkill?.content || null,
     )
     await nextTick()
@@ -2403,62 +2376,6 @@ async function handleRegenerate(message: Message) {
   width: 100%;
 }
 
-
-/* 是否生成声音（仅 Kling 系列）：胶囊内嵌开关 */
-.meta-pill-sound {
-  flex: 0 0 auto;
-}
-
-.sound-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 28px;
-  padding: 0 8px;
-  border: 1px solid rgba(100, 116, 139, 0.42);
-  border-radius: 14px;
-  background: rgba(248, 250, 252, 0.92);
-  cursor: pointer;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 700;
-  color: rgba(15, 23, 42, 0.7);
-}
-
-.sound-toggle-track {
-  position: relative;
-  display: inline-block;
-  width: 30px;
-  height: 16px;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.5);
-  transition: background var(--transition-base);
-}
-
-.sound-toggle-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 12px;
-  height: 12px;
-  border-radius: 999px;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.24);
-  transition: transform var(--transition-base);
-}
-
-.sound-toggle.active {
-  border-color: rgba(10, 132, 255, 0.50);
-  color: rgba(10, 132, 255, 0.95);
-}
-
-.sound-toggle.active .sound-toggle-track {
-  background: var(--color-theme-gradient);
-}
-
-.sound-toggle.active .sound-toggle-thumb {
-  transform: translateX(14px);
-}
 
 .motion-control-note strong {
 

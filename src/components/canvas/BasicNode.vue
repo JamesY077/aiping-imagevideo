@@ -19,6 +19,7 @@
       {{ label || '未命名节点' }}
     </div>
     <Handle class="basic-node-handle basic-node-handle--source" type="source" :position="Position.Right" />
+
   </div>
 </template>
 
@@ -51,3 +52,9 @@ function handleInput(event: Event) {
   canvasStore.updateNodeLabel(props.id, target.value)
 }
 </script>
+
+<style scoped>
+.basic-node {
+  position: relative;
+}
+</style>

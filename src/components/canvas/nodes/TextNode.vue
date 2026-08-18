@@ -21,6 +21,37 @@
     </template>
 
     <template #toolbar>
+      <!-- Skill 规范上传：仅文本节点提供，非必填；上传后会沿连线约束下游图片/视频生成 -->
+      <button
+        class="gen-chip gen-upload"
+        title="上传 .md Skill 文件，生成图片/视频时将严格遵循该规范（非必填）"
+        @click.stop="skillInputRef?.click()"
+      >
+        {{ data.skillName ? '更换 Skill' : '上传 Skill' }}
+      </button>
+      <input
+        ref="skillInputRef"
+        type="file"
+        accept=".md,.markdown,text/markdown,text/plain"
+        hidden
+        @change="onSkillFile"
+      />
+      <span
+        v-if="data.skillName"
+        class="gen-skill-name"
+        :title="data.skillContent || ''"
+      >
+        {{ data.skillName }}
+        <button
+          class="gen-skill-remove"
+          type="button"
+          title="移除 Skill 文件"
+          @click.stop="clearSkill"
+        >
+          ✕
+        </button>
+      </span>
+
       <!-- AI 润色开关 -->
       <button
         class="gen-chip"
@@ -60,10 +91,57 @@
 
 <script setup lang="ts">
 /** 文本节点：负责文字创作 / AI 润色。 */
+import { ref } from 'vue'
 import NodeShell from './NodeShell.vue'
 import { useGenerationNode, type GenerationNodeProps } from './useGenerationNode'
 import { DEFAULT_TEXT_SYSTEM_PROMPT } from '@/stores/settingsStore'
+import { readSkillFile } from '@/features/skill/parse'
 
 const props = defineProps<GenerationNodeProps>()
 const { store, isRunning, textModels, onTextModel } = useGenerationNode(props)
+
+const skillInputRef = ref<HTMLInputElement | null>(null)
+const skillError = ref('')
+
+async function onSkillFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  if (!/\.(md|markdown)$/i.test(file.name) && file.type !== 'text/markdown') {
+    skillError.value = '请上传 .md 或 .markdown 格式的 Skill 文件。'
+    store.updateNodeData(props.id, { error: skillError.value, status: 'failed' })
+    input.value = ''
+    return
+  }
+
+  try {
+    const content = await readSkillFile(file)
+    if (!content.trim()) {
+      throw new Error('Skill 文件内容为空，请换一个文件重试。')
+    }
+    skillError.value = ''
+    store.updateNodeData(props.id, {
+      skillContent: content,
+      skillName: file.name,
+      error: undefined,
+      status: 'idle',
+    })
+  } catch (error) {
+    skillError.value = error instanceof Error ? error.message : 'Skill 文件读取失败，请重试。'
+    store.updateNodeData(props.id, { error: skillError.value, status: 'failed' })
+  } finally {
+    input.value = ''
+  }
+}
+
+function clearSkill() {
+  skillError.value = ''
+  store.updateNodeData(props.id, {
+    skillContent: '',
+    skillName: '',
+    error: undefined,
+    status: 'idle',
+  })
+}
 </script>

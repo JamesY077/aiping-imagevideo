@@ -141,6 +141,7 @@
       </VueFlow>
 
     </div>
+
   </div>
 </template>
 
@@ -181,7 +182,6 @@ import '@vue-flow/minimap/dist/style.css'
 const router = useRouter()
 const canvasStore = useCanvasStore()
 const {
-  screenToFlowCoordinate,
   zoomIn,
   zoomOut,
   fitView,
@@ -249,7 +249,7 @@ function handlePaneDoubleClick(event: MouseEvent) {
   const target = event.target as HTMLElement
   // Only add node when double-clicking empty pane (not on an existing node)
   if (target.closest('.vue-flow__node')) return
-  const flow = screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
+  const flow = clientToFlowCoordinate({ x: event.clientX, y: event.clientY })
   contextMenu.value = {
     visible: true,
     x: event.clientX,
@@ -270,10 +270,19 @@ function handleAddNode(kind: CanvasNodeKind) {
   const rect = el?.getBoundingClientRect()
   const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2
   const cy = rect ? rect.top + rect.height / 2 : window.innerHeight / 2
-  const flow = screenToFlowCoordinate({ x: cx, y: cy })
+  const flow = clientToFlowCoordinate({ x: cx, y: cy })
   const id = canvasStore.addGenerationNode(kind, { x: flow.x - 150, y: flow.y - 80 })
   // 稍微偏移以便连续添加时不完全重叠
   return id
+}
+
+function clientToFlowCoordinate(point: { x: number; y: number }) {
+  const viewport = getViewport()
+  const zoom = viewport.zoom && Number.isFinite(viewport.zoom) && viewport.zoom > 0 ? viewport.zoom : 1
+  return {
+    x: (point.x - viewport.x) / zoom,
+    y: (point.y - viewport.y) / zoom,
+  }
 }
 
 function closeContextMenu() {
@@ -376,6 +385,10 @@ function handleKeyDown(event: KeyboardEvent) {
 }
 
 onMounted(() => {
+  // 进入无限画布时清空当前节点与连线，保证每次打开都是空白画板。
+  canvasStore.reset()
+  setViewport({ x: 0, y: 0, zoom: 1 })
+
   window.addEventListener('keydown', handleKeyDown)
   window.addEventListener('keydown', handleSpaceDown)
   window.addEventListener('keyup', handleSpaceUp)
@@ -503,7 +516,7 @@ onBeforeUnmount(() => {
 /* 顶部整体进度条 */
 .canvas-progress {
   position: absolute;
-  top: 16px;
+  top: 72px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 30;
@@ -570,11 +583,11 @@ onBeforeUnmount(() => {
   background: var(--ac-surface-hover);
 }
 
-/* Toolbar — moved to the bottom center, Apple-style floating dock */
+/* Toolbar — top center floating dock */
 :deep(.canvas-toolbar) {
   position: absolute;
-  bottom: 24px;
-  top: auto;
+  top: 16px;
+  bottom: auto;
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
@@ -792,30 +805,6 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25);
 }
 
-/* 分组右下角调整大小手柄 */
-:deep(.group-node-resize) {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 18px;
-  height: 18px;
-  cursor: nwse-resize;
-  z-index: 5;
-}
-
-:deep(.group-node-resize::after) {
-  content: '';
-  position: absolute;
-  right: 4px;
-  bottom: 4px;
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid rgba(255, 255, 255, 0.5);
-  border-bottom: 2px solid rgba(255, 255, 255, 0.5);
-  border-bottom-right-radius: 3px;
-}
-
-
 
 /* Controls — Apple-style floating vertical control (bottom-left) */
 .canvas-controls {
@@ -885,5 +874,3 @@ onBeforeUnmount(() => {
   background: var(--ac-surface-solid);
 }
 </style>
-
-
