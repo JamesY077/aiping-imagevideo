@@ -106,6 +106,9 @@ function openPreview() {
 .media-frame {
   position: relative;
   width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
   border: 0;
   border-radius: 20px;
@@ -117,9 +120,11 @@ function openPreview() {
 
 .media-frame img {
   display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
 }
 
 .media-chip,

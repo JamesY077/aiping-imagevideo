@@ -42,38 +42,52 @@ label {
 
 .input-wrapper {
   display: flex;
-  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 46px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(8, 8, 10, 0.78);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
 }
 
 input {
   flex: 1;
   min-width: 0;
-  padding: 15px 16px;
-  border: 1px solid var(--color-border);
-  border-radius: 18px;
-  background: #fff;
-  color: var(--color-text);
+  height: 44px;
+  padding: 0 16px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
   outline: none;
 }
 
-input:focus {
-  border-color: rgba(10, 132, 255, 0.40);
+.input-wrapper:focus-within {
+  border-color: rgba(171, 214, 255, 0.34);
   box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.10);
 }
 
 input::placeholder {
-  color: var(--color-text-hint);
+  color: rgba(255, 255, 255, 0.38);
 }
 
 .toggle-visibility {
   flex-shrink: 0;
-  min-height: 50px;
-  padding: 0 18px;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: #fff;
-  color: var(--color-text);
+  align-self: stretch;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
   font-size: 13px;
   font-weight: 600;
+}
+
+.toggle-visibility:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.92);
 }
 </style>

@@ -4,13 +4,13 @@ import { hasActiveApiSession, invalidateExpiredApiSession } from '@/api/config'
 const routes = [
   {
     path: '/',
-    redirect: '/home',
-  },
-  {
-    path: '/home',
     name: 'Landing',
     component: () => import('@/views/LandingPage.vue'),
     meta: { requiresNoAuth: true },
+  },
+  {
+    path: '/home',
+    redirect: '/',
   },
   {
     path: '/setup',
@@ -22,7 +22,7 @@ const routes = [
     path: '/studio',
     name: 'Chat',
     component: () => import('@/views/ChatCreate.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresNoAuth: true },
   },
   {
     path: '/canvas',
@@ -54,8 +54,8 @@ router.beforeEach((to, _from, next) => {
   invalidateExpiredApiSession()
 
   if (to.meta.requiresAuth && !hasActiveApiSession()) {
-    next('/home')
-  } else if ((to.path === '/' || to.path === '/home' || to.path === '/setup') && hasActiveApiSession()) {
+    next('/')
+  } else if (to.path === '/setup' && hasActiveApiSession()) {
     next('/studio')
   } else {
     next()

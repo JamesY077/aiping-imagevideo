@@ -4,8 +4,9 @@ import { clearApiSessionReady, getMillisecondsUntilNextChinaMidnight, hasActiveA
 let midnightRefreshTimer: number | null = null
 
 function redirectToLandingIfNeeded() {
-  if (router.currentRoute.value.path !== '/home') {
-    router.replace('/home')
+  const publicPaths = new Set(['/', '/home', '/studio', '/setup'])
+  if (!publicPaths.has(router.currentRoute.value.path)) {
+    router.replace('/')
   }
 }
 
@@ -22,7 +23,7 @@ function scheduleNextChinaMidnightRefresh() {
   const delay = getMillisecondsUntilNextChinaMidnight(new Date())
   midnightRefreshTimer = window.setTimeout(() => {
     clearApiSessionReady()
-    window.location.replace('/home')
+    window.location.replace('/')
   }, delay)
 }
 

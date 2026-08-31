@@ -1,569 +1,636 @@
 <template>
-  <div class="landing-page">
-    <header class="site-nav">
-      <div class="nav-inner">
-        <div class="brand-lockup">
-          <strong class="brand-title">ArtRealm AI</strong>
-        </div>
-        <div class="nav-actions">
-          <button class="nav-primary nav-login" @click="router.push('/setup')">登录</button>
-        </div>
-      </div>
+  <div class="home-page">
+    <header class="home-header">
+      <button class="brand-logo" type="button" aria-label="ArtRealm 首页">
+        <span class="brand-mark">A</span>
+        <span class="brand-name">ArtRealm</span>
+      </button>
+
+      <div class="nav-spacer" aria-hidden="true" />
+
+      <button class="login-btn" type="button" @click="router.push('/setup')">Login</button>
     </header>
 
-    <main class="page-content">
-      <section class="hero-section">
-        <div class="hero-copy">
-          <p class="hero-kicker">智能创作平台</p>
-          <h1>
-            更纯粹的
-            <span>图像与视频生成体验</span>
-          </h1>
-          <p class="hero-description">
-            在一个简洁、安静、专业的界面中完成提示词编写、模型切换、参考图上传与生成管理，让灵感更专注地落地。
-          </p>
-          <div class="hero-actions">
-            <button class="hero-primary" @click="router.push('/setup')">立即开始</button>
-          </div>
-        </div>
-
-        <div class="hero-stage frost-panel">
-          <div class="stage-header">
-            <div>
-              <span class="stage-label">实时工作台</span>
-              <h2>统一的创作界面</h2>
-            </div>
-            <span class="stage-badge">已就绪</span>
-          </div>
-
-          <div class="stage-visual">
-            <div class="visual-card visual-card-output">
-              <span class="mini-kicker">输出结果</span>
-              <strong>多模型统一接入</strong>
-              <p>图像生成、编辑、参考图与视频能力都在同一套创作系统中协同完成。</p>
-            </div>
-            <div class="visual-card visual-card-input">
-              <span class="mini-kicker">提示词</span>
-              <strong>电影感人像，冷暖交错光影，细腻颗粒，极简背景。</strong>
-              <p>层次更清晰，高光更柔和，画面情绪更统一，细节表达更自然。</p>
-            </div>
-          </div>
-
-          <div class="stage-dialogue">
-            <div class="dialogue-bubble">
-              <span class="dialogue-prefix">AI</span>
-              <div class="typing-line" aria-live="polite">
-                <span class="typing-text">{{ displayedPrompt }}</span>
-                <span class="typing-caret" aria-hidden="true"></span>
-              </div>
-              <span class="dialogue-send" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none">
-                  <path d="M4 12.75L19.5 4.5L15.75 19.5L11.25 13.5L4 12.75Z" stroke="url(#sendGradient)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                  <path d="M10.75 13.25L19.5 4.5" stroke="url(#sendGradient)" stroke-width="1.8" stroke-linecap="round" />
-                  <defs>
-                    <linearGradient id="sendGradient" x1="4" y1="4.5" x2="19.5" y2="19.5" gradientUnits="userSpaceOnUse">
-                      <stop offset="0" stop-color="#171717" />
-                      <stop offset="0.45" stop-color="#5f4b8b" />
-                      <stop offset="1" stop-color="#c86b4a" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-              </span>
-            </div>
-          </div>
-        </div>
+    <main class="home-main">
+      <section class="hero-copy" aria-labelledby="home-title">
+        <p class="hero-kicker">AI Creative Engine</p>
+        <h1 id="home-title">一句话生成高质感视觉资产</h1>
+        <p class="hero-subtitle">输入创意，上传参考图，快速进入简易模式完成图片生成与灵感迭代。</p>
       </section>
+
+      <div class="typewriter-card" aria-label="创作灵感">
+        <span class="typewriter-label">Creative Prompt</span>
+        <p class="typewriter-line">{{ typewriterText }}<span class="typewriter-caret" aria-hidden="true" /></p>
+      </div>
     </main>
+
+    <section class="template-section" aria-labelledby="template-title">
+      <div class="template-head">
+        <h2 id="template-title">模板库</h2>
+        <button type="button">查看全部</button>
+      </div>
+
+      <div class="template-grid">
+        <button
+          v-for="item in templates"
+          :key="item.title"
+          class="template-card"
+          type="button"
+          @click="handleTemplateClick(item)"
+        >
+          <span class="template-visual" :class="[item.theme, { 'has-image': item.image, 'is-zoomed': item.title === '影视爆炸现场' }]">
+            <img v-if="item.image" :src="item.image" alt="" class="template-image" />
+            <span v-else class="visual-glow" />
+          </span>
+          <strong>{{ item.title }}</strong>
+        </button>
+      </div>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { hasActiveApiSession } from '@/api/config'
+
+const LANDING_PENDING_PROMPT_KEY = 'artrealm_landing_pending_prompt'
 
 const router = useRouter()
 
-const prompts = ['生成一张电影感未来夜景海报', '设计一组极简高级感品牌海报', '输出一段流畅的产品展示短片']
-const promptIndex = ref(0)
-const visibleLength = ref(0)
+const templates = [
+  {
+    title: 'F1 飞驰赛车',
+    prompt: 'F1 方程式赛车在赛道上高速飞驰，低机位广角镜头，车身运动模糊，轮胎带起火花与水雾，雨后赛道反光，电影级运动摄影，浅景深，强烈速度感，超清细节',
+    theme: 'template-race',
+    image: '/template-f1.jpg',
+  },
+  {
+    title: 'iPhone 17 产品电商图',
+    prompt: 'iPhone 17 旗舰手机产品电商主图，钛金属边框高光，深色科技感背景，蓝紫渐变轮廓光，镜头模组与屏幕清晰展示，悬浮构图，商业产品摄影，高级质感，超清渲染',
+    theme: 'template-product',
+    image: '/template-iphone17.jpg',
+  },
+  {
+    title: '科技感网页 UI',
+    prompt: '未来科技感网页 UI 界面设计，深色模式仪表盘，玻璃拟态数据卡片，蓝紫渐变数据可视化图表，悬浮导航栏，清晰信息层级，高清界面设计，现代极简',
+    theme: 'template-tech',
+    image: '/template-webui.jpg',
+  },
+  {
+    title: '卡通兔子',
+    prompt: '可爱卡通兔子角色，软萌大眼睛，奶油白毛绒质感，治愈系绘本插画风格，柔和自然光，浅色温馨场景，精致细节，迪士尼级角色设计',
+    theme: 'template-commerce',
+    image: '/template-rabbit.jpg',
+  },
+  {
+    title: '无线耳机结构解析',
+    prompt: '无线头戴式降噪耳机爆炸分解产品图，精密声学结构与内部电子组件清晰展示，USB-C 充电口、电池、驱动单元、麦克风阵列与记忆棉耳罩，工业设计图纸风格，深色科技背景，商业产品渲染，超清细节',
+    theme: 'template-commerce',
+    image: '/template-headphones.jpg',
+  },
+  {
+    title: '影视爆炸现场',
+    prompt: '电影级爆炸现场，橙红色火球与黑色浓烟升腾，尘土碎片飞溅，冲击波，逆光剪影，广角构图，逼真影视特效，超高细节',
+    theme: 'template-monster',
+    image: '/template-landscape.jpg',
+  },
+  {
+    title: '中世纪战士',
+    prompt: '中世纪战士角色，厚重金属铠甲，战损做旧，斗篷，手持长剑，阴天战场背景，电影级写实人像，戏剧性侧光，细腻质感，史诗氛围',
+    theme: 'template-hero',
+    image: '/template-festival.jpg',
+  },
+  {
+    title: '专业相机三视图',
+    prompt: '专业数码相机产品三视图与爆炸分解展示，黑色机身，35mm f/2.0 定焦镜头，标注尺寸、按键与接口，工业设计图纸风格，商业产品展示，超清渲染',
+    theme: 'template-commerce',
+    image: '/template-camera.jpg',
+  },
+]
 
-let typingTimer: ReturnType<typeof window.setTimeout> | null = null
-let loopTimer: ReturnType<typeof window.setTimeout> | null = null
+const typewriterPhrases = [
+  'F1 方程式赛车在赛道上飞驰。',
+  'iPhone 17 旗舰手机产品电商主图。',
+  '未来科技感网页 UI 界面设计。',
+  '治愈系卡通兔子角色。',
+]
 
-const currentPrompt = computed(() => prompts[promptIndex.value])
-const displayedPrompt = computed(() => currentPrompt.value.slice(0, visibleLength.value))
+const typewriterText = ref('')
+let typewriterTimer: number | undefined
+let phraseIndex = 0
+let charIndex = 0
+let deleting = false
 
-const clearTimers = () => {
-  if (typingTimer) {
-    window.clearTimeout(typingTimer)
-    typingTimer = null
-  }
+function runTypewriter() {
+  const phrase = typewriterPhrases[phraseIndex % typewriterPhrases.length]
 
-  if (loopTimer) {
-    window.clearTimeout(loopTimer)
-    loopTimer = null
-  }
-}
-
-const runPromptLoop = () => {
-  clearTimers()
-  visibleLength.value = 0
-
-  const typeNext = () => {
-    const text = currentPrompt.value
-
-    if (visibleLength.value < text.length) {
-      visibleLength.value += 1
-      typingTimer = window.setTimeout(typeNext, 90)
+  if (!deleting) {
+    typewriterText.value = phrase.slice(0, charIndex + 1)
+    charIndex += 1
+    if (charIndex === phrase.length) {
+      deleting = true
+      typewriterTimer = window.setTimeout(runTypewriter, 1800)
       return
     }
-
-    loopTimer = window.setTimeout(() => {
-      promptIndex.value = (promptIndex.value + 1) % prompts.length
-      visibleLength.value = 0
-      runPromptLoop()
-    }, 1600)
+    typewriterTimer = window.setTimeout(runTypewriter, 60)
+    return
   }
 
-  typingTimer = window.setTimeout(typeNext, 240)
+  typewriterText.value = phrase.slice(0, charIndex - 1)
+  charIndex -= 1
+  if (charIndex === 0) {
+    deleting = false
+    phraseIndex += 1
+    typewriterTimer = window.setTimeout(runTypewriter, 320)
+    return
+  }
+  typewriterTimer = window.setTimeout(runTypewriter, 26)
+}
+
+function handleTemplateClick(item: { prompt: string }) {
+  sessionStorage.setItem(
+    LANDING_PENDING_PROMPT_KEY,
+    JSON.stringify({ prompt: item.prompt, hasReference: false }),
+  )
+
+  if (hasActiveApiSession()) {
+    router.push({
+      path: '/studio',
+      query: {
+        mode: 'simple',
+        type: 'image',
+        prompt: item.prompt,
+      },
+    })
+    return
+  }
+
+  router.push({ path: '/setup', query: { redirect: 'landing' } })
 }
 
 onMounted(() => {
-  runPromptLoop()
+  runTypewriter()
 })
 
 onBeforeUnmount(() => {
-  clearTimers()
+  if (typewriterTimer !== undefined) {
+    window.clearTimeout(typewriterTimer)
+  }
 })
 </script>
 
+
 <style scoped>
-.landing-page {
+.home-page {
+  position: relative;
   min-height: 100dvh;
-  padding: 14px 20px 20px;
+  overflow-x: hidden;
+  color: #fff;
   background:
-    radial-gradient(circle at 10% 0%, rgba(10, 132, 255, 0.10), transparent 32%),
-    radial-gradient(circle at 90% 8%, rgba(0, 0, 0, 0.06), transparent 26%),
-    linear-gradient(180deg, #fbfbfd 0%, #f5f5f7 55%, #eef0f3 100%);
+    radial-gradient(circle at 50% 50%, rgba(8, 14, 30, 0.02), rgba(2, 4, 12, 0.34) 64%, rgba(0, 0, 0, 0.66) 100%),
+    url('/home-collage-bg.png') center top / cover no-repeat;
+  isolation: isolate;
 }
 
-.page-content,
-.site-nav {
-  width: min(100%, var(--content-width-wide));
-  margin: 0 auto;
+.home-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.44) 0%, rgba(0, 0, 0, 0.10) 42%, rgba(0, 0, 0, 0.72) 100%),
+    radial-gradient(circle at 88% 23%, rgba(52, 229, 255, 0.16), transparent 0 22%);
 }
 
-.site-nav {
-  position: sticky;
+.home-header {
+  position: fixed;
   top: 0;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 10;
-  padding-top: 4px;
-}
-
-.nav-inner {
-  display: flex;
-  justify-content: space-between;
+  width: min(100% - 48px, 1280px);
+  height: 86px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 24px;
-  min-height: 56px;
-  padding: 8px 10px 8px 16px;
-  border: 1px solid rgba(0, 0, 0, 0.07);
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.06);
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
+  gap: 20px;
+  padding: 0;
 }
 
-.brand-lockup {
+.brand-logo,
+.login-btn,
+.template-head button,
+.template-card {
+  border: 0;
+  font: inherit;
+}
+
+.brand-logo {
+  justify-self: start;
   display: inline-flex;
   align-items: center;
+  gap: 10px;
+  padding: 0;
+  color: #fff;
+  background: transparent;
+  text-shadow: 0 8px 28px rgba(0, 0, 0, 0.38);
 }
 
-.hero-kicker,
-.stage-label,
-.mini-kicker {
-  display: block;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--color-text-hint);
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #06111f;
+  font-size: 14px;
+  font-weight: 900;
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.32),
+    0 0 34px rgba(57, 216, 255, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
-.brand-title {
-  font-size: clamp(24px, 2.1vw, 30px);
+.brand-name {
+  font-family: var(--font-family-display);
+  font-size: 18px;
   font-weight: 800;
   letter-spacing: -0.06em;
-  line-height: 1;
-  font-family: "Georgia", "Times New Roman", serif;
-  font-style: italic;
-  background: linear-gradient(135deg, #000000 0%, #1d1d1f 60%, #0a84ff 130%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
 }
 
-.nav-actions,
-.hero-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.nav-spacer {
+  width: 1px;
+  height: 1px;
 }
 
-.nav-primary,
-.hero-primary,
-.nav-secondary,
-.hero-secondary {
-  min-height: 48px;
-  padding: 0 24px;
+.login-btn {
+  justify-self: end;
+  min-width: 92px;
+  min-height: 42px;
+  padding: 0 22px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 999px;
+  background: rgba(5, 12, 26, 0.52);
+  color: rgba(255, 255, 255, 0.94);
   font-size: 14px;
   font-weight: 700;
-  transition:
-    transform var(--transition-base),
-    border-color var(--transition-base),
-    background var(--transition-base),
-    box-shadow var(--transition-base),
-    color var(--transition-base);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(18px) saturate(140%);
 }
 
-.nav-primary,
-.hero-primary {
-  border: none;
-  background: var(--color-theme-gradient);
-  color: #fff;
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.20);
+.login-btn:hover {
+  border-color: rgba(105, 240, 255, 0.44);
+  background: rgba(9, 24, 52, 0.64);
 }
 
-.nav-secondary,
-.hero-secondary {
-  border: 1px solid var(--color-border);
-  background: rgba(255, 255, 255, 0.9);
-  color: var(--color-text);
-}
-
-.nav-primary:hover,
-.hero-primary:hover,
-.nav-secondary:hover,
-.hero-secondary:hover {
-  transform: none;
-}
-
-.hero-section {
-  display: grid;
-  grid-template-columns: minmax(0, 0.94fr) minmax(320px, 0.86fr);
-  gap: 18px;
+.home-main {
+  position: relative;
+  z-index: 2;
+  width: min(100% - 48px, 1120px);
+  min-height: auto;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  padding: 18px 0 8px;
-  min-height: calc(100dvh - 74px);
+  padding: 120px 0 28px;
 }
 
 .hero-copy {
-  max-width: 560px;
+  width: min(100%, 760px);
+  margin-bottom: 28px;
+  text-align: center;
+  text-shadow: 0 12px 36px rgba(0, 0, 0, 0.42);
 }
 
 .hero-kicker {
-  letter-spacing: 0.22em;
+  margin-bottom: 12px;
+  background: linear-gradient(135deg, #f7e3c8 0%, #efb79a 52%, #e99aab 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
 }
 
 .hero-copy h1 {
-  max-width: 10ch;
-  margin-top: 10px;
-  font-size: clamp(40px, 5.2vw, 68px);
+  color: rgba(255, 255, 255, 0.96);
+  font-family: var(--font-family-display);
+  font-size: clamp(34px, 5vw, 64px);
+  font-weight: 800;
   line-height: 1.02;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.07em;
 }
 
-.hero-copy h1 span {
-  display: block;
-  font-family: inherit;
-  font-style: normal;
-  font-weight: 600;
-}
-
-.hero-description {
-  max-width: 31rem;
-  margin-top: 14px;
-  color: var(--color-text-secondary);
+.hero-subtitle {
+  width: min(100%, 560px);
+  margin: 16px auto 0;
+  color: rgba(225, 240, 255, 0.72);
   font-size: 15px;
-  line-height: 1.75;
-}
-
-.hero-actions {
-  margin-top: 20px;
-}
-
-.hero-primary,
-.nav-primary {
-  min-width: 132px;
-}
-
-.nav-login {
-  min-width: auto;
-  min-height: 40px;
-  padding: 0 18px;
-  font-size: 13px;
-  background: #111;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
-}
-
-.stage-dialogue,
-.visual-card strong {
-  display: block;
-}
-
-.visual-card p {
-  display: block;
-  margin-top: 8px;
-  color: var(--color-text-secondary);
   line-height: 1.7;
 }
 
-.hero-stage {
-  padding: 16px;
-  border-radius: 24px;
-  min-height: 460px;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  gap: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.66);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.08);
-  backdrop-filter: blur(24px);
-  margin-left: -22px;
-}
-
-.stage-header,
-.stage-dialogue {
+.typewriter-card {
+  position: relative;
+  width: min(100%, 820px);
+  min-height: 96px;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.stage-header h2 {
-  margin-top: 6px;
-  font-size: 20px;
-  letter-spacing: -0.04em;
-}
-
-.stage-badge {
-  display: inline-flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-width: 80px;
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(30, 41, 59, 0.08);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.stage-visual {
-  position: relative;
-  overflow: hidden;
+  gap: 10px;
+  padding: 20px 26px;
+  border: 1px solid rgba(255, 226, 204, 0.18);
   border-radius: 24px;
   background:
-    radial-gradient(circle at top left, rgba(10, 132, 255, 0.16), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(238, 240, 243, 0.94));
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  min-height: 316px;
+    linear-gradient(180deg, rgba(34, 25, 28, 0.88), rgba(12, 8, 10, 0.84)),
+    radial-gradient(circle at 78% 0%, rgba(255, 181, 138, 0.16), transparent 0 38%);
+  box-shadow:
+    0 30px 90px rgba(0, 0, 0, 0.52),
+    inset 0 1px 0 rgba(255, 235, 220, 0.18);
+  backdrop-filter: blur(22px) saturate(120%);
 }
 
-.visual-card {
+.typewriter-card::before {
+  content: '';
   position: absolute;
-  max-width: 260px;
-  padding: 16px;
-  border-radius: 18px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.90);
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.07);
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(135deg, rgba(255, 226, 200, 0.14), transparent 38%),
+    linear-gradient(315deg, rgba(255, 190, 170, 0.08), transparent 48%);
+  mix-blend-mode: screen;
 }
 
-.visual-card-output {
-  left: 20px;
-  top: 20px;
-}
-
-.visual-card-input {
-  right: 20px;
-  bottom: 20px;
-}
-
-.visual-card strong {
-  font-size: 17px;
-  letter-spacing: -0.03em;
-  line-height: 1.45;
-}
-
-.stage-dialogue {
-  align-items: flex-end;
-  justify-content: flex-start;
-}
-
-.dialogue-bubble {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 14px 16px;
-  border-radius: 18px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.78);
-}
-
-.dialogue-prefix {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  background: #111;
-  color: #fff;
-  font-size: 12px;
+.typewriter-label {
+  background: linear-gradient(135deg, #f7e3c8 0%, #efb79a 48%, #e99aab 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-family: "Georgia", "Times New Roman", serif;
+  font-style: italic;
+  font-size: 13px;
   font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
-.typing-line {
-  display: inline-flex;
-  align-items: center;
-  flex: 1;
+.typewriter-line {
+  position: relative;
+  z-index: 1;
+  min-height: 1.6em;
   margin: 0;
-  font-size: 16px;
+  color: rgba(255, 245, 236, 0.92);
+  font-family: var(--font-family-display);
+  font-size: clamp(14px, 1.1vw, 17px);
+  font-weight: 500;
   line-height: 1.6;
-  min-height: 26px;
-  white-space: nowrap;
-  overflow: hidden;
+  letter-spacing: 0.01em;
+  text-align: center;
+  white-space: pre-wrap;
 }
 
-.typing-text {
-  color: var(--color-text);
-}
-
-.typing-caret {
+.typewriter-caret {
   display: inline-block;
   width: 2px;
-  height: 1.2em;
-  margin-left: 2px;
-  border-radius: 999px;
-  background: #0a84ff;
-  animation: caretBlink 0.9s step-end infinite;
+  height: 1.05em;
+  margin-left: 3px;
+  vertical-align: -0.14em;
+  background: linear-gradient(180deg, #ffe6c7, #efb79a);
+  animation: caret-blink 1s steps(1, end) infinite;
 }
 
-.dialogue-send {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-}
-
-.dialogue-send svg {
-  width: 22px;
-  height: 22px;
-}
-
-@keyframes caretBlink {
+@keyframes caret-blink {
   0%,
-  50% {
+  100% {
     opacity: 1;
   }
-
-  51%,
-  100% {
+  50% {
     opacity: 0;
   }
 }
 
-@media (max-width: 1180px) {
-  .hero-section {
-    grid-template-columns: 1fr;
-    min-height: auto;
-  }
+.template-section {
+  position: relative;
+  z-index: 2;
+  width: min(100% - 40px, 1520px);
+  margin: -12px auto 64px;
+  padding: 20px 0 0;
+}
 
-  .hero-copy h1 {
-    max-width: 100%;
-  }
+.template-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
 
-  .hero-stage {
-    min-height: 400px;
-    margin-left: 0;
+.template-head h2 {
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.template-head button {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.template-card {
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.76);
+  text-align: left;
+}
+
+.template-card strong {
+  display: block;
+  margin-top: 10px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 15px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-visual {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px;
+  background: #0a0a0d;
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.28);
+}
+
+.template-visual::before,
+.template-visual::after,
+.visual-glow {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.template-visual::before {
+  opacity: 0.96;
+}
+
+.template-visual::after {
+  background: linear-gradient(180deg, transparent 50%, rgba(0, 0, 0, 0.36));
+}
+
+.visual-glow {
+  filter: blur(18px);
+  opacity: 0.58;
+}
+
+.template-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.template-visual.has-image::before {
+  display: none;
+}
+
+.template-visual.is-zoomed .template-image {
+  transform: scale(1.08);
+}
+
+.template-product::before {
+  background: linear-gradient(135deg, #101722, #741a48 70%), radial-gradient(circle at 36% 38%, #f3ebce, transparent 0 20%);
+}
+
+.template-b2b::before {
+  background: linear-gradient(135deg, #2d7ab5, #d8eef6), radial-gradient(circle at 62% 44%, #ffffff, transparent 0 18%);
+}
+
+.template-tech::before {
+  background: radial-gradient(ellipse at 50% 50%, #dfeeff, transparent 0 16%), linear-gradient(135deg, #04080d, #182232);
+}
+
+.template-race::before {
+  background: linear-gradient(135deg, #d9e3e6, #1d2d36), radial-gradient(ellipse at 50% 68%, #101010, transparent 0 28%);
+}
+
+.template-monster::before {
+  background: linear-gradient(135deg, #2d1e1b, #e07936), radial-gradient(circle at 50% 50%, #1a100c, transparent 0 24%);
+}
+
+.template-commerce::before {
+  background: radial-gradient(circle at 64% 42%, #101010, transparent 0 18%), linear-gradient(135deg, #120303, #8e1113);
+}
+
+.template-hero::before {
+  background: linear-gradient(135deg, #bd2b23, #082f44 72%), radial-gradient(circle at 38% 45%, #f1a165, transparent 0 18%);
+}
+
+.template-stage::before {
+  background: linear-gradient(135deg, #dfe7ef, #46556d), radial-gradient(ellipse at 52% 74%, #ffffff, transparent 0 24%);
+}
+
+.template-card:hover .template-visual {
+  transform: translateY(-2px);
+  border-color: rgba(116, 230, 255, 0.28);
+}
+
+@media (max-width: 1100px) {
+  .template-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 860px) {
-  .landing-page {
-    padding: 10px 12px 20px;
-  }
-
-  .nav-inner {
-    padding: 10px 0;
-  }
-
-  .nav-actions,
-  .hero-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .nav-primary,
-  .hero-primary,
-  .nav-secondary,
-  .hero-secondary {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .hero-section {
-    min-height: auto;
-    padding-top: 12px;
+@media (max-width: 900px) {
+  .home-main {
+    width: min(100% - 28px, 1120px);
   }
 
   .hero-copy h1 {
-    font-size: clamp(34px, 11vw, 54px);
+    font-size: clamp(30px, 8vw, 48px);
   }
 
-  .hero-description {
+  .typewriter-card {
+    min-height: 88px;
+    padding: 16px;
+  }
+
+  .typewriter-line {
     font-size: 14px;
   }
 
-  .hero-stage {
-    min-height: 420px;
+  .template-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .home-header {
+    height: 74px;
+    width: min(100% - 32px, 1280px);
+  }
+
+  .brand-mark {
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+  }
+
+  .brand-name {
+    font-size: 18px;
+  }
+
+  .login-btn {
+    min-width: 76px;
+    min-height: 38px;
+    padding: 0 16px;
+  }
+
+  .home-main {
+    padding-top: 96px;
+    padding-bottom: 42px;
+  }
+
+  .hero-copy {
+    text-align: left;
+  }
+
+  .hero-subtitle {
+    margin-left: 0;
+  }
+
+  .typewriter-card {
+    border-radius: 20px;
     padding: 14px;
   }
 
-  .stage-header,
-  .stage-dialogue {
-    flex-direction: column;
-  }
-
-  .visual-card {
-    position: relative;
-    inset: auto;
-    max-width: none;
-    margin: 14px;
-  }
-
-  .typing-line {
+  .typewriter-line {
     font-size: 15px;
-    min-height: auto;
-    white-space: normal;
   }
 
-  .typing-caret {
-    display: none;
-  }
-
-  .stage-visual {
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    min-height: 300px;
+  .template-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

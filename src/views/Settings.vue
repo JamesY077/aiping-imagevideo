@@ -298,9 +298,23 @@ function resetPolishPrompt() {
 .settings-page {
   min-height: 100dvh;
   padding: 20px;
+  color: rgba(255, 255, 255, 0.92);
   background:
-    radial-gradient(circle at 10% 0%, rgba(10, 132, 255, 0.10), transparent 30%),
-    linear-gradient(180deg, #fbfbfd 0%, #f5f5f7 55%, #eef0f3 100%);
+    radial-gradient(circle at 16% 0%, rgba(91, 141, 255, 0.16), transparent 28%),
+    radial-gradient(circle at 84% 72%, rgba(255, 138, 76, 0.11), transparent 24%),
+    linear-gradient(180deg, #070707 0%, #0b0b0e 52%, #111114 100%);
+}
+
+.settings-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.052) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.048) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: radial-gradient(circle at 50% 40%, #000 0 34%, transparent 78%);
 }
 
 .topbar-inner,
@@ -322,9 +336,9 @@ function resetPolishPrompt() {
   padding: 20px 24px;
   border: 1px solid var(--color-border);
   border-radius: 28px;
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: var(--color-shadow-soft);
-  backdrop-filter: blur(24px);
+  background: rgba(255, 255, 255, 0.075);
+  box-shadow: var(--color-shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(28px) saturate(145%);
 }
 
 .title-block {
@@ -361,11 +375,11 @@ h1 {
 
 .hero-card,
 .card {
-  border: 1px solid var(--color-border);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 28px;
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: var(--color-shadow-soft);
-  backdrop-filter: blur(24px);
+  background: rgba(255, 255, 255, 0.075);
+  box-shadow: var(--color-shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(28px) saturate(145%);
 }
 
 .hero-card {
@@ -376,8 +390,8 @@ h1 {
   gap: 18px;
   align-items: end;
   background:
-    linear-gradient(135deg, rgba(10, 132, 255, 0.10), transparent 28%),
-    rgba(255, 255, 255, 0.82);
+    radial-gradient(circle at 15% 0%, rgba(255, 255, 255, 0.14), transparent 0 38%),
+    rgba(255, 255, 255, 0.075);
 }
 
 .hero-card h2 {
@@ -408,9 +422,9 @@ h1 {
 
 .info-list {
   overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 22px;
-  background: rgba(244, 247, 251, 0.7);
+  background: rgba(255, 255, 255, 0.055);
 }
 
 .row,
@@ -456,9 +470,9 @@ h1 {
   display: block;
   width: 100%;
   padding: 14px 16px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.07);
   color: var(--color-text-secondary);
   font-size: 13px;
   line-height: 1.6;
@@ -502,15 +516,15 @@ h1 {
 
 .ghost-btn {
   border: 1px solid var(--color-border);
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.08);
   color: var(--color-text);
 }
 
 .primary-btn {
   border: none;
   background: var(--color-theme-gradient);
-  color: #fff;
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.18);
+  color: #08080a;
+  box-shadow: 0 14px 32px rgba(255, 255, 255, 0.10);
 }
 
 .danger-btn {
@@ -567,7 +581,7 @@ label {
   width: 100%;
   border: 1px solid var(--color-border);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.84);
+  background: rgba(8, 8, 10, 0.78);
   color: var(--color-text);
   transition:
     border-color var(--transition-base),
@@ -595,9 +609,9 @@ label {
 .text-input:focus,
 .text-area:focus {
   outline: none;
-  border-color: rgba(10, 132, 255, 0.40);
-  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.10);
-  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(255, 255, 255, 0.24);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.06);
+  background: rgba(8, 8, 10, 0.92);
 }
 
 .helper-link {
@@ -619,16 +633,17 @@ label {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(15, 23, 42, 0.14);
+  background: rgba(0, 0, 0, 0.58);
   backdrop-filter: blur(10px);
 }
 
 .modal {
   padding: 28px;
-  border: 1px solid var(--color-border);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 28px;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.14);
+  background: rgba(17, 17, 20, 0.94);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.46);
+  backdrop-filter: blur(28px) saturate(145%);
 }
 
 .modal h3 {

@@ -1,48 +1,34 @@
 <template>
   <div class="chat-page">
     <div class="workspace-shell single-session-layout">
-      <aside class="session-sidebar single-session-sidebar" aria-label="当前会话">
-        <div class="sidebar-top single-session-top">
-          <div class="brand-lockup">
-            <strong class="brand-title">ArtRealm AI</strong>
-          </div>
+      <header class="top-nav">
+        <div class="brand-lockup">
+          <strong class="brand-title">ArtRealm</strong>
         </div>
 
-        <div class="mode-intro-card">
-          <span class="mode-intro-badge">简易模式</span>
-          <p class="mode-intro-desc">
-            当前处于「简易模式」：通过对话即可快速生成图像与视频，适合灵感速写与单张创作。想要多画面协作、串联创作流程，可切换到下方的「无限画布」。
-          </p>
-        </div>
-
-
-        <div class="sidebar-footer">
+        <div class="top-nav-actions">
           <button class="skill-create-btn" type="button" @click="router.push('/skill')">
             <span class="skill-create-icon" aria-hidden="true">✦</span>
             创作 Skill
           </button>
           <button class="canvas-entry-btn" type="button" @click="router.push('/canvas')">
-
             <span class="canvas-entry-text">无限画布</span>
             <span class="canvas-entry-new" aria-label="测试版功能">BETA</span>
-
           </button>
-
           <button class="sidebar-secondary-btn" type="button" @click="router.push('/settings')">
             设置
           </button>
         </div>
+      </header>
 
-
-      </aside>
 
       <main class="workspace-main">
         <section class="chat-stage">
           <div class="chat-area" ref="chatAreaRef">
             <div v-if="activeMessages.length === 0" class="empty-state">
-              <p class="empty-kicker">简易模式 · Start with an idea</p>
-              <h1>把灵感写成一句清晰的创作指令。</h1>
-              <p class="empty-copy">这里是「简易模式」——用一句话描述主体、氛围、镜头语言，即可快速生成图像或视频。想要多画面并行、串联复杂创作流程？点击左侧「无限画布」体验全新玩法。</p>
+              <p class="empty-kicker">Simple Create · Agentic Visual Canvas</p>
+              <h1>把一句想法变成一张可交付视觉。</h1>
+              <p class="empty-copy">输入主体、风格、光线、构图和用途；系统会在这个简洁工作台里完成生成、查看、下载与再次迭代。</p>
             </div>
 
 
@@ -56,9 +42,30 @@
           </div>
         </section>
 
-        <section class="composer-dock">
-          <div class="composer-meta-row composer-meta-row-top">
-            <div class="dock-pills dock-pills-primary">
+        <section class="composer-dock" :class="{ 'ratio-open': showAspectRatioMenu }">
+          <div class="composer-console" :class="{ open: isComposerControlsOpen, 'ratio-open': showAspectRatioMenu }">
+            <button
+              class="composer-summary"
+              type="button"
+              :aria-expanded="isComposerControlsOpen"
+              aria-controls="composer-control-panel"
+              @click="isComposerControlsOpen = !isComposerControlsOpen"
+            >
+              <span class="summary-kicker">Creative Console</span>
+              <span class="summary-chip summary-chip-strong">{{ mediaTypeLabel }}</span>
+              <span class="summary-chip">{{ selectedModelLabel }}</span>
+              <span class="summary-chip">{{ activeGenerateModeLabel }}</span>
+              <span class="summary-chip">{{ selectedAspectRatioOption.label }}</span>
+              <span v-if="settingsStore.mediaType === 'video'" class="summary-chip">{{ selectedVideoDurationLabel }}</span>
+              <span v-if="materialSummaryLabel" class="summary-chip" :class="{ attention: needsMaterialAttention }">{{ materialSummaryLabel }}</span>
+              <span v-if="skillStore.activeSkill" class="summary-chip summary-chip-skill">Skill：{{ skillStore.activeSkill.name }}</span>
+              <span class="summary-spacer" />
+              <span class="summary-toggle">{{ isComposerControlsOpen ? '收起参数' : '展开参数与素材' }}</span>
+            </button>
+
+            <div v-show="isComposerControlsOpen" id="composer-control-panel" class="composer-control-panel" :class="{ 'ratio-open': showAspectRatioMenu }">
+              <div class="composer-meta-row composer-meta-row-top">
+                <div class="dock-pills dock-pills-primary">
               <div class="meta-pill meta-pill-type">
                 <span class="meta-pill-label">创作类型</span>
                 <div class="media-switch compact-switch" role="tablist" aria-label="生成类型">
@@ -517,7 +524,37 @@
                 class="reference-input"
                 placeholder="粘贴参考图片或视频链接"
               />
+              </div>
+
+              <div v-if="settingsStore.mediaType === 'video'" class="skill-control-row">
+                <input
+                  ref="skillFileInput"
+                  type="file"
+                  accept=".md,text/markdown"
+                  class="file-input"
+                  @change="handleSkillFileChange"
+                />
+                <button
+                  class="skill-upload-btn-inline"
+                  type="button"
+                  :class="{ active: !!skillStore.activeSkill }"
+                  :title="skillStore.activeSkill ? `已应用 Skill：${skillStore.activeSkill.name}（点击更换）` : '上传 .md Skill，生成时将严格遵循其规范'"
+                  @click="skillFileInput?.click()"
+                >
+                  {{ skillStore.activeSkill ? `Skill：${skillStore.activeSkill.name}` : '上传 Skill' }}
+                </button>
+                <button
+                  v-if="skillStore.activeSkill"
+                  class="skill-clear-inline"
+                  type="button"
+                  title="移除已应用的 Skill"
+                  @click="skillStore.clearActiveSkill()"
+                >
+                  ×
+                </button>
+              </div>
             </div>
+          </div>
           </div>
 
           <div v-if="referencedMentions.length" class="referenced-mentions" aria-label="已引用素材">
@@ -557,6 +594,7 @@
               ref="promptInputRef"
               v-model="inputText"
               :placeholder="inputPlaceholder"
+              :style="{ height: `${composerTextareaHeight}px` }"
               @input="handlePromptInput"
               @keyup="handlePromptInput"
               @click="handlePromptInput"
@@ -565,33 +603,6 @@
 
 
             <div class="composer-actions">
-              <template v-if="settingsStore.mediaType === 'video'">
-                <input
-                  ref="skillFileInput"
-                  type="file"
-                  accept=".md,text/markdown"
-                  class="file-input"
-                  @change="handleSkillFileChange"
-                />
-                <button
-                  class="skill-upload-btn-inline"
-                  type="button"
-                  :class="{ active: !!skillStore.activeSkill }"
-                  :title="skillStore.activeSkill ? `已应用 Skill：${skillStore.activeSkill.name}（点击更换）` : '上传 .md Skill，生成时将严格遵循其规范'"
-                  @click="skillFileInput?.click()"
-                >
-                  {{ skillStore.activeSkill ? `Skill：${skillStore.activeSkill.name}` : '上传 Skill' }}
-                </button>
-                <button
-                  v-if="skillStore.activeSkill"
-                  class="skill-clear-inline"
-                  type="button"
-                  title="移除已应用的 Skill"
-                  @click="skillStore.clearActiveSkill()"
-                >
-                  ×
-                </button>
-              </template>
               <button
                 class="icon-btn"
                 :title="isComposerExpanded ? '收起输入框' : '展开输入框'"
@@ -625,8 +636,8 @@
                     <path d="M10.75 13.25L19.5 4.5" :stroke="canSend && !activeSessionGenerating ? 'currentColor' : 'url(#chatSendGradient)'" stroke-width="1.8" stroke-linecap="round" />
                     <defs>
                       <linearGradient id="chatSendGradient" x1="4" y1="4.5" x2="19.5" y2="19.5" gradientUnits="userSpaceOnUse">
-                        <stop offset="0" stop-color="#000000" />
-                        <stop offset="0.55" stop-color="#1d1d1f" />
+                        <stop offset="0" stop-color="#24262d" />
+                        <stop offset="0.55" stop-color="#3a3f47" />
                         <stop offset="1" stop-color="#0a84ff" />
                       </linearGradient>
                     </defs>
@@ -643,7 +654,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick, onMounted, computed, watch, onBeforeUnmount } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import ChatBubble from '@/components/ChatBubble.vue'
 import ModelSelector from '@/components/ModelSelector.vue'
 import CameraMovementGuide from '@/components/CameraMovementGuide.vue'
@@ -664,6 +675,7 @@ import {
   getSupportedVideoDurations,
   modelRequiresReference,
   modelSupportsLocalUpload,
+  type AspectRatioOption,
   type MediaType,
 } from '@/types/model'
 import { showErrorMessage } from '@/utils/errors'
@@ -672,10 +684,12 @@ import type { Message, UploadedFile } from '@/types/chat'
 import { resolveGenerateIoType } from '@/features/generate/media'
 
 const router = useRouter()
+const route = useRoute()
 const settingsStore = useSettingsStore()
 const chatStore = useChatStore()
 const skillStore = useSkillStore()
 const { generate } = useGenerate()
+const LANDING_REFERENCE_STORAGE_KEY = 'artrealm_landing_reference_image'
 
 // Skill 上传入口（简易模式，非必填）：上传后生成会携带该 skill 规范。
 const skillFileInput = ref<HTMLInputElement | null>(null)
@@ -709,6 +723,10 @@ const motionControlImageInput = ref<HTMLInputElement | null>(null)
 const motionControlVideoInput = ref<HTMLInputElement | null>(null)
 const isPolishing = ref(false)
 const isComposerExpanded = ref(false)
+const isComposerControlsOpen = ref(true)
+const COMPOSER_TEXTAREA_DEFAULT = 196
+const COMPOSER_TEXTAREA_EXPANDED = 320
+const composerTextareaHeight = ref(COMPOSER_TEXTAREA_DEFAULT)
 const showAspectRatioMenu = ref(false)
 const uploadedFile = ref<UploadedFile | null>(null)
 const viduStartFrame = ref<UploadedFile | null>(null)
@@ -895,11 +913,27 @@ const showReferenceField = computed(() => {
 })
 
 const uploadAccept = computed(() => getLocalUploadAccept(settingsStore.selectedModel) || 'image/*,video/*')
+function createAspectRatioOption(value: string): AspectRatioOption | null {
+  const [width, height] = value.split(':').map((item) => Number(item))
+  if (!width || !height) return null
+  const scale = 28 / Math.max(width, height)
+  return {
+    value,
+    label: value,
+    boxWidth: Math.max(12, Math.round(width * scale)),
+    boxHeight: Math.max(12, Math.round(height * scale)),
+  }
+}
+
+function getAspectRatioOption(value: string): AspectRatioOption | null {
+  return ASPECT_RATIO_OPTIONS.find((option) => option.value === value) || createAspectRatioOption(value)
+}
+
 const aspectRatioOptions = computed(() => {
   if (settingsStore.mediaType !== 'video') return ASPECT_RATIO_OPTIONS
   const supported = getSupportedAspectRatios(settingsStore.selectedModel)
   return supported
-    ? ASPECT_RATIO_OPTIONS.filter((option) => supported.includes(option.value))
+    ? supported.map(getAspectRatioOption).filter((option): option is AspectRatioOption => !!option)
     : ASPECT_RATIO_OPTIONS
 })
 
@@ -911,6 +945,65 @@ const selectedAspectRatioOption = computed(() => {
     aspectRatioOptions.value[0] ||
     ASPECT_RATIO_OPTIONS[0]
   )
+})
+
+const mediaTypeLabel = computed(() => (settingsStore.mediaType === 'image' ? '图像' : '视频'))
+const selectedModelLabel = computed(() => settingsStore.selectedModel || '未选择模型')
+const selectedVideoDurationLabel = computed(() => {
+  return videoDurationOptions.value.find((option) => option.value === settingsStore.videoDuration)?.label || `${settingsStore.videoDuration}s`
+})
+const activeGenerateModeLabel = computed(() => {
+  if (settingsStore.mediaType === 'image') {
+    return imageModeOptions.find((option) => option.value === imageMode.value)?.label || '文生图'
+  }
+  if (usesViduLikeVideoMode.value) {
+    return activeVideoModeOptions.value.find((option) => option.value === videoMode.value)?.label || '文生视频'
+  }
+  return uploadedFile.value ? '参考生成' : '文生视频'
+})
+const needsMaterialAttention = computed(() => {
+  if (!showReferenceField.value) return false
+  if (isImageReferenceMode.value) return !uploadedFile.value
+  if (!usesViduLikeVideoMode.value) return showReferenceUrlInput.value ? !referenceUrl.value.trim() : false
+  if (videoMode.value === 'image2video') return !uploadedFile.value
+  if (videoMode.value === 'motionControl2video') return !motionControlImage.value || !motionControlVideo.value
+  if (videoMode.value === 'startEnd2video') return !viduStartFrame.value
+  if (videoMode.value === 'referenceImage2video') return multimodalImages.value.length === 0
+  if (videoMode.value === 'subjectReference2video') return !uploadedFile.value
+  if (videoMode.value === 'editVideo') return !editVideoFile.value || !editImageFile.value
+  return false
+})
+const materialSummaryLabel = computed(() => {
+  if (!showReferenceField.value) return ''
+  if (isImageReferenceMode.value) return uploadedFile.value ? `素材：${uploadedFile.value.name}` : '素材：待上传'
+  if (showReferenceUrlInput.value) return referenceUrl.value.trim() ? '参考链接已填写' : '参考链接待填写'
+  if (usesViduLikeVideoMode.value) {
+    if (videoMode.value === 'image2video') return uploadedFile.value ? `参考图：${uploadedFile.value.name}` : '参考图待上传'
+    if (videoMode.value === 'motionControl2video') {
+      const count = [motionControlImage.value, motionControlVideo.value].filter(Boolean).length
+      return count === 2 ? '动作素材已齐' : `动作素材 ${count}/2`
+    }
+    if (videoMode.value === 'startEnd2video') {
+      if (viduStartFrame.value && viduEndFrame.value) return '首尾帧已添加'
+      if (viduStartFrame.value) return '首帧已添加'
+      return '首帧待上传'
+    }
+    if (videoMode.value === 'referenceImage2video') return multimodalImages.value.length ? `参考图 ${multimodalImages.value.length}/${KLING_REFERENCE_IMAGE_LIMIT}` : '参考图待上传'
+    if (videoMode.value === 'multimodalReference2video') {
+      const count = multimodalImages.value.length + multimodalVideos.value.length + multimodalAudios.value.length
+      return count ? `多模态素材 ${count}` : '多模态素材可选'
+    }
+    if (videoMode.value === 'editVideo') {
+      const count = [editVideoFile.value, editImageFile.value].filter(Boolean).length
+      return count === 2 ? '编辑素材已齐' : `编辑素材 ${count}/2`
+    }
+    if (videoMode.value === 'subjectReference2video') return uploadedFile.value ? '主体参考已添加' : '主体图待上传'
+  }
+  return uploadedFile.value ? `素材：${uploadedFile.value.name}` : '素材可选'
+})
+
+watch(needsMaterialAttention, (needsAttention) => {
+  if (needsAttention) isComposerControlsOpen.value = true
 })
 
 const inputPlaceholder = computed(() => {
@@ -1078,6 +1171,36 @@ function createUploadedFile(file: File, type: UploadedFile['type'], dimensions?:
     size: file.size,
     file,
     dimensions,
+  }
+}
+
+function dataUrlToFile(dataUrl: string, name: string, type: string): File {
+  const [meta, base64] = dataUrl.split(',')
+  const mime = type || meta.match(/data:([^;]+)/)?.[1] || 'image/png'
+  const binary = atob(base64 || '')
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+  return new File([bytes], name, { type: mime })
+}
+
+function restoreLandingReferenceImage() {
+  if (route.query.reference !== 'landing') return
+  const raw = sessionStorage.getItem(LANDING_REFERENCE_STORAGE_KEY)
+  if (!raw) return
+
+  try {
+    const parsed = JSON.parse(raw) as { name?: string; type?: string; size?: number; dataUrl?: string }
+    if (!parsed.dataUrl) return
+    const file = dataUrlToFile(parsed.dataUrl, parsed.name || 'landing-reference.png', parsed.type || 'image/png')
+    removeUploadedFile()
+    uploadedFile.value = createUploadedFile(file, 'image')
+    if (supportsImageReferenceMode.value) imageMode.value = 'image2image'
+  } catch (error) {
+    showErrorMessage(getReadableErrorMessage(error, '首页参考图读取失败，请重新上传。'))
+  } finally {
+    sessionStorage.removeItem(LANDING_REFERENCE_STORAGE_KEY)
   }
 }
 
@@ -1563,7 +1686,11 @@ function insertCameraCommand(text: string) {
 }
 
 async function toggleComposerExpanded() {
-  isComposerExpanded.value = !isComposerExpanded.value
+  const nextExpanded = !isComposerExpanded.value
+  isComposerExpanded.value = nextExpanded
+  composerTextareaHeight.value = nextExpanded
+    ? Math.max(composerTextareaHeight.value, COMPOSER_TEXTAREA_EXPANDED)
+    : COMPOSER_TEXTAREA_DEFAULT
   await nextTick()
   promptInputRef.value?.focus()
 }
@@ -1572,12 +1699,27 @@ function scrollChatToBottom() {
   chatAreaRef.value?.scrollTo({ top: chatAreaRef.value.scrollHeight, behavior: 'smooth' })
 }
 
-onMounted(() => {
-
+onMounted(async () => {
   settingsStore.loadFromStorage()
+  sessionStorage.removeItem('artrealm_landing_pending_prompt')
+  if (route.query.type === 'image') {
+    settingsStore.setMediaType('image')
+    imageMode.value = 'text2image'
+  }
   ensureSupportedAspectRatio()
   ensureSupportedVideoDuration()
   ensureWelcomeMessage()
+  restoreLandingReferenceImage()
+  const initialPrompt = typeof route.query.prompt === 'string' ? route.query.prompt.trim() : ''
+  if (initialPrompt) {
+    inputText.value = initialPrompt
+    await nextTick()
+    if (route.query.autosend === '1') {
+      handleSend()
+    } else {
+      promptInputRef.value?.focus()
+    }
+  }
 })
 
 onBeforeUnmount(() => {
@@ -1750,6 +1892,11 @@ async function handleRegenerate(message: Message) {
   overflow: hidden;
   background: transparent;
   isolation: isolate;
+  --surface-glass: rgba(255, 255, 255, 0.76);
+  --surface-glass-strong: rgba(255, 255, 255, 0.92);
+  --surface-line: rgba(255, 255, 255, 0.78);
+  --surface-shadow: 0 24px 70px rgba(15, 23, 42, 0.10);
+  --surface-shadow-soft: 0 12px 34px rgba(15, 23, 42, 0.07);
 }
 
 .chat-page::before {
@@ -1759,9 +1906,24 @@ async function handleRegenerate(message: Message) {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 18% 14%, rgba(255, 255, 255, 0.72), transparent 0 20%),
-    radial-gradient(circle at 78% 22%, rgba(10, 132, 255, 0.12), transparent 0 18%),
-    linear-gradient(180deg, rgba(251, 251, 253, 0.82), rgba(238, 240, 243, 0.94));
+    radial-gradient(circle at 16% 10%, rgba(255, 255, 255, 0.92), transparent 0 23%),
+    radial-gradient(circle at 76% 18%, rgba(10, 132, 255, 0.14), transparent 0 20%),
+    radial-gradient(circle at 45% 92%, rgba(17, 24, 39, 0.06), transparent 0 24%),
+    linear-gradient(135deg, rgba(252, 253, 255, 0.96), rgba(238, 243, 249, 0.94) 52%, rgba(246, 247, 249, 0.98));
+}
+
+.chat-page::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.42;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.36) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.30) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(circle at 50% 48%, #000, transparent 74%);
 }
 
 .workspace-shell,
@@ -1795,10 +1957,11 @@ async function handleRegenerate(message: Message) {
   min-height: 0;
   padding: 16px 14px 14px;
   border-radius: 28px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.08);
-  backdrop-filter: blur(24px);
+  border: 1px solid var(--surface-line);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(250, 251, 253, 0.70));
+  box-shadow: var(--surface-shadow-soft);
+  backdrop-filter: blur(28px) saturate(135%);
 }
 
 .single-session-sidebar {
@@ -1826,7 +1989,7 @@ async function handleRegenerate(message: Message) {
   line-height: 1;
   font-family: "Georgia", "Times New Roman", serif;
   font-style: italic;
-  background: linear-gradient(135deg, #000000 0%, #1d1d1f 58%, #0a84ff 135%);
+  background: linear-gradient(135deg, #24262d 0%, #343842 58%, #0a84ff 135%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -1847,9 +2010,11 @@ async function handleRegenerate(message: Message) {
   gap: 8px;
   padding: 12px 12px 14px;
   border-radius: 18px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.92), rgba(240, 242, 245, 0.78));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 251, 0.74)),
+    radial-gradient(circle at 0 0, rgba(10, 132, 255, 0.12), transparent 38%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82), 0 10px 24px rgba(15, 23, 42, 0.05);
 }
 
 .mode-intro-badge {
@@ -1917,7 +2082,7 @@ async function handleRegenerate(message: Message) {
   font-weight: 700;
   letter-spacing: 0.02em;
   color: #f8fafc;
-  background: #111113;
+  background: #24262d;
   transition: background var(--transition-base);
 }
 
@@ -1950,6 +2115,8 @@ async function handleRegenerate(message: Message) {
 .sidebar-secondary-btn,
 .sidebar-danger-btn,
 .switch-btn,
+.composer-summary,
+.summary-toggle,
 .ratio-current-btn,
 .upload-btn,
 .icon-btn,
@@ -1978,10 +2145,10 @@ async function handleRegenerate(message: Message) {
 .chat-stage,
 .composer-dock,
 .session-card {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.06);
-  backdrop-filter: blur(24px);
+  border: 1px solid var(--surface-line);
+  background: var(--surface-glass);
+  box-shadow: var(--surface-shadow-soft);
+  backdrop-filter: blur(28px) saturate(140%);
   background-clip: padding-box;
 }
 
@@ -2004,7 +2171,9 @@ async function handleRegenerate(message: Message) {
 
 .chat-stage {
   border-bottom-color: rgba(255, 255, 255, 0.78);
-  background: rgba(255, 255, 255, 0.92);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(250, 251, 253, 0.74)),
+    radial-gradient(circle at 50% 0%, rgba(10, 132, 255, 0.06), transparent 36%);
 }
 
 .chat-area {
@@ -2022,8 +2191,12 @@ async function handleRegenerate(message: Message) {
 .empty-state {
   margin: auto;
   max-width: 560px;
-  padding: 42px 28px;
+  padding: 44px 34px;
   text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.74);
+  border-radius: 30px;
+  background: rgba(255, 255, 255, 0.42);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
 }
 
 .empty-kicker {
@@ -2048,14 +2221,120 @@ async function handleRegenerate(message: Message) {
 
 .composer-dock {
   flex-shrink: 0;
-  border-radius: 32px;
-  padding: 8px 10px 10px;
+  border-radius: 30px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   border-top-color: rgba(255, 255, 255, 0.76);
-  background: rgba(255, 255, 255, 0.94);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.88)),
+    radial-gradient(circle at 12% 0%, rgba(10, 132, 255, 0.08), transparent 35%);
+  box-shadow: var(--surface-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.90);
   overflow: visible;
+}
+
+.composer-console {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.composer-summary {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 7px 8px 7px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 22px;
+  text-align: left;
+  color: rgba(15, 23, 42, 0.88);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.82));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92), 0 8px 24px rgba(15, 23, 42, 0.05);
+}
+
+.composer-summary:hover {
+  border-color: rgba(100, 116, 139, 0.30);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.96), 0 12px 28px rgba(15, 23, 42, 0.07);
+}
+
+.summary-kicker {
+  flex: 0 0 auto;
+  margin-right: 2px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(71, 85, 105, 0.64);
+}
+
+.summary-chip {
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  max-width: min(260px, 100%);
+  padding: 0 9px;
+  border: 1px solid rgba(148, 163, 184, 0.20);
+  border-radius: 999px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 750;
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.summary-chip-strong {
+  border-color: transparent;
+  color: #fff;
+  background: #24262d;
+}
+
+.summary-chip.attention {
+  border-color: rgba(245, 158, 11, 0.28);
+  color: rgba(146, 64, 14, 0.95);
+  background: rgba(255, 251, 235, 0.92);
+}
+
+.summary-chip-skill {
+  border-color: rgba(10, 132, 255, 0.22);
+  color: rgba(10, 102, 194, 0.96);
+  background: rgba(10, 132, 255, 0.08);
+}
+
+.summary-spacer {
+  flex: 1 1 24px;
+}
+
+.summary-toggle {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.96);
+  font-size: 11px;
+  font-weight: 800;
+  background: var(--color-theme-gradient);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.14);
+}
+
+.composer-control-panel {
+  max-height: min(42vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 9px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.78), rgba(255, 255, 255, 0.62));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
 }
 
 .composer-meta-row {
@@ -2088,9 +2367,9 @@ async function handleRegenerate(message: Message) {
   gap: 8px;
   padding: 5px 7px 5px 10px;
   border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  background: rgba(248, 250, 252, 0.78);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82), 0 6px 14px rgba(15, 23, 42, 0.04);
 }
 
 .meta-pill-type {
@@ -2118,26 +2397,29 @@ async function handleRegenerate(message: Message) {
 }
 
 .media-switch,
+.video-mode-switch,
 .ratio-selector,
 .model-slot,
 .duration-selector,
 .upload-mini-row,
 .reference-input {
-  border: 1px solid rgba(148, 163, 184, 0.34);
+  border: 1px solid rgba(148, 163, 184, 0.26);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.76);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.84),
     0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .media-switch,
+.video-mode-switch,
 .ratio-selector,
 .duration-selector {
   position: relative;
 }
 
 .media-switch::after,
+.video-mode-switch::after,
 .ratio-selector::after,
 .duration-selector::after {
   content: '';
@@ -2154,7 +2436,8 @@ async function handleRegenerate(message: Message) {
   display: none;
 }
 
-.media-switch {
+.media-switch,
+.video-mode-switch {
   display: inline-flex;
   padding: 2px;
   gap: 2px;
@@ -2194,6 +2477,7 @@ async function handleRegenerate(message: Message) {
   padding: 0 8px;
   border-radius: 10px;
   font-size: 11px;
+  white-space: nowrap;
 }
 
 .switch-btn.active {
@@ -2367,6 +2651,15 @@ async function handleRegenerate(message: Message) {
   align-items: stretch;
 }
 
+.skill-control-row {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 2px;
+}
+
 /* 运镜指令：独占一行，弹出框向上展开，不再挤压上方胶囊行 */
 .camera-guide-row {
   display: flex;
@@ -2379,6 +2672,21 @@ async function handleRegenerate(message: Message) {
 
 .motion-control-note strong {
 
+  padding: 0 2px;
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(15, 23, 42, 0.9);
+}
+
+.motion-control-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.motion-control-note {
+  margin: 0;
   padding: 0 2px;
   font-size: 12px;
   font-weight: 800;
@@ -2717,7 +3025,7 @@ async function handleRegenerate(message: Message) {
 
 .upload-btn,
 .icon-btn {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.58);
 }
 
 .upload-btn:hover,
@@ -2748,15 +3056,19 @@ async function handleRegenerate(message: Message) {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: end;
-  padding: 8px;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.14);
+  padding: 8px 8px 8px 12px;
+  border-radius: 24px;
+  border: 1px solid rgba(148, 163, 184, 0.20);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.78));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92), 0 10px 24px rgba(15, 23, 42, 0.05);
 }
 
 .input-shell:focus-within {
-  border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(10, 132, 255, 0.28);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.86));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.96), 0 0 0 4px rgba(10, 132, 255, 0.06), 0 14px 30px rgba(15, 23, 42, 0.08);
 }
 
 .compact-model-slot {
@@ -2766,7 +3078,7 @@ async function handleRegenerate(message: Message) {
 }
 
 .input-shell.expanded textarea {
-  min-height: 120px;
+  min-height: 320px;
 }
 
 .input-shell textarea {
@@ -2775,7 +3087,7 @@ async function handleRegenerate(message: Message) {
   max-height: 152px;
   box-sizing: border-box;
   margin: 0;
-  padding: 6px 8px;
+  padding: 7px 6px;
   border: 0;
   resize: vertical;
   background: transparent;
@@ -2823,17 +3135,17 @@ async function handleRegenerate(message: Message) {
 
 /* 图片：紫色系 */
 .referenced-chip-image {
-  background: linear-gradient(135deg, #111113, #4b5563);
+  background: linear-gradient(135deg, #24262d, #4b5563);
 }
 
 /* 视频：橙红色系 */
 .referenced-chip-video {
-  background: linear-gradient(135deg, #111113, #0a84ff);
+  background: linear-gradient(135deg, #24262d, #0a84ff);
 }
 
 /* 音频：青绿色系 */
 .referenced-chip-audio {
-  background: linear-gradient(135deg, #111113, #22c1dc);
+  background: linear-gradient(135deg, #24262d, #22c1dc);
 }
 
 .composer-actions {
@@ -2841,6 +3153,7 @@ async function handleRegenerate(message: Message) {
   align-items: center;
   gap: 6px;
   align-self: flex-end;
+  padding-left: 4px;
 }
 
 /* 视频模式：对话框内「上传 Skill」按钮 */
@@ -2848,9 +3161,9 @@ async function handleRegenerate(message: Message) {
   min-height: 34px;
   max-width: 150px;
   padding: 0 12px;
-  border: 1px solid rgba(10, 132, 255, 0.30);
+  border: 1px solid rgba(10, 132, 255, 0.24);
   border-radius: 14px;
-  background: rgba(10, 132, 255, 0.08);
+  background: rgba(10, 132, 255, 0.06);
   color: rgba(10, 132, 255, 0.95);
   font-size: 12px;
   font-weight: 700;
@@ -2909,7 +3222,7 @@ async function handleRegenerate(message: Message) {
 .icon-btn,
 .send-btn,
 .text-btn {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.62);
   color: rgba(15, 23, 42, 0.9);
 }
 
@@ -2921,7 +3234,7 @@ async function handleRegenerate(message: Message) {
 .send-btn.ready {
   background: var(--color-theme-gradient);
   color: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.20);
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.20), 0 0 0 1px rgba(255, 255, 255, 0.42) inset;
 }
 
 .send-btn.ready .send-gradient-icon {
@@ -3014,6 +3327,27 @@ async function handleRegenerate(message: Message) {
     justify-content: space-between;
   }
 
+  .composer-summary {
+    align-items: flex-start;
+  }
+
+  .summary-kicker,
+  .summary-spacer {
+    display: none;
+  }
+
+  .summary-chip {
+    max-width: 100%;
+  }
+
+  .summary-toggle {
+    width: 100%;
+  }
+
+  .composer-control-panel {
+    max-height: min(52vh, 460px);
+  }
+
   .reference-input {
     min-width: 100%;
   }
@@ -3032,9 +3366,14 @@ async function handleRegenerate(message: Message) {
   }
 
 
-  .video-mode-switch,
-  .video-mode-switch .switch-btn {
+  .video-mode-switch {
     width: 100%;
+    overflow-x: auto;
+  }
+
+  .video-mode-switch .switch-btn {
+    width: auto;
+    flex: 1 0 max-content;
   }
 
   .ratio-selector,
@@ -3051,4 +3390,1006 @@ async function handleRegenerate(message: Message) {
     max-height: min(260px, calc(100dvh - 190px));
   }
 }
+.chat-page {
+  padding: 14px;
+  color: rgba(255, 255, 255, 0.92);
+  background:
+    radial-gradient(circle at 48% 4%, rgba(255, 255, 255, 0.11), transparent 0 24%),
+    radial-gradient(circle at 12% 24%, rgba(91, 141, 255, 0.16), transparent 0 28%),
+    radial-gradient(circle at 88% 78%, rgba(255, 138, 76, 0.10), transparent 0 22%),
+    linear-gradient(180deg, #070707 0%, #0b0b0e 52%, #111114 100%);
+  --surface-glass: rgba(255, 255, 255, 0.075);
+  --surface-glass-strong: rgba(255, 255, 255, 0.11);
+  --surface-line: rgba(255, 255, 255, 0.11);
+  --surface-shadow: 0 24px 100px rgba(0, 0, 0, 0.42);
+  --surface-shadow-soft: 0 14px 44px rgba(0, 0, 0, 0.24);
+}
+
+.chat-page::before {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.052) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.048) 1px, transparent 1px);
+  background-size: 72px 72px;
+  opacity: 1;
+  mask-image: radial-gradient(circle at 50% 40%, #000 0 34%, transparent 78%);
+}
+
+.chat-page::after {
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.48));
+  opacity: 1;
+  mask-image: none;
+}
+
+.workspace-shell,
+.single-session-layout {
+  width: min(100%, 1440px);
+  grid-template-columns: 248px minmax(0, 1fr);
+  gap: 14px;
+}
+
+.session-sidebar {
+  padding: 16px;
+  border-color: rgba(255, 255, 255, 0.11);
+  background: rgba(255, 255, 255, 0.065);
+  box-shadow: var(--surface-shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  backdrop-filter: blur(28px) saturate(145%);
+}
+
+.brand-lockup {
+  padding: 0;
+}
+
+.brand-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-family-display);
+  font-size: 22px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  color: #f7f7f2;
+  background: none;
+}
+
+.brand-title::before {
+  content: 'A';
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: #f7f7f2;
+  color: #08080a;
+  font: 800 16px/1 var(--font-family);
+  box-shadow: 0 0 32px rgba(255, 255, 255, 0.22);
+}
+
+.mode-intro-card {
+  margin-top: 14px;
+  padding: 14px;
+  border-color: rgba(255, 255, 255, 0.11);
+  background:
+    radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.14), transparent 0 42%),
+    rgba(255, 255, 255, 0.075);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+
+.mode-intro-badge,
+.canvas-entry-new {
+  background: rgba(255, 255, 255, 0.92);
+  color: #08080a;
+  box-shadow: 0 12px 34px rgba(255, 255, 255, 0.10);
+}
+
+.mode-intro-desc,
+.empty-copy {
+  color: rgba(255, 255, 255, 0.54);
+}
+
+.workspace-main {
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 34px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.105), transparent 0 28%),
+    rgba(255, 255, 255, 0.052);
+  box-shadow: var(--surface-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  backdrop-filter: blur(24px) saturate(140%);
+}
+
+.chat-stage {
+  padding: 20px 20px 0;
+}
+
+.chat-area {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.empty-state {
+  width: min(100%, 780px);
+  margin: clamp(42px, 8vh, 96px) auto 0;
+  padding: 0;
+  text-align: center;
+}
+
+.empty-kicker {
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.18em;
+}
+
+.empty-state h1 {
+  max-width: 11ch;
+  margin: 14px auto 0;
+  color: #f7f7f2;
+  font-family: var(--font-family-display);
+  font-size: clamp(52px, 8vw, 104px);
+  font-weight: 600;
+  line-height: 0.9;
+  letter-spacing: -0.08em;
+}
+
+.empty-copy {
+  max-width: 560px;
+  margin: 24px auto 0;
+  font-size: 15px;
+}
+
+.composer-dock {
+  padding: 0 20px 20px;
+}
+
+.composer-console {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.075);
+  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.11);
+  backdrop-filter: blur(28px) saturate(145%);
+}
+
+.composer-summary {
+  color: rgba(255, 255, 255, 0.78);
+  background: transparent;
+}
+
+.summary-kicker,
+.meta-pill-label {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.summary-chip,
+.meta-pill {
+  border-color: rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.075);
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.summary-chip-strong,
+.switch-btn.active,
+.mode-switch-btn.active,
+.ratio-current-btn,
+.send-btn.ready,
+.skill-create-btn,
+.canvas-entry-btn {
+  background: #f7f7f2;
+  color: #08080a;
+  border-color: transparent;
+}
+
+.composer-control-panel {
+  border-top-color: rgba(255, 255, 255, 0.10);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.switch-btn,
+.upload-mini-row,
+.upload-card-row,
+.reference-input,
+.motion-control-panel,
+.subject-reference-card,
+.multimodal-panel,
+.skill-control-row,
+.ratio-dropdown {
+  border-color: rgba(255, 255, 255, 0.11);
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.switch-btn:not(.active):hover,
+.upload-mini-row:hover,
+.upload-card-row:hover {
+  background: rgba(255, 255, 255, 0.11);
+  color: #fff;
+}
+
+.input-shell {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  background: rgba(6, 6, 8, 0.78);
+  box-shadow: inset 0 1px 18px rgba(0, 0, 0, 0.44);
+}
+
+.input-shell textarea {
+  color: #fff;
+}
+
+.input-shell textarea::placeholder,
+.upload-hint,
+.pill-filename,
+.summary-toggle {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.icon-btn,
+.polish-btn,
+.text-btn,
+.sidebar-secondary-btn,
+.skill-upload-btn-inline {
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.icon-btn:hover,
+.polish-btn:not(:disabled):hover,
+.text-btn:hover,
+.sidebar-secondary-btn:hover,
+.skill-upload-btn-inline:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.send-btn.ready {
+  box-shadow: 0 16px 36px rgba(255, 255, 255, 0.10);
+}
+
+.sidebar-footer {
+  gap: 10px;
+}
+
+:deep(.message .avatar-icon),
+:deep(.message .bubble),
+:deep(.result-card) {
+  border-color: rgba(255, 255, 255, 0.11);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px) saturate(135%);
+}
+
+:deep(.message.user .bubble) {
+  background: #f7f7f2;
+  color: #08080a;
+}
+
+:deep(.content p),
+:deep(.result-title),
+:deep(.meta-pair dd) {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+:deep(.message.user .content p),
+:deep(.message.user .time) {
+  color: #08080a;
+}
+
+:deep(.message.system .bubble) {
+  background: rgba(255, 255, 255, 0.075);
+}
+
+:deep(.meta-pair),
+:deep(.media-frame),
+:deep(.provider-pill) {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.76);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+:deep(.meta-pair dt),
+:deep(.time) {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.chat-stage {
+  border-color: rgba(255, 255, 255, 0.10);
+  background: transparent;
+  box-shadow: none;
+}
+
+.empty-state {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.composer-dock {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.composer-summary {
+  border-color: rgba(255, 255, 255, 0.11);
+  background: rgba(255, 255, 255, 0.075);
+}
+
+.media-switch,
+.video-mode-switch,
+.ratio-selector,
+.model-slot,
+.duration-selector {
+  border-color: rgba(255, 255, 255, 0.11);
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.motion-control-option {
+  border-color: rgba(255, 255, 255, 0.11);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.motion-control-option-label,
+.motion-control-note,
+.multimodal-note,
+.upload-label {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.motion-control-note small,
+.multimodal-note small,
+.upload-hint {
+  color: rgba(255, 255, 255, 0.46);
+}
+
+.motion-control-select,
+.duration-select {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.ratio-caret,
+.duration-caret {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.summary-toggle {
+  color: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(18px) saturate(140%);
+}
+
+.send-btn.ready {
+  background: linear-gradient(135deg, #5b8cff 0%, #7a5cff 100%);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 14px 34px rgba(79, 110, 255, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.send-btn.ready .send-gradient-icon {
+  color: #fff;
+}
+
+.input-shell:focus-within {
+  border-color: rgba(122, 158, 255, 0.48);
+  background: rgba(6, 6, 8, 0.88);
+  box-shadow: inset 0 1px 18px rgba(0, 0, 0, 0.44), 0 0 0 3px rgba(91, 140, 255, 0.12);
+}
+
+:deep(.model-selector select) {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.88);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+:deep(.model-selector .select-icon) {
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.ratio-current-btn {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.ratio-dropdown-item {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.ratio-dropdown-item.active {
+  background: rgba(91, 140, 255, 0.16);
+  color: #fff;
+}
+
+.ratio-current-box,
+.ratio-option-box {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ratio-selector.open,
+.ratio-selector:focus-within {
+  border-color: rgba(122, 158, 255, 0.50);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 0 3px rgba(91, 140, 255, 0.12);
+}
+
+.composer-control-panel.ratio-open {
+  overflow: visible;
+}
+
+.skill-control-row {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.skill-upload-btn-inline {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.skill-upload-btn-inline:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.skill-upload-btn-inline.active {
+  background: linear-gradient(135deg, #5b8cff 0%, #7a5cff 100%);
+  border-color: transparent;
+  color: #fff;
+}
+
+.composer-summary,
+.composer-control-panel,
+.composer-console,
+.meta-pill,
+.media-switch,
+.video-mode-switch,
+.ratio-selector,
+.model-slot,
+.duration-selector,
+.upload-mini-row,
+.upload-card-row,
+.reference-input,
+.motion-control-panel,
+.motion-control-option,
+.subject-reference-card,
+.multimodal-panel,
+.skill-control-row,
+.ratio-dropdown {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.composer-summary {
+  background: #17191f;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.composer-control-panel {
+  background: #111318;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.composer-console {
+  background: #15171c;
+  border-color: transparent;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.38);
+}
+
+.meta-pill,
+.media-switch,
+.video-mode-switch,
+.ratio-selector,
+.model-slot,
+.duration-selector,
+.upload-mini-row,
+.upload-card-row,
+.reference-input,
+.motion-control-panel,
+.motion-control-option,
+.subject-reference-card,
+.multimodal-panel {
+  background: #1c1f26;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.ratio-dropdown {
+  background: #15171c;
+  border-color: transparent;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
+}
+
+.input-shell {
+  background: #0d0f13;
+  border-color: transparent;
+}
+
+.input-shell:focus-within {
+  background: #0d0f13;
+}
+
+.summary-toggle {
+  background: #262a33;
+  border-color: transparent;
+  color: rgba(255, 255, 255, 0.88);
+  backdrop-filter: none;
+}
+
+@media (max-width: 1100px) {
+  .workspace-shell,
+  .single-session-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .session-sidebar {
+    order: 1;
+    min-height: auto;
+  }
+
+  .workspace-main {
+    order: 2;
+  }
+
+  .mode-intro-card {
+    display: none;
+  }
+
+  .sidebar-footer {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 720px) {
+  .chat-page {
+    padding: 8px;
+  }
+
+  .workspace-main,
+  .composer-console,
+  .input-shell {
+    border-radius: 22px;
+  }
+
+  .empty-state h1 {
+    font-size: clamp(40px, 14vw, 64px);
+  }
+}
+
+
+/* 新简易模式布局：顶部菜单 + 左右创作区 */
+.top-nav {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+}
+
+.top-nav .brand-lockup {
+  width: auto;
+  padding: 0;
+}
+
+.top-nav-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.workspace-shell,
+.single-session-layout {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+}
+
+.workspace-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 12px;
+  height: 100%;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  overflow: hidden;
+}
+
+.chat-stage {
+  min-height: 0;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 24px;
+  background: #111318;
+}
+
+.composer-dock {
+  min-height: 0;
+  display: flex;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.composer-console {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.composer-summary {
+  flex: 0 0 auto;
+}
+
+.composer-control-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+}
+
+.composer-control-panel.ratio-open {
+  overflow: visible;
+}
+
+@media (max-width: 900px) {
+  .workspace-main {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .top-nav {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .top-nav-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+
+/* 最终简易模式微调：紧凑顶栏 + 右栏上下结构 + 可读性 */
+.top-nav {
+  min-height: 54px;
+  padding: 8px 12px;
+  gap: 10px;
+  background: #0a0a0c;
+  border: 1px solid #22242b;
+  border-radius: 16px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
+}
+
+.top-nav .brand-title {
+  font-size: 18px;
+  gap: 9px;
+  letter-spacing: -0.04em;
+}
+
+.top-nav .brand-title::before {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.top-nav-actions {
+  gap: 6px;
+}
+
+.top-nav-actions .skill-create-btn,
+.top-nav-actions .canvas-entry-btn,
+.top-nav-actions .sidebar-secondary-btn {
+  min-height: 34px;
+  padding: 0 13px;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  gap: 6px;
+}
+
+.top-nav-actions .skill-create-btn {
+  background: linear-gradient(135deg, #3b82f6 0%, #7c5cff 100%);
+  color: #fff;
+  border-color: transparent;
+}
+
+.top-nav-actions .canvas-entry-btn,
+.top-nav-actions .sidebar-secondary-btn {
+  background: #1c1f26;
+  color: #e6e8ef;
+  border: 1px solid #2a2e37;
+}
+
+.top-nav-actions .skill-create-icon {
+  font-size: 12px;
+}
+
+.top-nav-actions .canvas-entry-new {
+  padding: 2px 6px;
+  font-size: 9px;
+}
+
+.workspace-shell,
+.single-session-layout {
+  gap: 12px;
+}
+
+.workspace-main {
+  grid-template-columns: minmax(0, 1.1fr) minmax(380px, 0.9fr);
+  gap: 14px;
+}
+
+.composer-dock {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #15171c;
+  border: 1px solid #22252d;
+  border-radius: 22px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.30);
+}
+
+.composer-console {
+  order: 3;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.composer-summary {
+  display: none;
+}
+
+.composer-control-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  padding: 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.composer-control-panel.ratio-open,
+.composer-dock.ratio-open,
+.composer-console.ratio-open {
+  overflow: visible;
+}
+
+@media (min-width: 901px) {
+  .composer-control-panel.ratio-open .ratio-dropdown {
+    top: calc(100% + 10px);
+    bottom: auto;
+  }
+}
+
+.referenced-mentions {
+  order: 2;
+  flex: 0 0 auto;
+  padding: 8px 16px;
+}
+
+.input-shell {
+  order: 1;
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 0;
+  padding: 14px;
+  border: 1px solid #2a2f3a;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #11151c 0%, #0d1016 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 44px rgba(0, 0, 0, 0.22);
+}
+
+.input-shell:focus-within {
+  border-color: rgba(92, 132, 255, 0.62);
+  background: linear-gradient(180deg, #121822 0%, #0d1118 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 3px rgba(92, 132, 255, 0.12), 0 18px 44px rgba(0, 0, 0, 0.26);
+}
+
+.composer-actions {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  align-self: stretch;
+  padding: 12px 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.meta-pill-label,
+.upload-label,
+.motion-control-note,
+.motion-control-note strong,
+.multimodal-note,
+.multimodal-note strong,
+.referenced-mentions-label {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.upload-hint,
+.motion-control-note small,
+.multimodal-note small,
+.input-shell textarea::placeholder {
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.multimodal-group,
+.mention-menu {
+  background: #151923;
+  border-color: #2b3342;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 14px 32px rgba(0, 0, 0, 0.22);
+}
+
+.multimodal-group-title,
+.mention-item-name {
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.multimodal-group-count {
+  color: rgba(255, 255, 255, 0.54);
+}
+
+.multimodal-add-btn {
+  border-color: rgba(92, 132, 255, 0.46);
+  background: rgba(92, 132, 255, 0.10);
+  color: rgba(190, 207, 255, 0.96);
+}
+
+.multimodal-add-btn:hover,
+.mention-item:hover,
+.mention-item.active {
+  background: rgba(92, 132, 255, 0.18);
+}
+
+.switch-btn,
+.ratio-current-btn,
+.reference-input,
+.motion-control-select,
+.duration-select {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.switch-btn:not(.active) {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.switch-btn.active,
+.mode-switch-btn.active {
+  background: linear-gradient(135deg, #3b82f6 0%, #7c5cff 100%);
+  color: #fff;
+  border-color: transparent;
+}
+
+.ratio-current-btn {
+  background: #1c1f26;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.icon-btn,
+.polish-btn,
+.text-btn {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.icon-btn,
+.polish-btn {
+  background: #1a1f29;
+  border: 1px solid #2b3342;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 13px;
+}
+
+.polish-btn {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 13px;
+  color: #dbe6ff;
+}
+
+.icon-btn:hover,
+.polish-btn:not(:disabled):hover {
+  background: #242b38;
+  border-color: rgba(92, 132, 255, 0.5);
+}
+
+.send-btn.ready {
+  background: linear-gradient(135deg, #3b82f6 0%, #7c5cff 100%);
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(69, 105, 255, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.input-shell textarea {
+  color: #fff;
+  font-size: 15px;
+  min-height: 0;
+  max-height: none;
+  padding: 4px 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  resize: none;
+  cursor: text;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.38) transparent;
+}
+
+.input-shell textarea::-webkit-scrollbar {
+  width: 8px;
+}
+
+.input-shell textarea::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.32);
+}
+
+.input-shell textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.meta-pill-label {
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .input-shell {
+    margin-top: 0;
+  }
+
+  .composer-console {
+    max-height: min(46vh, 440px);
+  }
+}
+
+@media (max-width: 640px) {
+  .top-nav {
+    min-height: auto;
+  }
+
+  .top-nav-actions .skill-create-btn,
+  .top-nav-actions .canvas-entry-btn,
+  .top-nav-actions .sidebar-secondary-btn {
+    min-height: 32px;
+    padding: 0 11px;
+  }
+}
+
 </style>

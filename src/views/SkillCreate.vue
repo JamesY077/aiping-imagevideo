@@ -622,6 +622,86 @@ function goBack() {
   color: var(--color-text-hint);
 }
 
+.skill-create {
+  --color-text: rgba(255, 255, 255, 0.92);
+  --color-text-secondary: rgba(255, 255, 255, 0.68);
+  --color-text-hint: rgba(255, 255, 255, 0.46);
+  --color-text-inverse: #0a0a0c;
+  --color-surface-strong: #1c1f26;
+  --color-border: rgba(255, 255, 255, 0.10);
+  --color-border-strong: rgba(255, 255, 255, 0.16);
+  --color-accent: #3b82f6;
+  --color-accent-strong: #8fb0ff;
+  --color-accent-soft: rgba(92, 132, 255, 0.14);
+  --color-user-bubble: linear-gradient(135deg, #f7f7f2 0%, #d9dce3 100%);
+  --color-shadow-soft: 0 14px 40px rgba(0, 0, 0, 0.28);
+  color: var(--color-text);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(92, 132, 255, 0.18), transparent 30%),
+    radial-gradient(circle at 92% 4%, rgba(124, 92, 255, 0.14), transparent 26%),
+    linear-gradient(180deg, #070707 0%, #0b0d12 52%, #111318 100%);
+}
+
+.sc-header,
+.sc-input {
+  background: rgba(10, 10, 12, 0.82);
+}
+
+.sc-templates,
+.sc-chat {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sc-back,
+.sc-template,
+.sc-composer,
+.sc-editor-actions button,
+.sc-md,
+.sc-test-toggle,
+.sc-test-panel,
+.sc-test-input input {
+  background: #1c1f26;
+  border-color: #2b3342;
+  color: var(--color-text);
+  box-shadow: var(--color-shadow-soft);
+}
+
+.sc-msg p {
+  background: #151923;
+  border-color: #2b3342;
+}
+
+.sc-back:hover,
+.sc-template:hover,
+.sc-editor-actions button:hover:not(:disabled),
+.sc-test-toggle:hover {
+  background: #242b38;
+  border-color: rgba(92, 132, 255, 0.48);
+  color: var(--color-accent-strong);
+}
+
+.sc-send,
+.sc-test-input button {
+  background: linear-gradient(135deg, #3b82f6 0%, #7c5cff 100%);
+  color: #fff;
+}
+
+.sc-send:hover:not(:disabled),
+.sc-test-input button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #5b9cff 0%, #8d76ff 100%);
+}
+
+.sc-composer:focus-within,
+.sc-md:focus,
+.sc-test-input input:focus {
+  border-color: rgba(92, 132, 255, 0.58);
+  box-shadow: 0 0 0 4px rgba(92, 132, 255, 0.14), var(--color-shadow-soft);
+}
+
+.sc-test-media {
+  background: #0d1016;
+}
+
 @media (max-width: 760px) {
   .sc-body {
     grid-template-columns: 1fr;

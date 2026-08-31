@@ -243,30 +243,33 @@ select:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0.68);
   padding: 20px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .seedance-modal {
   width: 100%;
   max-width: 380px;
-  background: #fff;
-  border-radius: 16px;
+  background: linear-gradient(180deg, #171a22 0%, #10131a 100%);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 18px;
   padding: 24px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .seedance-modal-title {
   font-size: 16px;
-  font-weight: 600;
-  color: var(--color-text);
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.94);
   margin-bottom: 12px;
 }
 
 .seedance-modal-text {
   font-size: 14px;
   line-height: 1.7;
-  color: var(--color-text-secondary);
+  color: rgba(255, 255, 255, 0.66);
   margin: 0 0 20px;
 }
 
@@ -280,13 +283,16 @@ select:focus {
   padding: 0 24px;
   border: none;
   border-radius: 999px;
-  background: var(--color-text);
+  background: linear-gradient(135deg, #3b82f6 0%, #7c5cff 100%);
   color: #fff;
   font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 12px 28px rgba(69, 105, 255, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
 .seedance-modal-btn:hover {
-  opacity: 0.88;
+  opacity: 0.96;
+  background: linear-gradient(135deg, #5b9cff 0%, #8d76ff 100%);
 }
 </style>

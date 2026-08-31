@@ -1,6 +1,7 @@
 export type ImageRequestMode = 'default' | 'seedream-5-lite'
 
 const ASPECT_RATIO_SIZE_MAP: Record<string, { width: number; height: number }> = {
+  '21:9': { width: 1680, height: 720 },
   '16:9': { width: 1280, height: 720 },
   '3:2': { width: 1200, height: 800 },
   '4:3': { width: 1024, height: 768 },
@@ -11,6 +12,7 @@ const ASPECT_RATIO_SIZE_MAP: Record<string, { width: number; height: number }> =
 }
 
 const SEEDREAM_5_LITE_SIZE_MAP: Record<string, { width: number; height: number }> = {
+  '21:9': { width: 3024, height: 1296 },
   '16:9': { width: 2848, height: 1600 },
   '3:2': { width: 2496, height: 1664 },
   '4:3': { width: 2304, height: 1728 },
