@@ -521,23 +521,31 @@ h1 {
 }
 
 .primary-btn {
-  border: none;
-  background: var(--color-theme-gradient);
-  color: #08080a;
-  box-shadow: 0 14px 32px rgba(255, 255, 255, 0.10);
+  border: 1px solid var(--color-action-border);
+  background: var(--color-action-bg);
+  color: var(--color-action-text);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.22);
 }
 
 .danger-btn {
   margin-top: 18px;
-  border: none;
-  background: #dc2626;
-  color: #fff;
+  border: 1px solid var(--color-danger-border);
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
 }
 
 .ghost-btn:hover,
 .primary-btn:hover,
 .danger-btn:hover {
   transform: translateY(-1px);
+}
+
+.primary-btn:hover {
+  background: var(--color-action-bg-hover);
+}
+
+.danger-btn:hover {
+  background: rgba(255, 112, 112, 0.22);
 }
 
 .btn-row {

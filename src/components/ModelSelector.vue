@@ -281,18 +281,18 @@ select:focus {
 .seedance-modal-btn {
   min-height: 40px;
   padding: 0 24px;
-  border: none;
+  border: 1px solid var(--color-action-border);
   border-radius: 999px;
-  background: linear-gradient(135deg, #3b82f6 0%, #7c5cff 100%);
-  color: #fff;
+  background: var(--color-action-bg);
+  color: var(--color-action-text);
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 12px 28px rgba(69, 105, 255, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .seedance-modal-btn:hover {
   opacity: 0.96;
-  background: linear-gradient(135deg, #5b9cff 0%, #8d76ff 100%);
+  background: var(--color-action-bg-hover);
 }
 </style>

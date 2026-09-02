@@ -2,7 +2,7 @@
   <div class="setup-page">
     <header class="setup-nav">
       <button class="brand" type="button" @click="router.push('/')">
-        <span class="brand-mark">A</span>
+        <img class="brand-mark" src="/logo1.webp" alt="" />
         <span>ArtRealm</span>
       </button>
 
@@ -122,7 +122,7 @@ async function handleSubmit() {
   padding: 24px;
   color: rgba(255, 255, 255, 0.94);
   background:
-    url('/login-collage-bg.png') center / cover no-repeat, #05060a;
+    url('/login-collage-bg.webp') center / cover no-repeat, #05060a;
   isolation: isolate;
 }
 
@@ -182,15 +182,10 @@ async function handleSubmit() {
 }
 
 .brand-mark {
-  display: grid;
-  place-items: center;
   width: 30px;
   height: 30px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.94);
-  color: #08080c;
-  font-size: 14px;
-  font-weight: 900;
+  object-fit: cover;
 }
 
 .nav-spacer {
@@ -202,11 +197,16 @@ async function handleSubmit() {
   justify-self: end;
   min-height: 36px;
   padding: 0 18px;
+  border: 1px solid var(--color-pale-glass-border);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  color: #08080c;
+  background: var(--color-pale-glass-bg);
+  color: rgba(255, 255, 255, 0.94);
   font-size: 13px;
   font-weight: 800;
+}
+
+.nav-cta:hover {
+  background: var(--color-pale-glass-bg-hover);
 }
 
 .setup-shell {
@@ -322,12 +322,17 @@ label {
   width: 100%;
   min-height: 48px;
   margin-top: 18px;
+  border: 1px solid var(--color-action-border);
   border-radius: 14px;
-  background: linear-gradient(135deg, #f8f8ff, #d8d9ff 58%, #a88cff 140%);
-  color: #08080c;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34), 0 0 38px rgba(173, 123, 255, 0.20);
+  background: var(--color-action-bg);
+  color: var(--color-action-text);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
   font-size: 14px;
   font-weight: 900;
+}
+
+.submit-btn:not(:disabled):hover {
+  background: var(--color-action-bg-hover);
 }
 
 .submit-btn:disabled {

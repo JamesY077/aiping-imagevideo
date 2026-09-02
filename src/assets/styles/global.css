@@ -32,9 +32,20 @@
   --color-shadow: 0 24px 100px rgba(0, 0, 0, 0.42);
   --color-shadow-soft: 0 14px 44px rgba(0, 0, 0, 0.24);
   --color-user-bubble: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(222, 226, 232, 0.86));
-  --color-theme-gradient: linear-gradient(135deg, #f7f7f2 0%, #d9dce3 62%, #7ca5ff 150%);
-  --color-theme-gradient-hover: linear-gradient(135deg, #ffffff 0%, #e6e8ee 62%, #9cb8ff 150%);
-  --color-theme-gradient-active: linear-gradient(135deg, #dfe2e8 0%, #c8ccd5 62%, #648cff 150%);
+  --color-theme-gradient: linear-gradient(135deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.05) 100%);
+  --color-theme-gradient-hover: linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.08) 100%);
+  --color-theme-gradient-active: linear-gradient(135deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.10) 100%);
+  --color-action-bg: linear-gradient(135deg, #f7f7f2 0%, #d9dce3 100%);
+  --color-action-bg-hover: linear-gradient(135deg, #ffffff 0%, #e6e8ee 100%);
+  --color-action-bg-active: linear-gradient(135deg, #dfe2e8 0%, #c8ccd5 100%);
+  --color-action-border: rgba(255, 255, 255, 0.30);
+  --color-action-text: #08080a;
+  --color-danger-bg: rgba(255, 112, 112, 0.16);
+  --color-danger-border: rgba(255, 134, 134, 0.40);
+  --color-danger-text: #ffc6c6;
+  --color-pale-glass-bg: rgba(255, 255, 255, 0.12);
+  --color-pale-glass-bg-hover: rgba(255, 255, 255, 0.16);
+  --color-pale-glass-border: rgba(255, 255, 255, 0.28);
   --radius-xs: 12px;
   --radius-sm: 18px;
   --radius-md: 28px;
@@ -58,8 +69,8 @@ body {
   font-family: var(--font-family);
   color: var(--color-text);
   background:
-    radial-gradient(circle at 18% 0%, rgba(91, 141, 255, 0.15), transparent 28%),
-    radial-gradient(circle at 86% 18%, rgba(255, 138, 76, 0.10), transparent 25%),
+    radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.06), transparent 28%),
+    radial-gradient(circle at 86% 18%, rgba(255, 255, 255, 0.04), transparent 25%),
     linear-gradient(180deg, #070707 0%, #0b0b0e 52%, #111114 100%);
   min-height: 100vh;
   min-height: 100dvh;
@@ -108,11 +119,11 @@ video {
 }
 
 ::selection {
-  background: rgba(10, 132, 255, 0.22);
+  background: rgba(255, 255, 255, 0.20);
 }
 
 :focus-visible {
-  outline: 2px solid rgba(10, 132, 255, 0.68);
+  outline: 2px solid rgba(255, 255, 255, 0.66);
   outline-offset: 2px;
 }
 

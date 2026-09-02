@@ -251,30 +251,30 @@ function openPreview() {
 }
 
 .action-btn-primary {
-  background: var(--color-theme-gradient);
-  border-color: transparent;
-  color: #08080a;
-  box-shadow: 0 12px 24px rgba(95, 75, 139, 0.22);
+  background: var(--color-action-bg);
+  border-color: var(--color-action-border);
+  color: var(--color-action-text);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.22);
 }
 
 .action-btn-primary:hover {
-  background: var(--color-theme-gradient-hover);
-  border-color: transparent;
-  color: #08080a;
-  box-shadow: 0 14px 28px rgba(95, 75, 139, 0.26);
+  background: var(--color-action-bg-hover);
+  border-color: var(--color-action-border);
+  color: var(--color-action-text);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.26);
 }
 
 .action-btn-primary:active {
-  background: var(--color-theme-gradient-active);
-  border-color: transparent;
-  color: #08080a;
+  background: var(--color-action-bg-active);
+  border-color: var(--color-action-border);
+  color: var(--color-action-text);
   transform: translateY(0);
-  box-shadow: 0 8px 18px rgba(95, 75, 139, 0.2);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.20);
 }
 
 .action-btn-primary:focus-visible {
-  background: var(--color-theme-gradient-hover);
-  border-color: transparent;
+  background: var(--color-action-bg-hover);
+  border-color: var(--color-action-border);
 }
 
 .action-btn-subtle {

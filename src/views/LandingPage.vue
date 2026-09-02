@@ -2,7 +2,7 @@
   <div class="home-page">
     <header class="home-header">
       <button class="brand-logo" type="button" aria-label="ArtRealm 首页">
-        <span class="brand-mark">A</span>
+        <img class="brand-mark" src="/logo1.webp" alt="" />
         <span class="brand-name">ArtRealm</span>
       </button>
 
@@ -94,7 +94,7 @@ const skillTemplates = [
   {
     title: '王家卫式霓虹孤独风格',
     theme: 'template-skill',
-    image: '/skill-wkw-neon-loneliness-style.png',
+    image: '/skill-wkw-neon-loneliness-style.webp',
     fileUrl: '/skills/wkw-neon-loneliness-style.md',
     fileName: 'wkw-neon-loneliness-style.md',
   },
@@ -108,14 +108,14 @@ const skillTemplates = [
   {
     title: '手绘发光动画实拍融合',
     theme: 'template-skill',
-    image: '/skill-handdrawn-live-video-generator.png',
+    image: '/skill-handdrawn-live-video-generator.webp',
     fileUrl: '/skills/handdrawn-live-video-generator.md',
     fileName: 'handdrawn-live-video-generator.md',
   },
   {
     title: '极简旅行海报',
     theme: 'template-skill',
-    image: '/skill-photo-to-minimal-vector-travel-poster.png',
+    image: '/skill-photo-to-minimal-vector-travel-poster.webp',
     fileUrl: '/skills/photo-to-minimal-vector-travel-poster.md',
     fileName: 'photo-to-minimal-vector-travel-poster.md',
   },
@@ -126,49 +126,49 @@ const templates = [
     title: 'F1 飞驰赛车',
     prompt: 'F1 方程式赛车在赛道上高速飞驰，低机位广角镜头，车身运动模糊，轮胎带起火花与水雾，雨后赛道反光，电影级运动摄影，浅景深，强烈速度感，超清细节',
     theme: 'template-race',
-    image: '/template-f1.jpg',
+    image: '/template-f1.webp',
   },
   {
     title: 'iPhone 17 产品电商图',
     prompt: 'iPhone 17 旗舰手机产品电商主图，钛金属边框高光，深色科技感背景，蓝紫渐变轮廓光，镜头模组与屏幕清晰展示，悬浮构图，商业产品摄影，高级质感，超清渲染',
     theme: 'template-product',
-    image: '/template-iphone17.jpg',
+    image: '/template-iphone17.webp',
   },
   {
     title: '科技感网页 UI',
     prompt: '未来科技感网页 UI 界面设计，深色模式仪表盘，玻璃拟态数据卡片，蓝紫渐变数据可视化图表，悬浮导航栏，清晰信息层级，高清界面设计，现代极简',
     theme: 'template-tech',
-    image: '/template-webui.jpg',
+    image: '/template-webui.webp',
   },
   {
     title: '卡通兔子',
     prompt: '可爱卡通兔子角色，软萌大眼睛，奶油白毛绒质感，治愈系绘本插画风格，柔和自然光，浅色温馨场景，精致细节，迪士尼级角色设计',
     theme: 'template-commerce',
-    image: '/template-rabbit.jpg',
+    image: '/template-rabbit.webp',
   },
   {
     title: '无线耳机结构解析',
     prompt: '无线头戴式降噪耳机爆炸分解产品图，精密声学结构与内部电子组件清晰展示，USB-C 充电口、电池、驱动单元、麦克风阵列与记忆棉耳罩，工业设计图纸风格，深色科技背景，商业产品渲染，超清细节',
     theme: 'template-commerce',
-    image: '/template-headphones.jpg',
+    image: '/template-headphones.webp',
   },
   {
     title: '影视爆炸现场',
     prompt: '电影级爆炸现场，橙红色火球与黑色浓烟升腾，尘土碎片飞溅，冲击波，逆光剪影，广角构图，逼真影视特效，超高细节',
     theme: 'template-monster',
-    image: '/template-landscape.jpg',
+    image: '/template-landscape.webp',
   },
   {
     title: '中世纪战士',
     prompt: '中世纪战士角色，厚重金属铠甲，战损做旧，斗篷，手持长剑，阴天战场背景，电影级写实人像，戏剧性侧光，细腻质感，史诗氛围',
     theme: 'template-hero',
-    image: '/template-festival.jpg',
+    image: '/template-festival.webp',
   },
   {
     title: '专业相机三视图',
     prompt: '专业数码相机产品三视图与爆炸分解展示，黑色机身，35mm f/2.0 定焦镜头，标注尺寸、按键与接口，工业设计图纸风格，商业产品展示，超清渲染',
     theme: 'template-commerce',
-    image: '/template-camera.jpg',
+    image: '/template-camera.webp',
   },
 ]
 
@@ -265,7 +265,7 @@ onBeforeUnmount(() => {
   color: #fff;
   background:
     radial-gradient(circle at 50% 50%, rgba(8, 14, 30, 0.02), rgba(2, 4, 12, 0.34) 64%, rgba(0, 0, 0, 0.66) 100%),
-    url('/home-collage-bg.png') center top / cover no-repeat;
+    url('/home-collage-bg.webp') center top / cover no-repeat;
   isolation: isolate;
 }
 
@@ -314,18 +314,13 @@ onBeforeUnmount(() => {
 }
 
 .brand-mark {
-  display: grid;
-  place-items: center;
   width: 30px;
   height: 30px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.92);
-  color: #06111f;
-  font-size: 14px;
-  font-weight: 900;
+  object-fit: cover;
   box-shadow:
     0 16px 40px rgba(0, 0, 0, 0.32),
-    0 0 34px rgba(57, 216, 255, 0.18),
+    0 0 34px rgba(255, 255, 255, 0.10),
     inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
@@ -346,10 +341,10 @@ onBeforeUnmount(() => {
   min-width: 92px;
   min-height: 42px;
   padding: 0 22px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 1px solid var(--color-pale-glass-border);
   border-radius: 999px;
-  background: rgba(5, 12, 26, 0.52);
-  color: rgba(255, 255, 255, 0.94);
+  background: var(--color-pale-glass-bg);
+  color: rgba(226, 234, 255, 0.96);
   font-size: 14px;
   font-weight: 700;
   box-shadow: 0 16px 42px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.12);
@@ -357,8 +352,8 @@ onBeforeUnmount(() => {
 }
 
 .login-btn:hover {
-  border-color: rgba(105, 240, 255, 0.44);
-  background: rgba(9, 24, 52, 0.64);
+  border-color: rgba(255, 255, 255, 0.34);
+  background: var(--color-pale-glass-bg-hover);
 }
 
 .home-main {

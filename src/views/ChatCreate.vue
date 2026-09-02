@@ -3,7 +3,10 @@
     <div class="workspace-shell single-session-layout">
       <header class="top-nav">
         <div class="brand-lockup">
-          <strong class="brand-title">ArtRealm</strong>
+          <strong class="brand-title">
+            <img class="brand-title-logo" src="/logo1.webp" alt="" />
+            ArtRealm
+          </strong>
         </div>
 
         <div class="top-nav-actions">
@@ -2163,19 +2166,20 @@ async function handleRegenerate(message: Message) {
   gap: 8px;
   min-height: 44px;
   padding: 0 18px;
-  border: 0;
+  border: 1px solid var(--color-action-border);
   border-radius: 16px;
   cursor: pointer;
   font-weight: 700;
   letter-spacing: 0.02em;
-  color: #fff;
-  background: var(--color-theme-gradient);
+  color: var(--color-action-text);
+  background: var(--color-action-bg);
   box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
   transition: transform var(--transition-base), box-shadow var(--transition-base);
 }
 
 .skill-create-btn:hover {
   transform: translateY(-1px);
+  background: var(--color-action-bg-hover);
   box-shadow: 0 18px 34px rgba(0, 0, 0, 0.24);
 }
 
@@ -2224,8 +2228,8 @@ async function handleRegenerate(message: Message) {
   font-weight: 800;
   letter-spacing: 0.06em;
   line-height: 1.2;
-  color: #fff;
-  background: #ff5f6d;
+  color: rgba(255, 255, 255, 0.86);
+  background: rgba(255, 255, 255, 0.16);
 }
 
 
@@ -2619,10 +2623,10 @@ async function handleRegenerate(message: Message) {
 .ratio-selector:focus-within,
 .duration-selector:focus-within,
 .media-switch:focus-within {
-  border-color: rgba(10, 132, 255, 0.42);
+  border-color: rgba(255, 255, 255, 0.30);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.92),
-    0 0 0 3px rgba(10, 132, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    0 0 0 3px rgba(255, 255, 255, 0.06),
     0 8px 18px rgba(15, 23, 42, 0.06);
 }
 
@@ -3056,19 +3060,26 @@ async function handleRegenerate(message: Message) {
 }
 
 .multimodal-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 52px;
   height: 52px;
-  border: 1px dashed rgba(10, 132, 255, 0.42);
+  border: 1px dashed rgba(255, 255, 255, 0.30);
   border-radius: 12px;
-  background: rgba(10, 132, 255, 0.06);
-  color: rgba(10, 132, 255, 0.90);
-  font-size: 22px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.90);
+  font-size: 18px;
+  font-weight: 600;
   line-height: 1;
   cursor: pointer;
+  transition: background var(--transition-base), border-color var(--transition-base), color var(--transition-base);
 }
 
 .multimodal-add-btn:hover {
-  background: rgba(10, 132, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.48);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 /* @ 引用菜单 */
@@ -3142,12 +3153,29 @@ async function handleRegenerate(message: Message) {
   justify-content: center;
 }
 
-.upload-btn,
+.upload-icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
 .icon-btn {
   background: rgba(255, 255, 255, 0.58);
 }
 
-.upload-btn:hover,
+.upload-btn {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.upload-btn:hover {
+  border-color: rgba(255, 255, 255, 0.38);
+  background: rgba(255, 255, 255, 0.16);
+}
+
 .icon-btn:hover,
 .text-btn:hover,
 .polish-btn:not(:disabled):hover {
@@ -3184,10 +3212,10 @@ async function handleRegenerate(message: Message) {
 }
 
 .input-shell:focus-within {
-  border-color: rgba(10, 132, 255, 0.28);
+  border-color: rgba(100, 116, 139, 0.42);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.86));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.96), 0 0 0 4px rgba(10, 132, 255, 0.06), 0 14px 30px rgba(15, 23, 42, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.96), 0 0 0 4px rgba(100, 116, 139, 0.08), 0 14px 30px rgba(15, 23, 42, 0.08);
 }
 
 .compact-model-slot {
@@ -3357,7 +3385,7 @@ async function handleRegenerate(message: Message) {
 }
 
 .send-btn.ready .send-gradient-icon {
-  color: rgba(255, 255, 255, 0.98);
+  color: rgba(8, 8, 10, 0.9);
 }
 
 .send-btn.ready .send-gradient-icon svg {
@@ -3571,16 +3599,11 @@ async function handleRegenerate(message: Message) {
   background: none;
 }
 
-.brand-title::before {
-  content: 'A';
-  display: grid;
-  place-items: center;
+.brand-title-logo {
   width: 34px;
   height: 34px;
   border-radius: 12px;
-  background: #f7f7f2;
-  color: #08080a;
-  font: 800 16px/1 var(--font-family);
+  object-fit: cover;
   box-shadow: 0 0 32px rgba(255, 255, 255, 0.22);
 }
 
@@ -3839,13 +3862,17 @@ async function handleRegenerate(message: Message) {
 .ratio-selector,
 .model-slot,
 .duration-selector {
-  border-color: rgba(255, 255, 255, 0.11);
+  border-color: rgba(255, 255, 255, 0.26);
   background: rgba(255, 255, 255, 0.07);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
+.ratio-selector {
+  border-color: transparent;
+}
+
 .motion-control-option {
-  border-color: rgba(255, 255, 255, 0.11);
+  border-color: rgba(255, 255, 255, 0.26);
   background: rgba(255, 255, 255, 0.07);
 }
 
@@ -3881,20 +3908,20 @@ async function handleRegenerate(message: Message) {
 }
 
 .send-btn.ready {
-  background: linear-gradient(135deg, #5b8cff 0%, #7a5cff 100%);
-  color: #fff;
-  border-color: transparent;
-  box-shadow: 0 14px 34px rgba(79, 110, 255, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  background: var(--color-action-bg);
+  color: var(--color-action-text);
+  border-color: var(--color-action-border);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.10);
 }
 
 .send-btn.ready .send-gradient-icon {
-  color: #fff;
+  color: rgba(8, 8, 10, 0.9);
 }
 
 .input-shell:focus-within {
-  border-color: rgba(122, 158, 255, 0.48);
+  border-color: rgba(255, 255, 255, 0.30);
   background: rgba(6, 6, 8, 0.88);
-  box-shadow: inset 0 1px 18px rgba(0, 0, 0, 0.44), 0 0 0 3px rgba(91, 140, 255, 0.12);
+  box-shadow: inset 0 1px 18px rgba(0, 0, 0, 0.44), 0 0 0 3px rgba(255, 255, 255, 0.08);
 }
 
 :deep(.model-selector select) {
@@ -3917,20 +3944,28 @@ async function handleRegenerate(message: Message) {
 }
 
 .ratio-dropdown-item.active {
-  background: rgba(91, 140, 255, 0.16);
+  background: rgba(255, 255, 255, 0.12);
   color: #fff;
 }
 
 .ratio-current-box,
 .ratio-option-box {
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: transparent;
   background: rgba(255, 255, 255, 0.08);
+}
+
+.media-switch:focus-within,
+.video-mode-switch:focus-within,
+.model-slot:focus-within,
+.duration-selector:focus-within {
+  border-color: rgba(255, 255, 255, 0.34);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10), 0 0 0 3px rgba(255, 255, 255, 0.06);
 }
 
 .ratio-selector.open,
 .ratio-selector:focus-within {
-  border-color: rgba(122, 158, 255, 0.50);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 0 3px rgba(91, 140, 255, 0.12);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .composer-control-panel.ratio-open {
@@ -3945,7 +3980,7 @@ async function handleRegenerate(message: Message) {
 
 .skill-upload-btn-inline {
   background: transparent;
-  border-color: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.26);
   color: rgba(255, 255, 255, 0.78);
 }
 
@@ -3955,9 +3990,9 @@ async function handleRegenerate(message: Message) {
 }
 
 .skill-upload-btn-inline.active {
-  background: linear-gradient(135deg, #5b8cff 0%, #7a5cff 100%);
-  border-color: transparent;
-  color: #fff;
+  background: var(--color-action-bg);
+  border-color: var(--color-action-border);
+  color: var(--color-action-text);
 }
 
 .composer-summary,
@@ -4202,11 +4237,10 @@ async function handleRegenerate(message: Message) {
   letter-spacing: -0.04em;
 }
 
-.top-nav .brand-title::before {
+.top-nav .brand-title-logo {
   width: 28px;
   height: 28px;
   border-radius: 10px;
-  font-size: 13px;
 }
 
 .top-nav-actions {
@@ -4226,9 +4260,9 @@ async function handleRegenerate(message: Message) {
 }
 
 .top-nav-actions .skill-create-btn {
-  background: linear-gradient(135deg, #3b82f6 0%, #7c5cff 100%);
-  color: #fff;
-  border-color: transparent;
+  background: var(--color-action-bg);
+  color: var(--color-action-text);
+  border-color: var(--color-action-border);
 }
 
 .top-nav-actions .canvas-entry-btn,
@@ -4336,9 +4370,9 @@ async function handleRegenerate(message: Message) {
 }
 
 .input-shell:focus-within {
-  border-color: rgba(92, 132, 255, 0.62);
+  border-color: rgba(255, 255, 255, 0.34);
   background: linear-gradient(180deg, #121822 0%, #0d1118 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 3px rgba(92, 132, 255, 0.12), 0 18px 44px rgba(0, 0, 0, 0.26);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 3px rgba(255, 255, 255, 0.06), 0 18px 44px rgba(0, 0, 0, 0.26);
 }
 
 .composer-actions {
@@ -4386,15 +4420,20 @@ async function handleRegenerate(message: Message) {
 }
 
 .multimodal-add-btn {
-  border-color: rgba(92, 132, 255, 0.46);
-  background: rgba(92, 132, 255, 0.10);
-  color: rgba(190, 207, 255, 0.96);
+  border-color: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.90);
 }
 
-.multimodal-add-btn:hover,
+.multimodal-add-btn:hover {
+  border-color: rgba(255, 255, 255, 0.48);
+  background: rgba(255, 255, 255, 0.13);
+  color: #fff;
+}
+
 .mention-item:hover,
 .mention-item.active {
-  background: rgba(92, 132, 255, 0.18);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .switch-btn,
@@ -4411,14 +4450,27 @@ async function handleRegenerate(message: Message) {
 
 .switch-btn.active,
 .mode-switch-btn.active {
-  background: linear-gradient(135deg, #3b82f6 0%, #7c5cff 100%);
-  color: #fff;
-  border-color: transparent;
+  background: var(--color-action-bg);
+  color: var(--color-action-text);
+  border-color: var(--color-action-border);
 }
 
 .ratio-current-btn {
   background: #1c1f26;
   color: rgba(255, 255, 255, 0.92);
+}
+
+.motion-control-select,
+.duration-select {
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 10px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.reference-input {
+  border-color: rgba(255, 255, 255, 0.26);
 }
 
 .icon-btn,
@@ -4450,13 +4502,13 @@ async function handleRegenerate(message: Message) {
 .icon-btn:hover,
 .polish-btn:not(:disabled):hover {
   background: #242b38;
-  border-color: rgba(92, 132, 255, 0.5);
+  border-color: rgba(255, 255, 255, 0.40);
 }
 
 .send-btn.ready {
-  background: linear-gradient(135deg, #3b82f6 0%, #7c5cff 100%);
-  color: #fff;
-  box-shadow: 0 12px 28px rgba(69, 105, 255, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  background: var(--color-action-bg);
+  color: var(--color-action-text);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.10);
 }
 
 .input-shell textarea {

@@ -547,7 +547,7 @@ onBeforeUnmount(() => {
 
 .canvas-progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, #0a84ff, #64d2ff);
+  background: linear-gradient(90deg, #3c3f46, #8b909b);
   border-radius: 999px;
   transition: width 0.3s ease;
 }
