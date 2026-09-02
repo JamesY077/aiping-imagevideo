@@ -1,11 +1,14 @@
 import { AppError } from '@/utils/errors'
+import {
+  prepareLocalImageDataUri,
+  prepareMinimaxH3ImageDataUri,
+} from '@/features/generate/localImage'
 
 /**
- * 图片上传工具（Seedance 2.0 参考图专用）
+ * 图片上传工具（本地图片统一走 COS 上传代理）
  * ------------------------------------------------------------------
- * 火山 Seedance 2.0 的 CreateAsset 只接受公网 http/https URL，不接受本地
- * base64。因此本地上传的参考图需先经过「上传代理服务」换成公网 URL
- * （见 server/upload-service）。
+ * 火山 Seedance 2.0 的 CreateAsset 必须使用公网 URL；其他支持本地图片的模型
+ * 在配置了上传服务后，也会统一把 base64 图片换成公网 URL，避免大请求体导致上游 503。
  *
  * 上传服务地址与鉴权 token 通过前端环境变量配置：
  *   VITE_UPLOAD_SERVICE_URL   例如 https://artrealm.nextmak.cn/upload
@@ -99,20 +102,11 @@ async function assertSeedanceImageValid(dataUri: string): Promise<void> {
   }
 }
 
-/**
- * 把一张 base64 dataURI 上传到上传代理服务，返回公网 HTTPS URL。
- * 若未配置上传服务，抛出带指引的错误。
- */
-export async function uploadDataUriToPublicUrl(dataUri: string): Promise<string> {
+/** 把 base64 dataURI 上传到 COS 代理服务，返回公网 HTTPS URL。 */
+async function uploadImageToPublicUrl(dataUri: string): Promise<string> {
   if (!UPLOAD_SERVICE_URL) {
-    throw new AppError(
-      'Seedance 2.0 的参考图需要公网图片 URL，但当前未配置图片上传服务。' +
-        '请在前端 .env 配置 VITE_UPLOAD_SERVICE_URL（并部署 server/upload-service），' +
-        '或改用画布中已生成的图片作为参考。',
-    )
+    throw new AppError('当前未配置图片上传服务，无法把本地图片转换为公网 URL。')
   }
-
-  await assertSeedanceImageValid(dataUri)
 
   try {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -151,8 +145,52 @@ export async function uploadDataUriToPublicUrl(dataUri: string): Promise<string>
     return data.url
   } catch (error: any) {
     if (error instanceof AppError) throw error
-    throw new AppError('图片上传失败，请检查网络后重试。')
+    throw new AppError('图片上传服务连接失败，请确认上传服务已启动且网络可达。')
   }
+}
+
+/**
+ * Seedance 2.0 专用：本地上传图片必须先经尺寸/比例校验，再上传为公网 URL。
+ */
+export async function uploadDataUriToPublicUrl(dataUri: string): Promise<string> {
+  if (!UPLOAD_SERVICE_URL) {
+    throw new AppError(
+      'Seedance 2.0 的参考图需要公网图片 URL，但当前未配置图片上传服务。' +
+        '请在前端 .env 配置 VITE_UPLOAD_SERVICE_URL（并部署 server/upload-service），' +
+        '或改用画布中已生成的图片作为参考。',
+    )
+  }
+
+  await assertSeedanceImageValid(dataUri)
+  return uploadImageToPublicUrl(dataUri)
+}
+
+/**
+ * 通用图片上传：
+ * - 已是 http/https：原样返回。
+ * - 是 base64 dataURI：先压缩大图，再上传为公网 URL。
+ * - 未配置上传服务时，返回压缩后的 dataURI，尽量兼容支持 base64 的模型。
+ */
+export async function ensurePublicImageUrlForModel(value: string): Promise<string> {
+  if (!isDataUri(value)) return value
+
+  const preparedDataUri = await prepareLocalImageDataUri(value)
+  if (!UPLOAD_SERVICE_URL) return preparedDataUri
+
+  return uploadImageToPublicUrl(preparedDataUri)
+}
+
+/**
+ * MiniMax-H3 专用图片上传：
+ * 在上传 COS 前先按 H3 官方尺寸限制（最短边至少 256px）做一次合规处理。
+ */
+export async function ensureMinimaxH3ImageForModel(value: string): Promise<string> {
+  if (!isDataUri(value)) return value
+
+  const preparedDataUri = await prepareMinimaxH3ImageDataUri(value)
+  if (!UPLOAD_SERVICE_URL) return preparedDataUri
+
+  return uploadImageToPublicUrl(preparedDataUri)
 }
 
 /**

@@ -7,8 +7,11 @@
  */
 import { computed } from 'vue'
 
+import { showErrorMessage } from '@/utils/errors'
+import { validateUploadFileKind } from '@/features/generate/fileFormats'
 import { useCanvasStore, type CanvasNodeData } from '@/stores/canvasStore'
 import {
+  getModelCapability,
   getSupportedAspectRatios,
   getSupportedVideoDurations,
   getSupportedVideoModes,
@@ -37,7 +40,16 @@ export function useGenerationNode(props: GenerationNodeProps) {
   // 视频节点：当前模型支持的生成方式（文生/图生/首尾帧/主体参考/动作控制）。
   const videoModeOptions = computed(() => getSupportedVideoModes(props.data.model))
 
-  const ratioOptions = computed(() => getSupportedAspectRatios(props.data.model) ?? DEFAULT_RATIOS)
+  const ratioOptions = computed(
+    () => getSupportedAspectRatios(props.data.model, props.data.videoMode) ?? DEFAULT_RATIOS,
+  )
+
+  // 视频分辨率档位（当前仅 MiniMax-H3 展示 768P / 2K）。
+  const resolutionOptions = computed(() => {
+    if (kind.value !== 'video') return null
+    if (getModelCapability(props.data.model)?.videoRequestMode !== 'minimax-h3') return null
+    return ['768P', '2K'] as const
+  })
   const durationOptions = computed(
     () => getSupportedVideoDurations(props.data.model) ?? [{ value: 5, label: '5s' }],
   )
@@ -49,7 +61,7 @@ export function useGenerationNode(props: GenerationNodeProps) {
   const showUpload = computed(
     () =>
       (kind.value === 'image' && props.data.imageMode === 'image2image') ||
-      (kind.value === 'video' && props.data.videoMode === 'image2video'),
+      (kind.value === 'video' && (props.data.videoMode === 'image2video' || props.data.videoMode === 'endFrame2video')),
   )
   // 主体参考视频：与图生视频一样，只需一张参考图。
   const showSubjectUpload = computed(
@@ -91,11 +103,21 @@ export function useGenerationNode(props: GenerationNodeProps) {
   function onDuration(e: Event) {
     store.updateNodeData(props.id, { duration: Number((e.target as HTMLSelectElement).value) })
   }
+  function onResolution(e: Event) {
+    store.updateNodeData(props.id, { resolution: (e.target as HTMLSelectElement).value })
+  }
 
   // ------ 文件上传处理 ------
   function onFile(e: Event) {
-    const file = (e.target as HTMLInputElement).files?.[0]
+    const input = e.target as HTMLInputElement
+    const file = input.files?.[0]
     if (!file) return
+    const formatError = validateUploadFileKind(file, 'image')
+    if (formatError) {
+      showErrorMessage(formatError)
+      input.value = ''
+      return
+    }
     const reader = new FileReader()
     reader.onload = () =>
       store.updateNodeData(props.id, {
@@ -106,9 +128,21 @@ export function useGenerationNode(props: GenerationNodeProps) {
   }
 
   // 通用：把选中的文件读为 data url 并写入指定的节点字段。
-  function readFileInto(e: Event, urlKey: keyof CanvasNodeData, nameKey: keyof CanvasNodeData) {
-    const file = (e.target as HTMLInputElement).files?.[0]
+  function readFileInto(
+    e: Event,
+    urlKey: keyof CanvasNodeData,
+    nameKey: keyof CanvasNodeData,
+    kind: 'image' | 'video' = 'image',
+  ) {
+    const input = e.target as HTMLInputElement
+    const file = input.files?.[0]
     if (!file) return
+    const formatError = validateUploadFileKind(file, kind)
+    if (formatError) {
+      showErrorMessage(formatError)
+      input.value = ''
+      return
+    }
     const reader = new FileReader()
     reader.onload = () =>
       store.updateNodeData(props.id, {
@@ -128,7 +162,7 @@ export function useGenerationNode(props: GenerationNodeProps) {
     readFileInto(e, 'motionImage', 'motionImageName')
   }
   function onMotionVideo(e: Event) {
-    readFileInto(e, 'motionVideo', 'motionVideoName')
+    readFileInto(e, 'motionVideo', 'motionVideoName', 'video')
   }
 
   // ------ 多模态参考（Seedance 2.0）：图片 / 视频 / 音频列表 ------
@@ -143,7 +177,13 @@ export function useGenerationNode(props: GenerationNodeProps) {
     if (!files.length) return
     const current = (props.data[listKey] as string[] | undefined) || []
     const room = Math.max(0, limit - current.length)
-    const picked = files.slice(0, room)
+    const picked = files.slice(0, room).filter((file) => {
+      if (listKey === 'multimodalAudios') return true
+      const kind = listKey === 'multimodalVideos' ? 'video' : 'image'
+      const formatError = validateUploadFileKind(file, kind)
+      if (formatError) showErrorMessage(formatError)
+      return !formatError
+    })
     Promise.all(
       picked.map(
         (file) =>
@@ -180,7 +220,7 @@ export function useGenerationNode(props: GenerationNodeProps) {
 
   // ------ 编辑视频（Seedance 2.0）：待编辑视频 + 替换图片 ------
   function onEditVideo(e: Event) {
-    readFileInto(e, 'editVideoUrl', 'editVideoName')
+    readFileInto(e, 'editVideoUrl', 'editVideoName', 'video')
   }
   function onEditImage(e: Event) {
     readFileInto(e, 'editImageUrl', 'editImageName')
@@ -195,6 +235,7 @@ export function useGenerationNode(props: GenerationNodeProps) {
     videoModeOptions,
     ratioOptions,
     durationOptions,
+    resolutionOptions,
     textModels,
     showUpload,
     showSubjectUpload,
@@ -209,6 +250,7 @@ export function useGenerationNode(props: GenerationNodeProps) {
     onTextModel,
     onRatio,
     onDuration,
+    onResolution,
     onFile,
     onStartFrame,
     onEndFrame,

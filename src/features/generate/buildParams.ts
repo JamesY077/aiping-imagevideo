@@ -35,17 +35,11 @@ export async function buildImageParams(
 
   if (mode && mode !== 'default') {
     const { width, height } = aspectRatioToDimensions(aspectRatio, mode)
+    imageParams.output_format = 'png'
     imageParams.watermark = false
-
-    if (mode === 'seedream-5-lite') {
-      imageParams.output_format = 'png'
-      imageParams.size = aspectRatioToImageSize(aspectRatio, mode, 'x')
-    } else {
-      imageParams.output_format = 'png'
-      imageParams.size = undefined
-      imageParams.width = width
-      imageParams.height = height
-    }
+    imageParams.size = undefined
+    imageParams.width = width
+    imageParams.height = height
   }
 
   return imageParams
@@ -59,7 +53,9 @@ export async function buildVideoParams(
   duration: number,
   videoRequestMode: ModelCapability['videoRequestMode'],
   // Kling 系列「是否生成声音」：native 生成带声音的视频，off 无声音（默认）。
-  klingAudio: 'native' | 'off' = 'off'
+  klingAudio: 'native' | 'off' = 'off',
+  // 视频分辨率档位（当前仅 MiniMax-H3 使用：768P / 2K）。
+  videoResolution: string | null = null
 ): Promise<VideoGenerateRequest> {
 
   const uploadedFiles = (Array.isArray(uploadedFile) ? uploadedFile : uploadedFile ? [uploadedFile] : [])
@@ -237,6 +233,70 @@ export async function buildVideoParams(
       delete videoParams.payload
       delete videoParams.extra_body
       break
+    case 'minimax-h3': {
+      // MiniMax-H3 走 /multimodal/minimax/videos/video_generation，content 数组协议。
+      // - 首尾帧生视频：purpose 为 start-frame / end-frame 的图片分别对应 first_frame / last_frame。
+      // - 图生视频：单张图片作为首帧（first_frame_image）。
+      // - 多模态参考：purpose 为 multimodal-image/-video/-audio 的素材按类型归类。
+      const startFrameIndex = uploadedFiles.findIndex((file) => file.purpose === 'start-frame')
+      const endFrameIndex = uploadedFiles.findIndex((file) => file.purpose === 'end-frame')
+      const hasFrameUploads = startFrameIndex >= 0 || endFrameIndex >= 0
+
+      if (hasFrameUploads) {
+        if (startFrameIndex >= 0 && uploadValues[startFrameIndex]) {
+          videoParams.first_frame_image = uploadValues[startFrameIndex]
+        }
+        if (endFrameIndex >= 0 && uploadValues[endFrameIndex]) {
+          videoParams.last_frame_image = uploadValues[endFrameIndex]
+        }
+        // 纯尾帧生视频：只传尾帧（role=last_frame），不当作首帧。
+        if (endFrameIndex >= 0 && startFrameIndex < 0 && uploadValues[endFrameIndex]) {
+          delete videoParams.first_frame_image
+        }
+      } else if (uploadedFiles.some((file) => file.purpose?.startsWith('multimodal-'))) {
+        const referenceImages: string[] = []
+        const referenceVideos: string[] = []
+        const referenceAudios: string[] = []
+        uploadedFiles.forEach((file, index) => {
+          const value = uploadValues[index]
+          if (!value) return
+          if (file.purpose === 'multimodal-video' || file.type === 'video') {
+            referenceVideos.push(value)
+          } else if (file.purpose === 'multimodal-audio' || file.type === 'audio') {
+            referenceAudios.push(value)
+          } else {
+            referenceImages.push(value)
+          }
+        })
+        if (referenceImages.length) videoParams.reference_images = referenceImages
+        if (referenceVideos.length) videoParams.reference_videos = referenceVideos
+        if (referenceAudios.length) videoParams.reference_audios = referenceAudios
+      } else if (uploadValue) {
+        videoParams.first_frame_image = uploadValue
+      }
+
+      videoParams.duration = duration || 5
+      videoParams.resolution = videoResolution === '2K' ? '2K' : '768P'
+      delete videoParams.seconds
+      delete videoParams.size
+      delete videoParams.image
+      delete videoParams.images
+      delete videoParams.img_url
+      delete videoParams.image_url
+      delete videoParams.image_list
+      delete videoParams.video_url
+      delete videoParams.video_list
+      delete videoParams.subject_reference
+      delete videoParams.audio
+      delete videoParams.movement_amplitude
+      delete videoParams.off_peak
+      delete videoParams.seed
+      delete videoParams.style
+      delete videoParams.payload
+      delete videoParams.extra_body
+      delete videoParams.klingAudio
+      break
+    }
     case 'seedance-2': {
       // Seedance 2.0 走「素材 + contents/generations/tasks」接口。
       // 多模态参考模式下，前端会用 purpose（multimodal-image/-video/-audio）标记素材，

@@ -48,6 +48,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const selectedModel = ref<string | null>(null)
   const aspectRatio = ref('1:1')
   const videoDuration = ref(6)
+  // 视频分辨率档位（当前仅 MiniMax-H3 暴露 768P / 2K 选择）。
+  const videoResolution = ref<'768P' | '2K'>('768P')
   const promptPolishModel = ref('')
   const promptPolishSystemPrompt = ref('')
   const textSystemPrompt = ref('')
@@ -60,6 +62,7 @@ export const useSettingsStore = defineStore('settings', () => {
       selectedModel.value = settings.selectedModel || null
       aspectRatio.value = settings.aspectRatio || (mediaType.value === 'video' ? '16:9' : '1:1')
       videoDuration.value = settings.videoDuration || getDefaultVideoDuration(selectedModel.value)
+      videoResolution.value = settings.videoResolution === '2K' ? '2K' : '768P'
       promptPolishModel.value = settings.promptPolishModel || ''
       promptPolishSystemPrompt.value = settings.promptPolishSystemPrompt || ''
       textSystemPrompt.value = settings.textSystemPrompt || ''
@@ -74,6 +77,7 @@ export const useSettingsStore = defineStore('settings', () => {
         selectedModel: selectedModel.value,
         aspectRatio: aspectRatio.value,
         videoDuration: videoDuration.value,
+        videoResolution: videoResolution.value,
         promptPolishModel: promptPolishModel.value,
         promptPolishSystemPrompt: promptPolishSystemPrompt.value,
         textSystemPrompt: textSystemPrompt.value,
@@ -106,6 +110,7 @@ export const useSettingsStore = defineStore('settings', () => {
     selectedModel,
     aspectRatio,
     videoDuration,
+    videoResolution,
     promptPolishModel,
     promptPolishSystemPrompt,
     textSystemPrompt,

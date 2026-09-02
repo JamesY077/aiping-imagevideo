@@ -3,7 +3,7 @@ import { modelModules } from '@/models'
 export type ModelIOType = 'text2image' | 'text2video' | 'image2image' | 'image2video'
 
 export type MediaType = 'image' | 'video'
-export type ModelInputType = 'text' | 'image' | 'video'
+export type ModelInputType = 'text' | 'image' | 'video' | 'audio'
 
 export interface ModelOption {
   id: string
@@ -20,9 +20,15 @@ export interface ModelCapability {
   inputs: ModelInputType[]
   localUploadInputs?: ModelInputType[]
   requiresReference?: boolean
-  availabilityNote?: 'supports-image-upload' | 'supports-video-upload' | 'supports-image-video-upload' | 'requires-image-upload' | 'requires-video-upload'
+  availabilityNote?:
+    | 'supports-image-upload'
+    | 'supports-video-upload'
+    | 'supports-image-video-upload'
+    | 'supports-multimodal-upload'
+    | 'requires-image-upload'
+    | 'requires-video-upload'
   imageRequestMode?: 'default' | 'seedream-5-lite'
-  videoRequestMode?: 'kling-v26' | 'kling-v3' | 'kling-omni' | 'kling-o1' | 'viduq3-fast' | 'minimax-hailuo' | 'seedance-2'
+  videoRequestMode?: 'kling-v26' | 'kling-v3' | 'kling-omni' | 'kling-o1' | 'viduq3-fast' | 'minimax-hailuo' | 'minimax-h3' | 'seedance-2'
 
 }
 
@@ -48,6 +54,7 @@ export type VideoGenerationMode =
   | 'image2video'
   | 'referenceImage2video'
   | 'startEnd2video'
+  | 'endFrame2video'
   | 'subjectReference2video'
   | 'motionControl2video'
   | 'multimodalReference2video'
@@ -127,6 +134,8 @@ export function getModelAvailabilityLabel(modelId: string | null | undefined): s
       return '支持上传视频'
     case 'supports-image-video-upload':
       return '支持上传图片/视频'
+    case 'supports-multimodal-upload':
+      return '支持上传图片/视频/音频'
     case 'requires-image-upload':
       return '仅上传图片后可用'
     case 'requires-video-upload':
@@ -143,8 +152,8 @@ export function modelRequiresReference(modelId: string | null | undefined): bool
 export function getLocalUploadAccept(modelId: string | null | undefined): string {
   const capability = getModelCapability(modelId)
   const inputs = capability?.localUploadInputs ?? []
-  if (inputs.includes('image') && inputs.includes('video')) {
-    return 'image/*,video/*'
+  if (inputs.includes('image') && inputs.includes('video') && inputs.includes('audio')) {
+    return 'image/*,video/*,audio/*'
   }
   if (inputs.includes('video')) {
     return 'video/*'
@@ -155,10 +164,19 @@ export function getLocalUploadAccept(modelId: string | null | undefined): string
   return ''
 }
 
-export function getSupportedAspectRatios(modelId: string | null | undefined): string[] | null {
+export function getSupportedAspectRatios(
+  modelId: string | null | undefined,
+  videoMode?: VideoGenerationMode | null | undefined
+): string[] | null {
   const mode = getModelCapability(modelId)?.videoRequestMode
   if (mode === 'seedance-2') {
     return ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']
+  }
+  // MiniMax-H3 支持 21:9 / 16:9 / 4:3 / 1:1 / 3:4 / 9:16；adaptive（默认）仅图生/参考场景可用，
+  // 纯文生视频须给具体比例，因此只在非 text2video 模式下提供 adaptive。
+  if (mode === 'minimax-h3') {
+    const ratios = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']
+    return videoMode && videoMode !== 'text2video' ? ['adaptive', ...ratios] : ratios
   }
   if (mode === 'viduq3-fast' || mode === 'minimax-hailuo') {
     return ['16:9', '9:16', '1:1', '4:3']
@@ -198,6 +216,17 @@ export function getSupportedVideoDurations(modelId: string | null | undefined): 
       return [
         { value: 5, label: '5s' },
       ]
+    case 'minimax-h3':
+      // MiniMax-H3 支持 4-15 秒整数时长，覆盖全档。
+      return [
+        { value: 4, label: '4s' },
+        { value: 5, label: '5s' },
+        { value: 6, label: '6s' },
+        { value: 8, label: '8s' },
+        { value: 10, label: '10s' },
+        { value: 12, label: '12s' },
+        { value: 15, label: '15s' },
+      ]
     default:
       return [
         { value: 6, label: '6s' },
@@ -206,7 +235,10 @@ export function getSupportedVideoDurations(modelId: string | null | undefined): 
 }
 
 export function getDefaultVideoDuration(modelId: string | null | undefined): number {
-  return getSupportedVideoDurations(modelId)?.[0]?.value ?? 6
+  const options = getSupportedVideoDurations(modelId)
+  if (!options?.length) return 6
+  // 优先取 5s / 6s 作为默认（如 MiniMax-H3 的首档是 4s，不作为默认）。
+  return options.find((option) => option.value === 5 || option.value === 6)?.value ?? options[0].value
 }
 
 const VIDEO_MODE_LABELS: Record<VideoGenerationMode, string> = {
@@ -214,6 +246,7 @@ const VIDEO_MODE_LABELS: Record<VideoGenerationMode, string> = {
   image2video: '图生视频',
   referenceImage2video: '参考生视频',
   startEnd2video: '首尾帧生视频',
+  endFrame2video: '尾帧生视频',
   subjectReference2video: '主体参考视频',
   motionControl2video: '动作控制',
   multimodalReference2video: '多模态参考',
@@ -260,6 +293,14 @@ export function getSupportedVideoModes(modelId: string | null | undefined): Vide
         'image2video',
         'multimodalReference2video',
         'editVideo',
+      ])
+    case 'minimax-h3':
+      return buildVideoModeOptions([
+        'text2video',
+        'image2video',
+        'endFrame2video',
+        'startEnd2video',
+        'multimodalReference2video',
       ])
     default:
 
@@ -327,5 +368,3 @@ export function pickPreferredDefaultModelId(
   const firstNormal = candidateIds.find((id) => !isSeedance2Model(id))
   return firstNormal ?? candidateIds[0]
 }
-
-

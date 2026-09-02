@@ -22,13 +22,25 @@
         </div>
       </div>
       <div v-if="message.generateStatus" class="generate-result">
-        <div v-if="message.generateStatus === 'pending' || message.generateStatus === 'processing'" class="inline-loading">
-          <div class="inline-spinner" />
-          <span class="loading-text">{{ message.generateStatus === 'pending' ? '准备生成中' : '生成进行中' }}</span>
-        </div>
-        <div v-if="message.generateStatus === 'processing' && message.progress" class="progress-bar">
-          <div class="progress-fill" :style="{ width: `${message.progress}%` }"></div>
-          <span class="progress-text">{{ message.progress }}%</span>
+        <div v-if="isActiveGeneration" class="generation-progress">
+          <div class="inline-loading">
+            <div class="inline-spinner" />
+            <span class="loading-text">{{ loadingText }}</span>
+          </div>
+
+          <div class="tip-window">
+            <Transition name="tip-slide" mode="out-in">
+              <span :key="tipIndex" class="generation-tip">{{ currentTip }}</span>
+            </Transition>
+          </div>
+
+          <div class="progress-meta">
+            <span class="progress-label">{{ progressLabel }}</span>
+            <span class="progress-text">{{ Math.round(displayProgress) }}%</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: `${displayProgress}%` }" />
+          </div>
         </div>
         <ImageResult
           v-if="message.generateStatus === 'completed' && message.generateResult?.type === 'image'"
@@ -68,7 +80,7 @@ import ImageResult from './ImageResult.vue'
 import VideoResult from './VideoResult.vue'
 import { formatTime } from '@/utils/format'
 import type { Message } from '@/types/chat'
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 const props = defineProps<{ message: Message }>()
 defineEmits<{
@@ -77,6 +89,94 @@ defineEmits<{
 }>()
 
 const previewFiles = computed(() => props.message.uploadedFiles?.length ? props.message.uploadedFiles : props.message.uploadedFile ? [props.message.uploadedFile] : [])
+
+const imageTips = [
+  '正在理解画面主体与空间关系…',
+  '正在拆解光影、风格与材质细节…',
+  '参考图已进入提示词编排…',
+  '正在为构图匹配最佳画幅…',
+  '模型正在调度算力，马上就好…',
+  '正在渲染细节与色彩层次…',
+]
+
+const videoTips = [
+  '正在解析分镜与运镜节奏…',
+  '参考帧已进入视频提示词编排…',
+  '正在匹配首尾帧与主体一致性…',
+  '模型正在调度视频算力…',
+  '正在渲染关键帧与动态细节…',
+  '视频任务已进入生成队列，请稍候…',
+]
+
+const tips = computed(() => (props.message.generateType === 'video' ? videoTips : imageTips))
+const tipIndex = ref(0)
+const simulatedProgress = ref(0)
+
+let progressTimer: ReturnType<typeof setInterval> | undefined
+let tipTimer: ReturnType<typeof setInterval> | undefined
+
+const isActiveGeneration = computed(() => props.message.generateStatus === 'pending' || props.message.generateStatus === 'processing')
+const currentTip = computed(() => tips.value[tipIndex.value % tips.value.length])
+const loadingText = computed(() => {
+  const kind = props.message.generateType === 'video' ? '视频' : '图片'
+  return props.message.generateStatus === 'pending' ? `${kind}任务准备中` : `${kind}生成进行中`
+})
+const progressLabel = computed(() => {
+  if (displayProgress.value >= 88) return '收尾渲染中'
+  if (displayProgress.value >= 45) return '主体与细节生成中'
+  return '正在理解创作意图'
+})
+const displayProgress = computed(() => {
+  const real = props.message.progress
+  const normalizedReal = typeof real === 'number' && Number.isFinite(real) ? Math.min(real, 99) : 0
+  return Math.min(99, Math.max(simulatedProgress.value, normalizedReal))
+})
+
+function clearGenerationTimers() {
+  if (progressTimer) clearInterval(progressTimer)
+  if (tipTimer) clearInterval(tipTimer)
+  progressTimer = undefined
+  tipTimer = undefined
+}
+
+function startGenerationAnimation() {
+  clearGenerationTimers()
+  simulatedProgress.value = Math.max(simulatedProgress.value, 4)
+  tipIndex.value = 0
+
+  progressTimer = setInterval(() => {
+    const next = simulatedProgress.value + (92 - simulatedProgress.value) * 0.028 + 0.25
+    simulatedProgress.value = Math.min(92, Math.round(next * 10) / 10)
+  }, 800)
+
+  tipTimer = setInterval(() => {
+    tipIndex.value += 1
+  }, 3200)
+}
+
+function stopGenerationAnimation() {
+  clearGenerationTimers()
+  simulatedProgress.value = 0
+}
+
+watch(
+  () => props.message.generateStatus,
+  (status) => {
+    if (status === 'pending' || status === 'processing') {
+      startGenerationAnimation()
+      return
+    }
+    if (status === 'completed') {
+      clearGenerationTimers()
+      simulatedProgress.value = 100
+      return
+    }
+    stopGenerationAnimation()
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(clearGenerationTimers)
 </script>
 
 <style scoped>
@@ -194,6 +294,17 @@ const previewFiles = computed(() => props.message.uploadedFiles?.length ? props.
   margin-top: 6px;
 }
 
+.generation-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 4px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.56);
+  border: 1px solid rgba(30, 41, 59, 0.08);
+}
+
 .inline-loading {
   display: flex;
   align-items: center;
@@ -219,8 +330,7 @@ const previewFiles = computed(() => props.message.uploadedFiles?.length ? props.
 
 .progress-bar {
   position: relative;
-  margin-top: 10px;
-  height: 8px;
+  height: 7px;
   border-radius: 999px;
   background: rgba(29, 29, 31, 0.08);
   overflow: hidden;
@@ -233,9 +343,48 @@ const previewFiles = computed(() => props.message.uploadedFiles?.length ? props.
   transition: width var(--transition-base);
 }
 
+.progress-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.progress-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
 .progress-text {
-  display: inline-block;
-  margin-top: 8px;
+  flex-shrink: 0;
+}
+
+.tip-window {
+  min-height: 18px;
+  overflow: hidden;
+}
+
+.generation-tip {
+  display: block;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--color-text-secondary);
+}
+
+.tip-slide-enter-active,
+.tip-slide-leave-active {
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.tip-slide-enter-from {
+  opacity: 0;
+  transform: translateY(7px);
+}
+
+.tip-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-7px);
 }
 
 .meta {

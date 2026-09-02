@@ -158,6 +158,24 @@
                 </div>
               </div>
 
+              <div v-if="isMinimaxH3VideoModel" class="meta-pill meta-pill-duration">
+                <span class="meta-pill-label">分辨率</span>
+                <div class="duration-selector">
+                  <div class="duration-select-wrap">
+                    <select
+                      id="video-resolution"
+                      v-model="settingsStore.videoResolution"
+                      class="duration-select"
+                      @change="settingsStore.saveToStorage()"
+                    >
+                      <option value="768P">768P</option>
+                      <option value="2K">2K</option>
+                    </select>
+                    <span class="duration-caret" aria-hidden="true">▾</span>
+                  </div>
+                </div>
+              </div>
+
               <div v-if="settingsStore.mediaType === 'video'" class="meta-pill meta-pill-duration duration-slot">
                 <span class="meta-pill-label">时长</span>
                 <div class="duration-selector">
@@ -190,20 +208,20 @@
 
               <template v-if="usesViduLikeVideoMode">
 
-                <div v-if="videoMode === 'image2video'" class="upload-mini-row upload-card-row" :class="{ 'has-file': !!uploadedFile }">
+                <div v-if="videoMode === 'image2video' || videoMode === 'endFrame2video'" class="upload-mini-row upload-card-row" :class="{ 'has-file': !!uploadedFile }">
                   <input
                     ref="fileInput"
                     type="file"
-                    accept="image/*"
+                    :accept="IMAGE_FILE_ACCEPT"
                     class="file-input"
                     @change="handleFileChange"
                   />
-                  <button class="upload-btn upload-icon-btn" type="button" aria-label="上传参考图" @click="fileInput?.click()">
+                  <button class="upload-btn upload-icon-btn" type="button" :aria-label="videoMode === 'endFrame2video' ? '上传尾帧图' : '上传参考图'" @click="fileInput?.click()">
                     +
                   </button>
                   <div class="upload-copy">
-                    <span class="upload-label">参考图</span>
-                    <span class="upload-hint">用于图生视频</span>
+                    <span class="upload-label">{{ videoMode === 'endFrame2video' ? '尾帧图' : '参考图' }}</span>
+                    <span class="upload-hint">{{ videoMode === 'endFrame2video' ? '作为视频结尾画面（MiniMax-H3），支持 PNG / JPG / WebP 等格式' : '用于图生视频，支持 PNG / JPG / WebP 等格式' }}</span>
                   </div>
                   <span v-if="uploadedFile" class="pill-filename">{{ uploadedFile.name }}</span>
                   <button v-if="uploadedFile" class="text-btn" type="button" @click="() => removeUploadedFile()">移除</button>
@@ -232,7 +250,7 @@
                       <input
                         ref="motionControlImageInput"
                         type="file"
-                        accept="image/*"
+                        :accept="IMAGE_FILE_ACCEPT"
                         class="file-input"
                         @change="handleMotionControlFileChange($event, 'image')"
                       />
@@ -241,7 +259,7 @@
                       </button>
                       <div class="upload-copy">
                         <span class="upload-label">参考图像</span>
-                        <span class="upload-hint">作为生成视频的人物外观参考</span>
+                        <span class="upload-hint">作为生成视频的人物外观参考，支持 PNG / JPG / WebP 等格式</span>
                       </div>
                       <span v-if="motionControlImage" class="pill-filename">{{ motionControlImage.name }}</span>
                       <button v-if="motionControlImage" class="text-btn" type="button" @click="removeMotionControlFile('image')">移除</button>
@@ -251,7 +269,7 @@
                       <input
                         ref="motionControlVideoInput"
                         type="file"
-                        accept="video/*"
+                        :accept="VIDEO_FILE_ACCEPT"
                         class="file-input"
                         @change="handleMotionControlFileChange($event, 'video')"
                       />
@@ -260,7 +278,7 @@
                       </button>
                       <div class="upload-copy">
                         <span class="upload-label">参考视频</span>
-                        <span class="upload-hint">用于对齐人物动作</span>
+                        <span class="upload-hint">用于对齐人物动作，支持 MP4 / MOV / WebM 等格式</span>
                       </div>
                       <span v-if="motionControlVideo" class="pill-filename">{{ motionControlVideo.name }}</span>
                       <button v-if="motionControlVideo" class="text-btn" type="button" @click="removeMotionControlFile('video')">移除</button>
@@ -273,7 +291,7 @@
                     <input
                       ref="viduStartInput"
                       type="file"
-                      accept="image/*"
+                      :accept="IMAGE_FILE_ACCEPT"
                       class="file-input"
                       @change="handleViduFrameChange($event, 'start')"
                     />
@@ -282,7 +300,7 @@
                     </button>
                     <div class="upload-copy">
                       <span class="upload-label">首帧</span>
-                      <span class="upload-hint">视频开始画面</span>
+                      <span class="upload-hint">视频开始画面，支持 PNG / JPG / WebP 等格式</span>
                     </div>
                     <span v-if="viduStartFrame" class="pill-filename">{{ viduStartFrame.name }}</span>
                     <button v-if="viduStartFrame" class="text-btn" type="button" @click="removeViduFrame('start')">移除</button>
@@ -292,7 +310,7 @@
                     <input
                       ref="viduEndInput"
                       type="file"
-                      accept="image/*"
+                      :accept="IMAGE_FILE_ACCEPT"
                       class="file-input"
                       @change="handleViduFrameChange($event, 'end')"
                     />
@@ -301,7 +319,7 @@
                     </button>
                     <div class="upload-copy">
                       <span class="upload-label">尾帧（可选）</span>
-                      <span class="upload-hint">视频结束画面，可不上传</span>
+                      <span class="upload-hint">视频结束画面，支持 PNG / JPG / WebP 等格式</span>
 
                     </div>
                     <span v-if="viduEndFrame" class="pill-filename">{{ viduEndFrame.name }}</span>
@@ -312,7 +330,7 @@
                 <div v-else-if="videoMode === 'referenceImage2video'" class="multimodal-panel">
                   <p class="multimodal-note">
                     参考生视频
-                    <small>上传参考图片（多图主体，最多 {{ KLING_REFERENCE_IMAGE_LIMIT }} 张），模型会参考图中的主体生成视频。上传后可在文本中输入 <b>@</b> 精确指定素材位置，例如「让 @图片1 中的角色走进 @图片2 的场景」。</small>
+                    <small>上传参考图片（多图主体，最多 {{ KLING_REFERENCE_IMAGE_LIMIT }} 张），模型会参考图中的主体生成视频。上传后可在文本中输入 <b>@</b> 精确指定素材位置，例如「让 @图片1 中的角色走进 @图片2 的场景」。支持常见格式：图片 PNG / JPG / WebP，视频 MP4 / MOV / WebM。</small>
                   </p>
                   <div class="multimodal-group">
                     <div class="multimodal-group-head">
@@ -333,7 +351,7 @@
                         @click="multimodalImageInput?.click()"
                       >+</button>
                     </div>
-                    <input ref="multimodalImageInput" type="file" accept="image/*" multiple class="file-input" @change="handleMultimodalFileChange($event, 'image')" />
+                    <input ref="multimodalImageInput" type="file" :accept="IMAGE_FILE_ACCEPT" multiple class="file-input" @change="handleMultimodalFileChange($event, 'image')" />
                   </div>
                 </div>
 
@@ -343,7 +361,7 @@
                   <input
                     ref="fileInput"
                     type="file"
-                    accept="image/*"
+                    :accept="IMAGE_FILE_ACCEPT"
                     class="file-input"
                     @change="handleFileChange"
                   />
@@ -353,7 +371,7 @@
                   </button>
                   <div class="subject-reference-copy">
                     <span class="upload-label">主体参考</span>
-                    <span class="upload-hint">上传人物主体图片生成 S2V 视频</span>
+                    <span class="upload-hint">上传人物主体图片生成 S2V 视频，支持 PNG / JPG / WebP 等格式</span>
                   </div>
                   <span v-if="uploadedFile" class="pill-filename">{{ uploadedFile.name }}</span>
                   <button v-if="uploadedFile" class="text-btn" type="button" @click="() => removeUploadedFile()">移除</button>
@@ -363,14 +381,14 @@
                 <div v-else-if="videoMode === 'editVideo'" class="multimodal-panel edit-video-panel">
                   <p class="multimodal-note">
                     编辑视频
-                    <small>提供「待编辑视频 + 参考图片 + 提示词」，完成替换主体、对象增删改、局部重绘/修复等编辑；仅需 1 个视频 + 1 张图片。可在文本中输入 <b>@</b> 精确指定素材位置，例如「将 @视频1 礼盒中的香水替换成 @图片1 中的面霜，运镜不变」。</small>
+                    <small>提供「待编辑视频 + 参考图片 + 提示词」，完成替换主体、对象增删改、局部重绘/修复等编辑；仅需 1 个视频 + 1 张图片。可在文本中输入 <b>@</b> 精确指定素材位置，例如「将 @视频1 礼盒中的香水替换成 @图片1 中的面霜，运镜不变」。支持常见格式：图片 PNG / JPG / WebP，视频 MP4 / MOV / WebM。</small>
                   </p>
                   <div class="frame-upload-grid">
                     <div class="upload-mini-row upload-card-row frame-upload-card" :class="{ 'has-file': !!editVideoFile }">
                       <input
                         ref="editVideoInput"
                         type="file"
-                        accept="video/*"
+                        :accept="VIDEO_FILE_ACCEPT"
                         class="file-input"
                         @change="handleEditFileChange($event, 'video')"
                       />
@@ -379,7 +397,7 @@
                       </button>
                       <div class="upload-copy">
                         <span class="upload-label">视频1</span>
-                        <span class="upload-hint">请上传需要修改的视频</span>
+                        <span class="upload-hint">请上传需要修改的视频，支持 MP4 / MOV / WebM 等格式</span>
                       </div>
                       <span v-if="editVideoFile" class="pill-filename">{{ editVideoFile.name }}</span>
                       <button v-if="editVideoFile" class="text-btn" type="button" @click="removeEditFile('video')">移除</button>
@@ -389,7 +407,7 @@
                       <input
                         ref="editImageInput"
                         type="file"
-                        accept="image/*"
+                        :accept="IMAGE_FILE_ACCEPT"
                         class="file-input"
                         @change="handleEditFileChange($event, 'image')"
                       />
@@ -398,7 +416,7 @@
                       </button>
                       <div class="upload-copy">
                         <span class="upload-label">图片1</span>
-                        <span class="upload-hint">请上传想要替换成的图片</span>
+                        <span class="upload-hint">请上传想要替换成的图片，支持 PNG / JPG / WebP 等格式</span>
                       </div>
                       <span v-if="editImageFile" class="pill-filename">{{ editImageFile.name }}</span>
                       <button v-if="editImageFile" class="text-btn" type="button" @click="removeEditFile('image')">移除</button>
@@ -406,10 +424,10 @@
                   </div>
                 </div>
 
-                <div v-else-if="videoMode === 'multimodalReference2video'" class="multimodal-panel">
+                <div v-else-if="isMultimodalReferenceMode" class="multimodal-panel">
                   <p class="multimodal-note">
                     多模态参考
-                    <small>可任意组合图片（0~9）、视频（0~3）、音频（0~3）作为参考；不支持「纯音频」或「文本+音频」。上传后可在文本中输入 <b>@</b> 精确指定素材位置。</small>
+                    <small>可任意组合图片（0~9）、视频（0~3）、音频（0~3）作为参考；不支持「纯音频」或「文本+音频」。上传后可在文本中输入 <b>@</b> 精确指定素材位置。支持常见格式：图片 PNG / JPG / WebP，视频 MP4 / MOV / WebM。</small>
                   </p>
 
 
@@ -434,7 +452,7 @@
                           @click="multimodalImageInput?.click()"
                         >+</button>
                       </div>
-                      <input ref="multimodalImageInput" type="file" accept="image/*" multiple class="file-input" @change="handleMultimodalFileChange($event, 'image')" />
+                      <input ref="multimodalImageInput" type="file" :accept="IMAGE_FILE_ACCEPT" multiple class="file-input" @change="handleMultimodalFileChange($event, 'image')" />
                     </div>
 
                     <div class="multimodal-group">
@@ -456,7 +474,7 @@
                           @click="multimodalVideoInput?.click()"
                         >+</button>
                       </div>
-                      <input ref="multimodalVideoInput" type="file" accept="video/*" multiple class="file-input" @change="handleMultimodalFileChange($event, 'video')" />
+                      <input ref="multimodalVideoInput" type="file" :accept="VIDEO_FILE_ACCEPT" multiple class="file-input" @change="handleMultimodalFileChange($event, 'video')" />
                     </div>
 
                     <div class="multimodal-group">
@@ -489,7 +507,7 @@
                 <input
                   ref="fileInput"
                   type="file"
-                  accept="image/*"
+                  :accept="IMAGE_FILE_ACCEPT"
                   class="file-input"
                   @change="handleFileChange"
                 />
@@ -498,7 +516,7 @@
                 </button>
                 <div class="upload-copy">
                   <span class="upload-label">参考图</span>
-                  <span class="upload-hint">用于图生图</span>
+                  <span class="upload-hint">用于图生图，支持 PNG / JPG / WebP 等格式</span>
                 </div>
                 <span v-if="uploadedFile" class="pill-filename">{{ uploadedFile.name }}</span>
                 <button v-if="uploadedFile" class="text-btn" type="button" @click="() => removeUploadedFile()">移除</button>
@@ -511,7 +529,13 @@
                   class="file-input"
                   @change="handleFileChange"
                 />
-                <button class="upload-btn upload-icon-btn" type="button" aria-label="上传参考" @click="fileInput?.click()">
+                <button
+                  class="upload-btn upload-icon-btn"
+                  type="button"
+                  aria-label="上传参考"
+                  :title="`支持常见格式：图片 ${IMAGE_FORMAT_HINT}；视频 ${VIDEO_FORMAT_HINT}`"
+                  @click="fileInput?.click()"
+                >
                   +
                 </button>
                 <span v-if="uploadedFile" class="pill-filename">{{ uploadedFile.name }}</span>
@@ -526,7 +550,7 @@
               />
               </div>
 
-              <div v-if="settingsStore.mediaType === 'video'" class="skill-control-row">
+              <div class="skill-control-row">
                 <input
                   ref="skillFileInput"
                   type="file"
@@ -573,7 +597,9 @@
           <div :class="['input-shell', { expanded: isComposerExpanded }]">
             <div
               v-if="showMentionMenu && mentionableAssets.length"
+              ref="mentionMenuRef"
               class="mention-menu"
+              :style="mentionMenuStyle"
               role="listbox"
               aria-label="选择参考素材"
             >
@@ -677,11 +703,20 @@ import {
   modelSupportsLocalUpload,
   type AspectRatioOption,
   type MediaType,
+  type VideoGenerationMode,
 } from '@/types/model'
 import { showErrorMessage } from '@/utils/errors'
 import { getReadableErrorMessage, validatePromptOrThrow } from '@/utils/errorHandling'
 import type { Message, UploadedFile } from '@/types/chat'
 import { resolveGenerateIoType } from '@/features/generate/media'
+import {
+  IMAGE_FILE_ACCEPT,
+  IMAGE_FORMAT_HINT,
+  VIDEO_FILE_ACCEPT,
+  VIDEO_FORMAT_HINT,
+  classifySupportedFile,
+  validateUploadFileKind,
+} from '@/features/generate/fileFormats'
 
 const router = useRouter()
 const route = useRoute()
@@ -740,7 +775,7 @@ const referenceUrl = ref('')
 
 const inputText = ref('')
 type ImageMode = 'text2image' | 'image2image'
-type VideoMode = 'text2video' | 'image2video' | 'referenceImage2video' | 'startEnd2video' | 'subjectReference2video' | 'motionControl2video' | 'multimodalReference2video' | 'editVideo'
+type VideoMode = VideoGenerationMode
 
 
 interface ImageDimensions {
@@ -773,6 +808,8 @@ const showMentionMenu = ref(false)
 const mentionAtIndex = ref(-1)
 // 当前高亮的引用项索引（用于键盘上下选择）
 const activeMentionIndex = ref(0)
+const mentionMenuRef = ref<HTMLElement | null>(null)
+const mentionMenuStyle = ref<Record<string, string>>({})
 
 const imageModeOptions: Array<{ value: ImageMode; label: string }> = [
   { value: 'text2image', label: '文生图' },
@@ -808,6 +845,15 @@ const seedanceVideoModeOptions: Array<{ value: VideoMode; label: string }> = [
   { value: 'editVideo', label: '编辑视频' },
 ]
 
+// MiniMax-H3：文生 / 图生（首帧）/ 尾帧 / 首尾帧 / 多模态参考（参考图 / 参考视频 / 参考音频）。
+const minimaxH3VideoModeOptions: Array<{ value: VideoMode; label: string }> = [
+  { value: 'text2video', label: '文生视频' },
+  { value: 'image2video', label: '图生视频' },
+  { value: 'endFrame2video', label: '尾帧生视频' },
+  { value: 'startEnd2video', label: '首尾帧生视频' },
+  { value: 'multimodalReference2video', label: '多模态参考' },
+]
+
 
 const hasPromptPolishModelConfigured = computed(() => !!settingsStore.promptPolishModel.trim())
 const polishDisabledReason = '请前往设置完成 AI 润色模型设置'
@@ -841,15 +887,22 @@ const isKlingReferenceMode = computed(() => isKlingOmniVideoModel.value && video
 
 
 const isSeedanceVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'seedance-2')
-const isMultimodalReferenceMode = computed(() => isSeedanceVideoModel.value && videoMode.value === 'multimodalReference2video')
+const isMinimaxH3VideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'minimax-h3')
+// 多模态参考：Seedance 2.0 与 MiniMax-H3 共用「素材 + @ 引用」面板。
+const isMultimodalReferenceMode = computed(() => (isSeedanceVideoModel.value || isMinimaxH3VideoModel.value) && videoMode.value === 'multimodalReference2video')
 const isEditVideoMode = computed(() => isSeedanceVideoModel.value && videoMode.value === 'editVideo')
 // 多模态参考、编辑视频、Kling 参考生视频都使用「素材 + @ 引用」的面板
 const isSeedanceMentionMode = computed(() => isMultimodalReferenceMode.value || isEditVideoMode.value || isKlingReferenceMode.value)
 
 
-const usesViduLikeVideoMode = computed(() => isViduVideoModel.value || isMinimaxHailuoVideoModel.value || isKlingMultimodalVideoModel.value || isSeedanceVideoModel.value)
+const usesViduLikeVideoMode = computed(() => isViduVideoModel.value || isMinimaxHailuoVideoModel.value || isMinimaxH3VideoModel.value || isKlingMultimodalVideoModel.value || isSeedanceVideoModel.value)
+// 统一引用开关：MiniMax-H3 等视频模型只要处于「多模态参考」模式，就复用 seedance2 的 @ 引用面板。
+const isMentionReferenceMode = computed(
+  () => isSeedanceMentionMode.value || (usesViduLikeVideoMode.value && videoMode.value === 'multimodalReference2video'),
+)
 const activeVideoModeOptions = computed(() => {
   if (isMinimaxHailuoVideoModel.value) return minimaxHailuoVideoModeOptions
+  if (isMinimaxH3VideoModel.value) return minimaxH3VideoModeOptions
   if (isKlingMotionControlVideoModel.value) return klingMotionControlVideoModeOptions
   if (isKlingOmniVideoModel.value) return klingOmniVideoModeOptions
   if (isSeedanceVideoModel.value) return seedanceVideoModeOptions
@@ -886,7 +939,7 @@ function mentionKind(item: UploadedFile): 'image' | 'video' | 'audio' {
  * 在输入框上方以彩色标签展示，用作图片/视频/音频的直观区分。
  */
 const referencedMentions = computed<UploadedFile[]>(() => {
-  if (!isSeedanceMentionMode.value || !inputText.value) return []
+  if (!isMentionReferenceMode.value || !inputText.value) return []
 
   const referencedLabels = new Set(
     Array.from(inputText.value.matchAll(MENTION_TAG_REGEX)).map((match) => match[0].slice(1)),
@@ -912,7 +965,9 @@ const showReferenceField = computed(() => {
   return isUploadEnabled.value || showReferenceUrlInput.value
 })
 
-const uploadAccept = computed(() => getLocalUploadAccept(settingsStore.selectedModel) || 'image/*,video/*')
+const uploadAccept = computed(
+  () => getLocalUploadAccept(settingsStore.selectedModel) || `${IMAGE_FILE_ACCEPT},${VIDEO_FILE_ACCEPT}`,
+)
 function createAspectRatioOption(value: string): AspectRatioOption | null {
   const [width, height] = value.split(':').map((item) => Number(item))
   if (!width || !height) return null
@@ -926,12 +981,17 @@ function createAspectRatioOption(value: string): AspectRatioOption | null {
 }
 
 function getAspectRatioOption(value: string): AspectRatioOption | null {
+  // MiniMax-H3 图生/参考场景支持 adaptive（自适应）。
+  if (value === 'adaptive') {
+    return { value: 'adaptive', label: '自适应', boxWidth: 20, boxHeight: 20 }
+  }
   return ASPECT_RATIO_OPTIONS.find((option) => option.value === value) || createAspectRatioOption(value)
 }
 
 const aspectRatioOptions = computed(() => {
   if (settingsStore.mediaType !== 'video') return ASPECT_RATIO_OPTIONS
-  const supported = getSupportedAspectRatios(settingsStore.selectedModel)
+  // MiniMax-H3 的具体比例列表依赖生成方式（仅图生/参考模式提供 adaptive）。
+  const supported = getSupportedAspectRatios(settingsStore.selectedModel, videoMode.value)
   return supported
     ? supported.map(getAspectRatioOption).filter((option): option is AspectRatioOption => !!option)
     : ASPECT_RATIO_OPTIONS
@@ -965,7 +1025,7 @@ const needsMaterialAttention = computed(() => {
   if (!showReferenceField.value) return false
   if (isImageReferenceMode.value) return !uploadedFile.value
   if (!usesViduLikeVideoMode.value) return showReferenceUrlInput.value ? !referenceUrl.value.trim() : false
-  if (videoMode.value === 'image2video') return !uploadedFile.value
+  if (videoMode.value === 'image2video' || videoMode.value === 'endFrame2video') return !uploadedFile.value
   if (videoMode.value === 'motionControl2video') return !motionControlImage.value || !motionControlVideo.value
   if (videoMode.value === 'startEnd2video') return !viduStartFrame.value
   if (videoMode.value === 'referenceImage2video') return multimodalImages.value.length === 0
@@ -979,6 +1039,7 @@ const materialSummaryLabel = computed(() => {
   if (showReferenceUrlInput.value) return referenceUrl.value.trim() ? '参考链接已填写' : '参考链接待填写'
   if (usesViduLikeVideoMode.value) {
     if (videoMode.value === 'image2video') return uploadedFile.value ? `参考图：${uploadedFile.value.name}` : '参考图待上传'
+    if (videoMode.value === 'endFrame2video') return uploadedFile.value ? `尾帧图：${uploadedFile.value.name}` : '尾帧图待上传'
     if (videoMode.value === 'motionControl2video') {
       const count = [motionControlImage.value, motionControlVideo.value].filter(Boolean).length
       return count === 2 ? '动作素材已齐' : `动作素材 ${count}/2`
@@ -1013,11 +1074,17 @@ const inputPlaceholder = computed(() => {
   if (usesViduLikeVideoMode.value && videoMode.value === 'image2video') {
     return '描述参考图如何动起来：主体运动、镜头推进、节奏和氛围。'
   }
+  if (usesViduLikeVideoMode.value && videoMode.value === 'endFrame2video') {
+    return '描述视频如何走向这个结尾画面：动作走向、镜头运动与氛围。'
+  }
   if (usesViduLikeVideoMode.value && videoMode.value === 'motionControl2video') {
     return '描述参考图中的人物外观、服装和场景，并结合参考视频控制人物动作。'
   }
   if (usesViduLikeVideoMode.value && videoMode.value === 'startEnd2video') {
     return '描述首帧到尾帧之间的变化过程、镜头运动、节奏和氛围。'
+  }
+  if (isMentionReferenceMode.value) {
+    return '描述生成目标，可输入 @ 引用图片、视频或音频，例如「让 @图片1 的角色走向 @视频1 的场景，并配合 @音频1 的节奏」。'
   }
   if (isMinimaxHailuoVideoModel.value && videoMode.value === 'subjectReference2video') {
     return '描述人物主体在视频中的动作、表情、镜头运动和氛围。'
@@ -1047,7 +1114,7 @@ const canSend = computed(() => {
     if (videoMode.value === 'referenceImage2video') return multimodalImages.value.length > 0
 
 
-    if (videoMode.value === 'image2video') return !!uploadedFile.value
+    if (videoMode.value === 'image2video' || videoMode.value === 'endFrame2video') return !!uploadedFile.value
 
 
     if (videoMode.value === 'motionControl2video') return !!motionControlImage.value && !!motionControlVideo.value
@@ -1126,6 +1193,8 @@ function setVideoMode(mode: VideoMode) {
   clearEditFiles()
   showMentionMenu.value = false
   referenceUrl.value = ''
+  // 模式切换会影响可选比例（如 MiniMax-H3 仅图生/参考模式提供 adaptive），需要重新校验。
+  ensureSupportedAspectRatio()
 }
 
 
@@ -1332,12 +1401,14 @@ function handleFileChange(e: Event) {
   if (!file) return
 
   const capability = getModelCapability(settingsStore.selectedModel)
-  const isImage = file.type.startsWith('image/')
-  const isVideo = file.type.startsWith('video/')
-  if (!isImage && !isVideo) {
-    showErrorMessage('仅支持图片和视频文件')
+  const fileKind = classifySupportedFile(file)
+  if (!fileKind) {
+    showErrorMessage(`仅支持常见格式：图片（${IMAGE_FORMAT_HINT}）、视频（${VIDEO_FORMAT_HINT}）`)
+    target.value = ''
     return
   }
+  const isImage = fileKind === 'image'
+  const isVideo = fileKind === 'video'
 
   if (isImage && !capability?.localUploadInputs?.includes('image')) {
     showErrorMessage('当前模型不支持本地图片上传')
@@ -1358,8 +1429,9 @@ async function handleViduFrameChange(e: Event, position: 'start' | 'end') {
   const file = target.files?.[0]
   if (!file) return
 
-  if (!file.type.startsWith('image/')) {
-    showErrorMessage('首尾帧生视频仅支持上传图片')
+  const frameFormatError = validateUploadFileKind(file, 'image')
+  if (frameFormatError) {
+    showErrorMessage(`首尾帧生视频仅支持常见图片格式（${IMAGE_FORMAT_HINT}）`)
     target.value = ''
     return
   }
@@ -1410,9 +1482,13 @@ function handleMotionControlFileChange(e: Event, type: 'image' | 'video') {
   const file = target.files?.[0]
   if (!file) return
 
-  const isExpectedType = type === 'image' ? file.type.startsWith('image/') : file.type.startsWith('video/')
-  if (!isExpectedType) {
-    showErrorMessage(type === 'image' ? '动作控制参考图像仅支持图片文件' : '动作控制参考视频仅支持视频文件')
+  const motionFormatError = validateUploadFileKind(file, type)
+  if (motionFormatError) {
+    showErrorMessage(
+      type === 'image'
+        ? `动作控制参考图像仅支持常见图片格式（${IMAGE_FORMAT_HINT}）`
+        : `动作控制参考视频仅支持常见视频格式（${VIDEO_FORMAT_HINT}）`,
+    )
     target.value = ''
     return
   }
@@ -1434,9 +1510,9 @@ function handleEditFileChange(e: Event, type: 'image' | 'video') {
   const file = target.files?.[0]
   if (!file) return
 
-  const isExpectedType = type === 'image' ? file.type.startsWith('image/') : file.type.startsWith('video/')
-  if (!isExpectedType) {
-    showErrorMessage(type === 'image' ? '请上传图片文件' : '请上传视频文件')
+  const editFormatError = validateUploadFileKind(file, type)
+  if (editFormatError) {
+    showErrorMessage(editFormatError)
     target.value = ''
     return
   }
@@ -1498,15 +1574,17 @@ function handleMultimodalFileChange(e: Event, type: 'image' | 'video' | 'audio')
 
   const listRef = multimodalRefFromType(type)
   const limit = MULTIMODAL_LIMITS[type]
-  const acceptPrefix = type === 'image' ? 'image/' : type === 'video' ? 'video/' : 'audio/'
 
   for (const file of files) {
     if (listRef.value.length >= limit) {
       showErrorMessage(`${multimodalLabelPrefix(type)}最多上传 ${limit} 个。`)
       break
     }
-    if (!file.type.startsWith(acceptPrefix)) {
-      showErrorMessage(`请上传正确的${multimodalLabelPrefix(type)}文件。`)
+    const formatError = type === 'audio'
+      ? (!file.type.startsWith('audio/') ? '请上传正确的音频文件。' : null)
+      : validateUploadFileKind(file, type)
+    if (formatError) {
+      showErrorMessage(formatError)
       continue
     }
     const uploaded = createUploadedFile(file, type)
@@ -1578,10 +1656,11 @@ function insertMentionReference(item: UploadedFile) {
   if (!textarea) {
     inputText.value += insertText
   } else {
+    const currentValue = textarea.value ?? inputText.value
     const start = mentionAtIndex.value >= 0 ? mentionAtIndex.value : textarea.selectionStart
     const end = textarea.selectionStart
-    const before = inputText.value.slice(0, start)
-    const after = inputText.value.slice(end)
+    const before = currentValue.slice(0, start)
+    const after = currentValue.slice(end)
     inputText.value = `${before}${insertText}${after}`
   }
   showMentionMenu.value = false
@@ -1590,15 +1669,19 @@ function insertMentionReference(item: UploadedFile) {
 }
 
 /** 监听输入，检测末尾的 @ 以触发引用菜单。 */
-function handlePromptInput() {
-  if (!isSeedanceMentionMode.value || !mentionableAssets.value.length) {
+function handlePromptInput(event?: Event) {
+  if (!isMentionReferenceMode.value || !mentionableAssets.value.length) {
     showMentionMenu.value = false
     return
   }
 
   const textarea = promptInputRef.value
+  const currentValue =
+    (event?.target as HTMLTextAreaElement | undefined)?.value ??
+    textarea?.value ??
+    inputText.value
   const caret = textarea ? textarea.selectionStart : inputText.value.length
-  const textBefore = inputText.value.slice(0, caret)
+  const textBefore = currentValue.slice(0, caret)
   const atIndex = textBefore.lastIndexOf('@')
   if (atIndex >= 0 && !/\s/.test(textBefore.slice(atIndex + 1))) {
     mentionAtIndex.value = atIndex
@@ -1607,9 +1690,42 @@ function handlePromptInput() {
       activeMentionIndex.value = 0
     }
     showMentionMenu.value = true
+    void positionMentionMenu()
   } else {
     showMentionMenu.value = false
     mentionAtIndex.value = -1
+  }
+}
+
+/** 将 @ 引用菜单定位到输入框附近，避免被父容器的 overflow/backdrop-filter 裁切。 */
+async function positionMentionMenu() {
+  await nextTick()
+  const textarea = promptInputRef.value
+  const menu = mentionMenuRef.value
+  if (!textarea || !menu) return
+
+  const rect = textarea.getBoundingClientRect()
+  const gap = 8
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  const menuWidth = Math.max(menu.offsetWidth || 180, 180)
+  const menuHeight = Math.min(menu.scrollHeight || 44, 220)
+  const availableBelow = viewportHeight - rect.bottom - gap
+  const availableAbove = rect.top - gap
+  const maxHeight = Math.max(96, Math.min(220, Math.max(availableBelow, availableAbove) - gap))
+  const placeBelow = availableBelow >= Math.min(menuHeight, maxHeight) || availableBelow >= availableAbove
+  const left = Math.min(Math.max(8, rect.left), Math.max(8, viewportWidth - menuWidth - 8))
+  const top = placeBelow
+    ? rect.bottom + gap
+    : Math.max(8, rect.top - Math.min(menuHeight, maxHeight) - gap)
+
+  mentionMenuStyle.value = {
+    position: 'fixed',
+    top: `${top}px`,
+    left: `${left}px`,
+    bottom: 'auto',
+    width: `${menuWidth}px`,
+    maxHeight: `${maxHeight}px`,
   }
 }
 
@@ -1742,7 +1858,7 @@ watch(
     if (!supportsImageReferenceMode.value) {
       imageMode.value = 'text2image'
     }
-    const usesModeSwitcher = settingsStore.mediaType === 'video' && ['viduq3-fast', 'minimax-hailuo', 'kling-v26', 'kling-v3', 'kling-omni', 'seedance-2'].includes(capability?.videoRequestMode || '')
+    const usesModeSwitcher = settingsStore.mediaType === 'video' && ['viduq3-fast', 'minimax-hailuo', 'minimax-h3', 'kling-v26', 'kling-v3', 'kling-omni', 'seedance-2'].includes(capability?.videoRequestMode || '')
     if (!usesModeSwitcher) {
       videoMode.value = 'text2video'
       removeViduFrames()
@@ -1812,6 +1928,8 @@ async function handleSend() {
             },
             motionControlVideo.value,
           ]
+      : videoMode.value === 'endFrame2video'
+        ? (uploadedFile.value ? [{ ...uploadedFile.value, purpose: 'end-frame' as const }] : null)
       : videoMode.value === 'startEnd2video' && viduStartFrame.value
         ? (viduEndFrame.value ? [viduStartFrame.value, viduEndFrame.value] : [viduStartFrame.value])
 
@@ -1851,7 +1969,7 @@ async function handleSend() {
 
   await nextTick()
   scrollChatToBottom()
-  await generate(prompt, ioType, settingsStore.selectedModel, file, settingsStore.aspectRatio, settingsStore.videoDuration, false, skillStore.activeSkill?.content || null)
+  await generate(prompt, ioType, settingsStore.selectedModel, file, settingsStore.aspectRatio, settingsStore.videoDuration, false, skillStore.activeSkill?.content || null, settingsStore.videoResolution)
 
 
 
@@ -1877,6 +1995,7 @@ async function handleRegenerate(message: Message) {
       duration,
       false,
       skillStore.activeSkill?.content || null,
+      settingsStore.videoResolution,
     )
     await nextTick()
     scrollChatToBottom()
@@ -2995,7 +3114,7 @@ async function handleRegenerate(message: Message) {
   font-size: 10px;
   font-weight: 800;
   color: #fff;
-  background: var(--color-theme-gradient);
+  background: linear-gradient(135deg, #3b82f6 0%, #7c5cff 100%);
 }
 
 .mention-item-name {
@@ -3156,7 +3275,7 @@ async function handleRegenerate(message: Message) {
   padding-left: 4px;
 }
 
-/* 视频模式：对话框内「上传 Skill」按钮 */
+/* 图像/视频模式：对话框内「上传 Skill」按钮 */
 .skill-upload-btn-inline {
   min-height: 34px;
   max-width: 150px;
@@ -4149,6 +4268,8 @@ async function handleRegenerate(message: Message) {
   border: 1px solid #22252d;
   border-radius: 22px;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.30);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .composer-console {

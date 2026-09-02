@@ -69,12 +69,17 @@
 
       <!-- 比例选择 -->
       <select class="gen-select" :value="data.aspectRatio" @change="onRatio">
-        <option v-for="r in ratioOptions" :key="r" :value="r">{{ r }}</option>
+        <option v-for="r in ratioOptions" :key="r" :value="r">{{ ratioLabel(r) }}</option>
       </select>
 
       <!-- 时长选择 -->
       <select class="gen-select" :value="String(data.duration)" @change="onDuration">
         <option v-for="d in durationOptions" :key="d.value" :value="String(d.value)">{{ d.label }}</option>
+      </select>
+
+      <!-- 分辨率选择（MiniMax-H3） -->
+      <select v-if="resolutionOptions" class="gen-select" :value="data.resolution || '768P'" @change="onResolution">
+        <option v-for="r in resolutionOptions" :key="r" :value="r">{{ r }}</option>
       </select>
 
       <!-- AI 润色 -->
@@ -90,54 +95,66 @@
       <CameraMovementGuide v-if="showCameraGuide" compact @insert="insertCameraCommand" />
 
 
-      <!-- 图生视频：上传参考图 -->
+      <!-- 图生视频 / 尾帧生视频（MiniMax-H3）：上传参考图 -->
 
-      <label v-if="showUpload" class="gen-chip gen-upload">
+      <label
+        v-if="showUpload"
+        class="gen-chip gen-upload"
+        :title="`支持常见图片格式（${IMAGE_FORMAT_HINT}）`"
+      >
 
-        {{ data.referenceFileName ? '已选图' : '参考图' }}
-        <input type="file" accept="image/*" hidden @change="onFile" />
+        {{
+          data.referenceFileName
+            ? (data.videoMode === 'endFrame2video' ? '已选尾帧' : '已选图')
+            : (data.videoMode === 'endFrame2video' ? '尾帧' : '参考图')
+        }}
+        <input type="file" :accept="IMAGE_FILE_ACCEPT" hidden @change="onFile" />
       </label>
 
       <!-- 主体参考视频：上传主体参考图 -->
-      <label v-if="showSubjectUpload" class="gen-chip gen-upload">
+      <label
+        v-if="showSubjectUpload"
+        class="gen-chip gen-upload"
+        :title="`支持常见图片格式（${IMAGE_FORMAT_HINT}）`"
+      >
         {{ data.referenceFileName ? '已选主体图' : '主体参考图' }}
-        <input type="file" accept="image/*" hidden @change="onFile" />
+        <input type="file" :accept="IMAGE_FILE_ACCEPT" hidden @change="onFile" />
       </label>
 
       <!-- 首尾帧生视频：上传首帧 + 尾帧 -->
       <template v-if="showStartEndUpload">
-        <label class="gen-chip gen-upload">
+        <label class="gen-chip gen-upload" :title="`支持常见图片格式（${IMAGE_FORMAT_HINT}）`">
           {{ data.startFrameName ? '已选首帧' : '首帧' }}
-          <input type="file" accept="image/*" hidden @change="onStartFrame" />
+          <input type="file" :accept="IMAGE_FILE_ACCEPT" hidden @change="onStartFrame" />
         </label>
-        <label class="gen-chip gen-upload">
+        <label class="gen-chip gen-upload" :title="`支持常见图片格式（${IMAGE_FORMAT_HINT}）`">
           {{ data.endFrameName ? '已选尾帧' : '尾帧(可选)' }}
-          <input type="file" accept="image/*" hidden @change="onEndFrame" />
+          <input type="file" :accept="IMAGE_FILE_ACCEPT" hidden @change="onEndFrame" />
         </label>
 
       </template>
 
       <!-- 动作控制：上传参考图像 + 参考视频 -->
       <template v-if="showMotionUpload">
-        <label class="gen-chip gen-upload">
+        <label class="gen-chip gen-upload" :title="`支持常见图片格式（${IMAGE_FORMAT_HINT}）`">
           {{ data.motionImageName ? '已选参考图' : '参考图像' }}
-          <input type="file" accept="image/*" hidden @change="onMotionImage" />
+          <input type="file" :accept="IMAGE_FILE_ACCEPT" hidden @change="onMotionImage" />
         </label>
-        <label class="gen-chip gen-upload">
+        <label class="gen-chip gen-upload" :title="`支持常见视频格式（${VIDEO_FORMAT_HINT}）`">
           {{ data.motionVideoName ? '已选参考视频' : '参考视频' }}
-          <input type="file" accept="video/*" hidden @change="onMotionVideo" />
+          <input type="file" :accept="VIDEO_FILE_ACCEPT" hidden @change="onMotionVideo" />
         </label>
       </template>
 
       <!-- 多模态参考（Seedance 2.0）：图片 0~9 / 视频 0~3 / 音频 0~3 拆分上传 -->
       <template v-if="showMultimodalUpload">
-        <label class="gen-chip gen-upload">
+        <label class="gen-chip gen-upload" :title="`支持常见图片格式（${IMAGE_FORMAT_HINT}）`">
           图片（{{ (data.multimodalImages || []).length }}/{{ MULTIMODAL_LIMITS.image }}）
-          <input type="file" accept="image/*" multiple hidden @change="onMultimodalImages" />
+          <input type="file" :accept="IMAGE_FILE_ACCEPT" multiple hidden @change="onMultimodalImages" />
         </label>
-        <label class="gen-chip gen-upload">
+        <label class="gen-chip gen-upload" :title="`支持常见视频格式（${VIDEO_FORMAT_HINT}）`">
           视频（{{ (data.multimodalVideos || []).length }}/{{ MULTIMODAL_LIMITS.video }}）
-          <input type="file" accept="video/*" multiple hidden @change="onMultimodalVideos" />
+          <input type="file" :accept="VIDEO_FILE_ACCEPT" multiple hidden @change="onMultimodalVideos" />
         </label>
         <label class="gen-chip gen-upload">
           音频（{{ (data.multimodalAudios || []).length }}/{{ MULTIMODAL_LIMITS.audio }}）
@@ -147,13 +164,13 @@
 
       <!-- 编辑视频（Seedance 2.0）：待编辑视频 + 替换图片 -->
       <template v-if="showEditVideoUpload">
-        <label class="gen-chip gen-upload">
+        <label class="gen-chip gen-upload" :title="`支持常见视频格式（${VIDEO_FORMAT_HINT}）`">
           {{ data.editVideoName ? '已选视频' : '待编辑视频' }}
-          <input type="file" accept="video/*" hidden @change="onEditVideo" />
+          <input type="file" :accept="VIDEO_FILE_ACCEPT" hidden @change="onEditVideo" />
         </label>
-        <label class="gen-chip gen-upload">
+        <label class="gen-chip gen-upload" :title="`支持常见图片格式（${IMAGE_FORMAT_HINT}）`">
           {{ data.editImageName ? '已选图片' : '替换图片' }}
-          <input type="file" accept="image/*" hidden @change="onEditImage" />
+          <input type="file" :accept="IMAGE_FILE_ACCEPT" hidden @change="onEditImage" />
         </label>
       </template>
 
@@ -229,6 +246,12 @@ import { useGenerationNode, type GenerationNodeProps } from './useGenerationNode
 import { getModelCapability } from '@/types/model'
 import { DEFAULT_VIDEO_SYSTEM_PROMPT } from '@/stores/settingsStore'
 import { readSkillFile } from '@/features/skill/parse'
+import {
+  IMAGE_FILE_ACCEPT,
+  IMAGE_FORMAT_HINT,
+  VIDEO_FILE_ACCEPT,
+  VIDEO_FORMAT_HINT,
+} from '@/features/generate/fileFormats'
 
 const props = defineProps<GenerationNodeProps>()
 
@@ -237,6 +260,7 @@ const {
   videoModeOptions,
   ratioOptions,
   durationOptions,
+  resolutionOptions,
   showUpload,
   showSubjectUpload,
   showStartEndUpload,
@@ -247,6 +271,7 @@ const {
   onVideoMode,
   onRatio,
   onDuration,
+  onResolution,
   onFile,
   onStartFrame,
   onEndFrame,
@@ -259,6 +284,11 @@ const {
   onEditVideo,
   onEditImage,
 } = useGenerationNode(props)
+
+// adaptive 比例（MiniMax-H3 图生/参考场景）显示为「自适应」。
+function ratioLabel(ratio: string): string {
+  return ratio === 'adaptive' ? '自适应' : ratio
+}
 
 // NodeShell 实例引用：用于调用其暴露的 insertMention（在光标处/末尾插入 @ 引用）。
 const shellRef = ref<InstanceType<typeof NodeShell> | null>(null)

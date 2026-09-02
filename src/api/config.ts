@@ -1,7 +1,10 @@
 export const AIPING_PUBLIC_API_BASE_URL = 'https://aiping.cn/api/v1'
 export const DEFAULT_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 
+/** 旧版 localStorage 凭据 key（仅用于迁移后清理）。 */
 const API_AUTH_STORAGE_KEY = 'aiping_api_auth'
+/** 新版 sessionStorage 凭据 key：浏览器会话结束即自动清除，降低凭据落盘暴露面。 */
+const API_AUTH_SESSION_STORAGE_KEY = 'aiping_api_auth_session'
 const API_SESSION_READY_STORAGE_KEY = 'aiping_api_session_ready'
 
 type StoredApiAuth = {
@@ -58,7 +61,10 @@ function createSessionId(): string {
 }
 
 function parseStoredApiAuth(): StoredApiAuth | null {
-  const raw = localStorage.getItem(API_AUTH_STORAGE_KEY)
+  // 优先读 sessionStorage；无则尝试迁移旧版 localStorage 中的凭据。
+  const sessionRaw = sessionStorage.getItem(API_AUTH_SESSION_STORAGE_KEY)
+  const legacyRaw = !sessionRaw ? localStorage.getItem(API_AUTH_STORAGE_KEY) : null
+  const raw = sessionRaw || legacyRaw
 
   if (!raw) return null
 
@@ -66,6 +72,11 @@ function parseStoredApiAuth(): StoredApiAuth | null {
     const parsed = JSON.parse(raw) as Partial<StoredApiAuth>
     if (!parsed.apiKey || !parsed.apiBaseUrl || !parsed.sessionId || !parsed.verifiedDateCN) {
       return null
+    }
+
+    if (legacyRaw) {
+      sessionStorage.setItem(API_AUTH_SESSION_STORAGE_KEY, legacyRaw)
+      localStorage.removeItem(API_AUTH_STORAGE_KEY)
     }
 
     return {
@@ -86,6 +97,7 @@ function getSessionReadyToken(): string | null {
 
 function clearStoredAuthData(): void {
   localStorage.removeItem(API_AUTH_STORAGE_KEY)
+  sessionStorage.removeItem(API_AUTH_SESSION_STORAGE_KEY)
 }
 
 export function normalizeApiBaseUrl(baseUrl: string): string {
@@ -151,8 +163,8 @@ export function saveApiBaseUrl(baseUrl: string): void {
   const current = parseStoredApiAuth()
   const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, '')
 
-  localStorage.setItem(
-    API_AUTH_STORAGE_KEY,
+  sessionStorage.setItem(
+    API_AUTH_SESSION_STORAGE_KEY,
     JSON.stringify({
       apiKey: current?.apiKey || '',
       apiBaseUrl: normalizedBaseUrl,
@@ -161,13 +173,14 @@ export function saveApiBaseUrl(baseUrl: string): void {
       verifiedDateCN: current?.verifiedDateCN || '',
     } satisfies StoredApiAuth),
   )
+  localStorage.removeItem(API_AUTH_STORAGE_KEY)
 }
 
 export function saveApiAuth(apiKey: string, baseUrl: string): void {
   const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, '')
 
-  localStorage.setItem(
-    API_AUTH_STORAGE_KEY,
+  sessionStorage.setItem(
+    API_AUTH_SESSION_STORAGE_KEY,
     JSON.stringify({
       apiKey: apiKey.trim(),
       apiBaseUrl: normalizedBaseUrl,
@@ -176,6 +189,7 @@ export function saveApiAuth(apiKey: string, baseUrl: string): void {
       verifiedDateCN: getCurrentChinaDateKey(),
     } satisfies StoredApiAuth),
   )
+  localStorage.removeItem(API_AUTH_STORAGE_KEY)
 }
 
 export function clearApiBaseUrl(): void {

@@ -1,4 +1,4 @@
-# 图片上传代理服务（Seedance 2.0 参考图专用）
+# 图片上传代理服务（本地图片统一上传）
 
 ## 为什么需要它
 
@@ -9,7 +9,8 @@
 本服务负责：前端把本地图片（base64）POST 过来 → 用腾讯云 COS 密钥上传 → 返回公网 HTTPS URL。
 COS 密钥只存在服务端 `.env`，不会暴露给前端用户。
 
-> 注意：其他模型（Kling / Vidu / Minimax / Seedream 等）直接吃 base64，不需要本服务。只有 Seedance 2.0 需要。
+> 说明：Seedance 2.0 必须使用公网 URL；其他模型在配置上传服务后也会统一走本服务，
+> 从而避免多张本地原图直接 base64 上传导致请求体过大、上游返回 503。
 
 ## 目录
 
@@ -89,6 +90,66 @@ VITE_UPLOAD_SERVICE_TOKEN=与服务端 UPLOAD_TOKEN 相同的值
 ```
 
 前端在调用 Seedance 2.0 且检测到本地 base64 参考图时，会自动先 POST 到该地址换取公网 URL，再交给火山。
+
+## 安全加固（已内置）
+
+- **限流**：每个 IP 每分钟最多 `UPLOAD_RATE_LIMIT_PER_MIN`（默认 20）次上传。
+- **配额**：每个 IP 每天最多上传 `UPLOAD_DAILY_QUOTA_MB`（默认 1024MB），超出返回 429。
+- **CORS 收紧**：`ALLOW_ORIGINS` 留空时仅允许本机与局域网来源；`*` 为显式全开（不推荐）；生产环境请填写站点域名。
+- **随机 key**：对象 key 含 128 位随机数，公开读时不可枚举。
+- **token 建议**：`UPLOAD_TOKEN` 会打进前端产物，属公开值；请定期轮换，并依赖限流/配额兜底。更安全做法是改为 COS STS 临时密钥或服务端代签（后续可迭代）。
+
+## 上传文件自动清理（4 种方案）
+
+### 方案 A：COS 生命周期规则（推荐，已提供脚本）
+
+本服务内置脚本，一键给 `seedance-uploads/` 前缀配置「上传 N 天后自动删除」：
+
+```bash
+cd server/upload-service
+# 在 .env 里设置 LIFECYCLE_EXPIRE_DAYS（本项目默认 3 天，最小值 1）
+npm run lifecycle
+```
+
+- 优点：托管在 COS 侧，自动执行，无需常驻任务。
+- 注意：脚本会**整组覆盖**桶上的全部生命周期规则，已有规则需先到控制台合并。
+- 火山/阿里抓取图片需要时间，建议 `LIFECYCLE_EXPIRE_DAYS >= 1`（本项目默认 3 天）。
+
+### 兜底：内置自动清理（已启用，无需 CAM 生命周期权限）
+
+当上传服务的 CAM 密钥没有 `PutBucketLifecycle` 权限（如当前环境）时，服务启动后每
+小时自动扫描 `seedance-uploads/` 前缀，删除上传时间超过 `LIFECYCLE_EXPIRE_DAYS`
+（默认 3 天）的对象。清理依据对象 key 中的上传时间戳，每页 1000 个。
+
+### 方案 B：COS 控制台手动配置
+
+存储桶 → 基础配置 → 生命周期 → 新增规则：
+范围选「指定前缀」填 `seedance-uploads/`，规则选「修改后 N 天删除」填 1。
+
+- 优点：图形化、所见即所得；改配置无需重新部署。
+- 缺点：不可代码化，换环境需重新配置。
+
+### 方案 C：服务器定时清理脚本 + cron
+
+写一个 `cleanup.sh` 调用 COS SDK列 `/seedance-uploads` 并删除过期对象，再用 crontab 每天执行：
+
+```cron
+30 3 * * * cd /opt/aiping-upload-service && node scripts/cleanup-expired.js >> /var/log/aiping-cleanup.log 2>&1
+```
+
+- 优点：可自定义「按前缀 + 超过 N 天 + 文件大小」等复杂规则。
+- 缺点：需要自维护脚本与服务器定时任务。
+
+### 方案 D：腾讯云 SCF 云函数定时触发
+
+在 SCF 写一个定时触发的函数，逻辑同方案 C，由平台托管调度。
+
+- 优点：无服务器、按执行收费、不怕本地机器宕机。
+- 缺点：多一套函数配置。
+
+### 推荐组合
+
+生产环境用 **方案 A（生命周期）+ 定期轮换 UPLOAD_TOKEN**；预算敏感或已有 SCF 体系可用方案 D。无论哪种方案，过期时间不要短于 1 天，避免上游还在抓图时对象已被删除。
 
 ## COS 侧建议
 

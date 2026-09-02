@@ -231,9 +231,9 @@ function openPreview() {
   min-height: 36px;
   padding: 0 14px;
   border-radius: 999px;
-  border: 1px solid rgba(30, 41, 59, 0.1);
-  background: rgba(255, 255, 255, 0.78);
-  color: var(--color-text);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.88);
   font-size: 12px;
   font-weight: 600;
   transition:
@@ -245,25 +245,29 @@ function openPreview() {
 
 .action-btn:hover {
   transform: translateY(-1px);
-  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(255, 255, 255, 0.20);
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
 }
 
 .action-btn-primary {
   background: var(--color-theme-gradient);
   border-color: transparent;
-  color: rgba(255, 255, 255, 0.96);
+  color: #08080a;
   box-shadow: 0 12px 24px rgba(95, 75, 139, 0.22);
 }
 
 .action-btn-primary:hover {
   background: var(--color-theme-gradient-hover);
   border-color: transparent;
+  color: #08080a;
   box-shadow: 0 14px 28px rgba(95, 75, 139, 0.26);
 }
 
 .action-btn-primary:active {
   background: var(--color-theme-gradient-active);
   border-color: transparent;
+  color: #08080a;
   transform: translateY(0);
   box-shadow: 0 8px 18px rgba(95, 75, 139, 0.2);
 }

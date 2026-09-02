@@ -24,10 +24,42 @@
       </div>
     </main>
 
-    <section class="template-section" aria-labelledby="template-title">
+    <section class="template-section skill-template-section" aria-labelledby="skill-template-title">
       <div class="template-head">
-        <h2 id="template-title">模板库</h2>
-        <button type="button">查看全部</button>
+        <h2 id="skill-template-title">Skill模板库</h2>
+      </div>
+
+      <div class="template-grid">
+        <article
+          v-for="item in skillTemplates"
+          :key="item.title"
+          class="template-card skill-template-card"
+          role="button"
+          tabindex="0"
+          @click="handleSkillTemplateClick"
+          @keydown.enter.prevent="handleSkillTemplateClick"
+          @keydown.space.prevent="handleSkillTemplateClick"
+        >
+          <span class="template-visual" :class="[item.theme, { 'has-image': item.image }]">
+            <img v-if="item.image" :src="item.image" alt="" class="template-image" />
+            <span v-else class="visual-glow" />
+            <button
+              class="skill-download-btn"
+              type="button"
+              :aria-label="`下载 ${item.title} Skill 文件`"
+              @click.stop="handleSkillDownloadClick(item)"
+            >
+              下载
+            </button>
+          </span>
+          <strong>{{ item.title }}</strong>
+        </article>
+      </div>
+    </section>
+
+    <section class="template-section prompt-template-section" aria-labelledby="template-title">
+      <div class="template-head">
+        <h2 id="template-title">提示词模板库</h2>
       </div>
 
       <div class="template-grid">
@@ -57,6 +89,37 @@ import { hasActiveApiSession } from '@/api/config'
 const LANDING_PENDING_PROMPT_KEY = 'artrealm_landing_pending_prompt'
 
 const router = useRouter()
+
+const skillTemplates = [
+  {
+    title: '王家卫式霓虹孤独风格',
+    theme: 'template-skill',
+    image: '/skill-wkw-neon-loneliness-style.png',
+    fileUrl: '/skills/wkw-neon-loneliness-style.md',
+    fileName: 'wkw-neon-loneliness-style.md',
+  },
+  {
+    title: '剪纸定格动画',
+    theme: 'template-skill',
+    image: '/skill-papercut-stop-motion-explainer.webp',
+    fileUrl: '/skills/papercut-stop-motion-explainer.md',
+    fileName: 'papercut-stop-motion-explainer.md',
+  },
+  {
+    title: '手绘发光动画实拍融合',
+    theme: 'template-skill',
+    image: '/skill-handdrawn-live-video-generator.png',
+    fileUrl: '/skills/handdrawn-live-video-generator.md',
+    fileName: 'handdrawn-live-video-generator.md',
+  },
+  {
+    title: '极简旅行海报',
+    theme: 'template-skill',
+    image: '/skill-photo-to-minimal-vector-travel-poster.png',
+    fileUrl: '/skills/photo-to-minimal-vector-travel-poster.md',
+    fileName: 'photo-to-minimal-vector-travel-poster.md',
+  },
+]
 
 const templates = [
   {
@@ -169,6 +232,19 @@ function handleTemplateClick(item: { prompt: string }) {
   router.push({ path: '/setup', query: { redirect: 'landing' } })
 }
 
+function handleSkillTemplateClick() {
+  router.push({ path: '/setup', query: { redirect: 'landing' } })
+}
+
+function handleSkillDownloadClick(item: { fileUrl: string; fileName: string }) {
+  const link = document.createElement('a')
+  link.href = item.fileUrl
+  link.download = item.fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+}
+
 onMounted(() => {
   runTypewriter()
 })
@@ -221,7 +297,6 @@ onBeforeUnmount(() => {
 
 .brand-logo,
 .login-btn,
-.template-head button,
 .template-card {
   border: 0;
   font: inherit;
@@ -423,6 +498,14 @@ onBeforeUnmount(() => {
   padding: 20px 0 0;
 }
 
+.skill-template-section {
+  margin-bottom: 44px;
+}
+
+.prompt-template-section {
+  margin-top: 0;
+}
+
 .template-head {
   display: flex;
   align-items: center;
@@ -438,13 +521,6 @@ onBeforeUnmount(() => {
   letter-spacing: -0.04em;
 }
 
-.template-head button {
-  background: transparent;
-  color: rgba(255, 255, 255, 0.74);
-  font-size: 15px;
-  font-weight: 700;
-}
-
 .template-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -457,6 +533,10 @@ onBeforeUnmount(() => {
   background: transparent;
   color: rgba(255, 255, 255, 0.76);
   text-align: left;
+}
+
+.skill-template-card {
+  cursor: pointer;
 }
 
 .template-card strong {
@@ -511,6 +591,33 @@ onBeforeUnmount(() => {
   display: block;
 }
 
+.skill-download-btn {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(5, 12, 26, 0.58);
+  color: rgba(255, 255, 255, 0.92);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(14px) saturate(140%);
+}
+
+.skill-download-btn:hover {
+  border-color: rgba(105, 240, 255, 0.44);
+  background: rgba(9, 24, 52, 0.68);
+}
+
 .template-visual.has-image::before {
   display: none;
 }
@@ -549,6 +656,12 @@ onBeforeUnmount(() => {
 
 .template-stage::before {
   background: linear-gradient(135deg, #dfe7ef, #46556d), radial-gradient(ellipse at 52% 74%, #ffffff, transparent 0 24%);
+}
+
+.template-skill::before {
+  background:
+    radial-gradient(circle at 68% 36%, rgba(255, 176, 202, 0.28), transparent 0 16%),
+    linear-gradient(135deg, #061b2e, #3c0d3a 72%);
 }
 
 .template-card:hover .template-visual {

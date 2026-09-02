@@ -62,6 +62,8 @@ export interface CanvasNodeData {
   // video
   videoMode?: VideoGenerationMode
   duration?: number
+  // 视频分辨率档位（当前仅 MiniMax-H3 使用：768P / 2K）。
+  resolution?: string
   // Kling 系列「是否生成声音」：true 生成带声音的视频（audio=native），false 无声音（默认）。
   klingSound?: boolean
 
@@ -1030,6 +1032,18 @@ export const useCanvasStore = defineStore('canvas', () => {
             purpose: 'motion-control-video',
           },
         ]
+      } else if (videoMode === 'endFrame2video') {
+        // 尾帧生视频（MiniMax-H3）：需要一张尾帧图（本节点上传或上游图片）。
+        if (!referenceImage) {
+          throw new Error('尾帧生视频需要上传尾帧图片，或连接一个已生成图片的上游节点。')
+        }
+        videoInput = {
+          name: node.data.referenceFileName || 'end-frame',
+          type: 'image',
+          url: referenceImage,
+          size: 0,
+          purpose: 'end-frame',
+        }
       } else if (videoMode === 'image2video') {
         // 图生视频：需要一张参考图（本节点上传或上游图片）。
         if (!referenceImage) {
@@ -1071,6 +1085,7 @@ export const useCanvasStore = defineStore('canvas', () => {
         capability?.videoRequestMode,
         // Kling 系列「是否生成声音」：开启则 audio=native，否则 off（默认）。
         node.data.klingSound ? 'native' : 'off',
+        node.data.resolution || null,
       )
 
 

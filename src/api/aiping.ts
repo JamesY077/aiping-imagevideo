@@ -20,9 +20,24 @@ import {
   collectSeedanceReferenceAudios,
   normalizeSeedanceResponse,
 } from '@/api/providers/video/seedanceShared'
+import {
+  MINIMAX_H3_TASKS_ENDPOINT,
+  MINIMAX_H3_QUERY_TASKS_ENDPOINT,
+  buildMinimaxH3Content,
+  collectMinimaxH3ReferenceAudios,
+  collectMinimaxH3ReferenceImages,
+  collectMinimaxH3ReferenceVideos,
+  collectMinimaxH3FirstFrame,
+  collectMinimaxH3LastFrame,
+  normalizeMinimaxH3Response,
+} from '@/api/providers/video/minimaxH3Shared'
 
 import { AppError } from '@/utils/errors'
-import { uploadDataUriToPublicUrl } from '@/features/generate/upload'
+import {
+  uploadDataUriToPublicUrl,
+  ensurePublicImageUrlForModel,
+  ensureMinimaxH3ImageForModel,
+} from '@/features/generate/upload'
 
 
 
@@ -226,9 +241,61 @@ export async function chatCompletion(params: ChatCompletionRequest): Promise<str
   }
 }
 
+async function prepareImageGenerationParams(params: ImageGenerateRequest): Promise<ImageGenerateRequest> {
+  if (!params.image) return params
+  return {
+    ...params,
+    image: await ensurePublicImageUrlForModel(params.image),
+  }
+}
+
+async function prepareVideoGenerationParams(
+  params: VideoGenerateRequest,
+  prepareImage: (value: string) => Promise<string> = ensurePublicImageUrlForModel,
+): Promise<VideoGenerateRequest> {
+  const next: VideoGenerateRequest = { ...params }
+
+  if (next.image) next.image = await prepareImage(next.image)
+  if (next.image_url) next.image_url = await prepareImage(next.image_url)
+  if (next.image_tail) next.image_tail = await prepareImage(next.image_tail)
+  if (next.img_url) next.img_url = await prepareImage(next.img_url)
+  if (next.first_frame_image) next.first_frame_image = await prepareImage(next.first_frame_image)
+  if (next.last_frame_image) next.last_frame_image = await prepareImage(next.last_frame_image)
+  if (next.first_frame_url) next.first_frame_url = await prepareImage(next.first_frame_url)
+  if (next.last_frame_url) next.last_frame_url = await prepareImage(next.last_frame_url)
+  if (next.start_image) next.start_image = await prepareImage(next.start_image)
+  if (next.end_image) next.end_image = await prepareImage(next.end_image)
+
+  if (next.images) {
+    next.images = await Promise.all(next.images.map(prepareImage))
+  }
+  if (next.reference_images) {
+    next.reference_images = await Promise.all(next.reference_images.map(prepareImage))
+  }
+  if (next.image_list) {
+    next.image_list = await Promise.all(
+      next.image_list.map(async (item) => ({
+        ...item,
+        image_url: await prepareImage(item.image_url),
+      })),
+    )
+  }
+  if (next.subject_reference) {
+    next.subject_reference = await Promise.all(
+      next.subject_reference.map(async (item) => ({
+        ...item,
+        image: await Promise.all((item.image || []).map(prepareImage)),
+      })),
+    )
+  }
+
+  return next
+}
+
 export async function generateImage(params: ImageGenerateRequest): Promise<ImageGenerateResponse> {
-  const provider = getImageProvider(params)
-  const fullBody = provider.buildRequestBody(params)
+  const preparedParams = await prepareImageGenerationParams(params)
+  const provider = getImageProvider(preparedParams)
+  const fullBody = provider.buildRequestBody(preparedParams)
 
   debugLog(`generateImage provider=${provider.provider} trying full body:`, sanitizeDebugBody(fullBody))
   try {
@@ -393,15 +460,96 @@ async function generateSeedanceVideo(params: VideoGenerateRequest, canonicalMode
   }
 }
 
+/**
+ * MiniMax-H3 专用生成流程：
+ * 1. 首/尾帧与参考图已由通用上传流程处理为公网 URL（或压缩后的 dataURI）；视频/音频参考必须已是公网 URL。
+ * 2. 组装 content 数组后调用 /multimodal/minimax/videos/video_generation 创建任务。
+ */
+async function generateMinimaxH3Video(params: VideoGenerateRequest, canonicalModel: string): Promise<VideoGenerateResponse> {
+  const firstFrame = collectMinimaxH3FirstFrame(params)
+  const lastFrame = collectMinimaxH3LastFrame(params)
+  const referenceImages = collectMinimaxH3ReferenceImages(params)
+  const referenceVideos = collectMinimaxH3ReferenceVideos(params)
+  const referenceAudios = collectMinimaxH3ReferenceAudios(params)
+
+  const hasFrames = !!(firstFrame || lastFrame)
+
+  if (!hasFrames) {
+    for (const url of referenceVideos) {
+      if (isDataUri(url)) {
+        throw new AppError('MiniMax-H3 的参考视频目前需要公网 URL，暂不支持本地上传。请改用公网可访问的地址。')
+      }
+    }
+    for (const url of referenceAudios) {
+      if (isDataUri(url)) {
+        throw new AppError('MiniMax-H3 的参考音频目前需要公网 URL，暂不支持本地上传。请改用公网可访问的地址。')
+      }
+    }
+  }
+
+  const body: Record<string, unknown> = {
+    model: params.model || canonicalModel,
+    content: hasFrames
+      ? buildMinimaxH3Content(params.prompt, {
+          firstFrame,
+          lastFrame,
+        })
+      : buildMinimaxH3Content(params.prompt, {
+          referenceImages,
+          referenceVideos,
+          referenceAudios,
+        }),
+    resolution: params.resolution === '2K' ? '2K' : '768P',
+    duration: Math.min(15, Math.max(4, Math.round(Number(params.duration || params.seconds || 5)))),
+  }
+
+  const ratio = params.aspect_ratio || params.ratio
+  if (ratio && ratio !== 'adaptive') body.ratio = ratio
+  else if (!hasFrames && !referenceImages.length && !referenceVideos.length && !referenceAudios.length) {
+    // 纯文生视频必须给具体比例。
+    body.ratio = '16:9'
+  }
+
+  if (typeof params.watermark === 'boolean') body.aigc_watermark = params.watermark
+  if (params.callback_url) body.callback_url = params.callback_url
+
+  debugLog('generateVideo provider=minimax-h3 body:', sanitizeDebugBody(body))
+  try {
+    const response = await client.post(MINIMAX_H3_TASKS_ENDPOINT, body)
+    return normalizeMinimaxH3Response(response.data)
+  } catch (error: any) {
+    debugLog('generateMinimaxH3Video error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+    })
+    if (error?.response?.status === 503) {
+      throw new AppError(
+        'MiniMax-H3 服务暂时不可用（503）。如果当前上传了多张本地图片，请稍后重试，或先压缩图片、减少参考图数量、改用公网图片链接后再试。',
+      )
+    }
+    throw new AppError(getApiErrorMessage(error, 'MiniMax-H3 视频生成失败，请切换模型或调整参数后重试。'))
+  }
+}
+
 export async function generateVideo(params: VideoGenerateRequest): Promise<VideoGenerateResponse> {
   const provider = getVideoProvider(params)
+  const preparedParams = provider.provider === 'seedance'
+    ? params
+    : provider.provider === 'minimax-h3'
+      ? await prepareVideoGenerationParams(params, ensureMinimaxH3ImageForModel)
+      : await prepareVideoGenerationParams(params)
 
   // Seedance 2.0 系列走独立的「素材 + 任务」流程。
   if (provider.provider === 'seedance') {
-    return generateSeedanceVideo(params, provider.models[0])
+    return generateSeedanceVideo(preparedParams, provider.models[0])
   }
 
-  const fullBody = provider.buildRequestBody(params)
+  // MiniMax-H3 走独立的 content 数组协议端点。
+  if (provider.provider === 'minimax-h3') {
+    return generateMinimaxH3Video(preparedParams, provider.models[0])
+  }
+
+  const fullBody = provider.buildRequestBody(preparedParams)
   const videoEndpoint = provider.getEndpoint(fullBody)
   const normalizeResponse = provider.normalizeResponse || ((data: VideoGenerateResponse) => data)
 
@@ -554,6 +702,28 @@ function normalizeVideoStatus(data: any, taskId: string, provider?: string): Vid
   }
 }
 
+/**
+ * 归一化 MiniMax-H3 任务查询结果。
+ * 查询接口返回：{ task: { id, status, content: { url }, ... }, aiping_id }。
+ */
+function normalizeMinimaxH3Status(data: any, taskId: string): VideoStatusResponse {
+  const task = data?.task || data?.data?.task || data?.data || data
+  const videoUrl = task?.content?.url || task?.content?.video_url || task?.video_url || task?.url
+
+  return {
+    ...task,
+    id: task?.id || task?.task_id || taskId,
+    task_id: task?.task_id || task?.id || taskId,
+    status: task?.status || task?.state || 'pending',
+    state: task?.state || task?.status,
+    video_url: videoUrl,
+    data: videoUrl ? [{ url: videoUrl, duration: task?.duration || 0 }] : undefined,
+    error: task?.error?.message || task?.error || task?.err_msg,
+    provider: 'minimax',
+    model: task?.model || data?.model,
+  }
+}
+
 export async function getVideoStatusWithProvider(taskId: string, provider?: string): Promise<VideoStatusResponse> {
   const normalizedProvider = provider?.toLowerCase()
 
@@ -580,18 +750,26 @@ export async function getVideoStatusWithProvider(taskId: string, provider?: stri
       ? [`/videos/${taskId}`, `/multimodal/kling/videos/${taskId}`]
     : normalizedProvider === 'kling'
       ? [`/multimodal/kling/videos/${taskId}`, `/videos/${taskId}`]
+    : normalizedProvider === 'minimax-h3'
+      ? [`${MINIMAX_H3_QUERY_TASKS_ENDPOINT}/${taskId}`]
     : [`/videos/${taskId}`]
 
 
-  // Kling Omni 对外展示仍归一为 kling，避免 UI 上出现内部路由标识。
-  const displayProvider = normalizedProvider === 'kling-omni' ? 'kling' : provider
+  // Kling Omni / MiniMax-H3 对外展示仍归一为 kling / minimax，避免 UI 上出现内部路由标识。
+  const displayProvider = normalizedProvider === 'kling-omni'
+    ? 'kling'
+    : normalizedProvider === 'minimax-h3'
+      ? 'minimax'
+      : provider
 
   let lastError: any
   for (const endpoint of endpoints) {
     try {
       debugLog(`getVideoStatus provider=${provider || 'default'} endpoint=${endpoint}`)
       const response = await client.get(endpoint)
-      return normalizeVideoStatus(response.data, taskId, displayProvider)
+      return normalizedProvider === 'minimax-h3'
+        ? normalizeMinimaxH3Status(response.data, taskId)
+        : normalizeVideoStatus(response.data, taskId, displayProvider)
     } catch (error: any) {
 
 

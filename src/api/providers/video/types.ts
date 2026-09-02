@@ -1,6 +1,6 @@
 import type { VideoGenerateRequest, VideoGenerateResponse } from '@/types/api'
 
-export type VideoProviderName = 'vidu' | 'minimax' | 'kling' | 'seedance'
+export type VideoProviderName = 'vidu' | 'minimax' | 'minimax-h3' | 'kling' | 'seedance'
 
 
 export interface VideoProviderAdapter {

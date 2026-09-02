@@ -46,9 +46,12 @@
       </button>
 
       <!-- 上传原始图片（也可由上游图片节点接入） -->
-      <label class="gen-chip gen-upload">
+      <label
+        class="gen-chip gen-upload"
+        :title="`支持常见图片格式（${IMAGE_FORMAT_HINT}）`"
+      >
         {{ data.referenceFileName ? '已选原图' : '原始图片' }}
-        <input type="file" accept="image/*" hidden @change="onFile" />
+        <input type="file" :accept="IMAGE_FILE_ACCEPT" hidden @change="onFile" />
       </label>
     </template>
   </NodeShell>
@@ -60,6 +63,7 @@ import NodeShell from './NodeShell.vue'
 import ModelSelector from '@/components/ModelSelector.vue'
 import { useGenerationNode, type GenerationNodeProps } from './useGenerationNode'
 import { DEFAULT_EXPAND_SYSTEM_PROMPT } from '@/stores/settingsStore'
+import { IMAGE_FILE_ACCEPT, IMAGE_FORMAT_HINT } from '@/features/generate/fileFormats'
 
 const props = defineProps<GenerationNodeProps>()
 const { store, modelMediaType, ratioOptions, onRatio, onFile } = useGenerationNode(props)

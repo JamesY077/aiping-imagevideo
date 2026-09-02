@@ -89,9 +89,13 @@
       </button>
 
       <!-- 图生图：上传参考图 -->
-      <label v-if="showUpload" class="gen-chip gen-upload">
+      <label
+        v-if="showUpload"
+        class="gen-chip gen-upload"
+        :title="`支持常见图片格式（${IMAGE_FORMAT_HINT}）`"
+      >
         {{ data.referenceFileName ? '已选图' : '参考图' }}
-        <input type="file" accept="image/*" hidden @change="onFile" />
+        <input type="file" :accept="IMAGE_FILE_ACCEPT" hidden @change="onFile" />
       </label>
     </template>
   </NodeShell>
@@ -105,6 +109,7 @@ import ModelSelector from '@/components/ModelSelector.vue'
 import { useGenerationNode, type GenerationNodeProps } from './useGenerationNode'
 import { DEFAULT_IMAGE_SYSTEM_PROMPT } from '@/stores/settingsStore'
 import { readSkillFile } from '@/features/skill/parse'
+import { IMAGE_FILE_ACCEPT, IMAGE_FORMAT_HINT } from '@/features/generate/fileFormats'
 
 const props = defineProps<GenerationNodeProps>()
 const { store, modelMediaType, ratioOptions, showUpload, onImageMode, onRatio, onFile } =
