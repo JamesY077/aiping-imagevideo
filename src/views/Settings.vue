@@ -93,29 +93,6 @@
         <div v-if="polishStatus" class="status-msg success">{{ polishStatus }}</div>
       </section>
 
-      <section class="card">
-        <div class="section-head">
-          <span class="kicker">ArtSkills</span>
-          <h3>Skill 创作模型</h3>
-        </div>
-        <div class="input-group">
-          <label for="artskills-model">底层模型</label>
-          <select
-            id="artskills-model"
-            class="text-input"
-            :value="skillStore.modelPreference"
-            @change="handleArtSkillsModelChange"
-          >
-            <option v-for="option in artskillsModelOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
-          <p class="field-hint">
-            未指定时会在多个底层模型中随机调用，对外始终展示为 {{ ARTSKILLS_DISPLAY_NAME }}。
-          </p>
-        </div>
-      </section>
-
       <section class="card about-card">
         <div class="section-head">
           <span class="kicker">关于</span>
@@ -181,11 +158,6 @@ import {
   useSettingsStore,
 } from '@/stores/settingsStore'
 import { useSkillStore } from '@/stores/skillStore'
-import {
-  ARTSKILLS_DISPLAY_NAME,
-  ARTSKILLS_MODEL_OPTIONS,
-  type ArtSkillsModelPreference,
-} from '@/features/skill/models'
 import { maskApiKey } from '@/utils/format'
 import { testConnectionWithDetail } from '@/api/aiping'
 import { AIPING_PUBLIC_API_BASE_URL, isOpenAiBaseUrlFormat } from '@/api/config'
@@ -209,7 +181,6 @@ const testStatus = ref('')
 const testStatusType = ref<'success' | 'error'>('success')
 const polishStatus = ref('')
 const defaultPolishSystemPrompt = DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT
-const artskillsModelOptions = ARTSKILLS_MODEL_OPTIONS
 
 const maskedKeyText = computed(() => (apiStore.apiKey ? maskApiKey(apiStore.apiKey) : '未设置'))
 
@@ -217,11 +188,6 @@ onMounted(() => {
   settingsStore.loadFromStorage()
   skillStore.loadFromStorage()
 })
-
-function handleArtSkillsModelChange(event: Event) {
-  const value = (event.target as HTMLSelectElement).value as ArtSkillsModelPreference
-  skillStore.setModelPreference(value)
-}
 
 function openEditConfig() {
   newApiBaseUrl.value = apiStore.apiBaseUrl || AIPING_PUBLIC_API_BASE_URL

@@ -2750,7 +2750,7 @@ async function handleRegenerate(message: Message) {
   appearance: none;
   border: 0;
   background: transparent;
-  min-width: 48px;
+  min-width: 0;
   padding-right: 20px;
   font: inherit;
   font-weight: 700;
@@ -2760,7 +2760,7 @@ async function handleRegenerate(message: Message) {
 
 .duration-caret {
   position: absolute;
-  right: 0;
+  right: 2px;
   top: 50%;
   transform: translateY(-50%);
   pointer-events: none;
@@ -4456,17 +4456,52 @@ async function handleRegenerate(message: Message) {
 }
 
 .ratio-current-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+  width: auto;
+  height: 28px;
+  padding: 0 10px;
+  gap: 8px;
   background: #1c1f26;
   color: rgba(255, 255, 255, 0.92);
 }
 
-.motion-control-select,
-.duration-select {
-  border: 1px solid rgba(255, 255, 255, 0.26);
-  border-radius: 10px;
-  padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.07);
+.ratio-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.ratio-caret {
+  flex: 0 0 auto;
+  font-size: 10px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.motion-control-select {
+  border: 0;
+  background: transparent;
+  padding: 0 4px;
   color: rgba(255, 255, 255, 0.92);
+}
+
+.duration-select {
+  border: 0;
+  background: transparent;
+  min-width: 0;
+  padding: 0 20px 0 4px;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.duration-selector {
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: 12px;
 }
 
 .reference-input {
