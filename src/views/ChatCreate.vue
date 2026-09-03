@@ -4,7 +4,7 @@
       <header class="top-nav">
         <div class="brand-lockup">
           <strong class="brand-title">
-            <img class="brand-title-logo" src="/logo1.webp" alt="" />
+            <img class="brand-title-logo" :src="assetUrl('/logo1.webp')" alt="" />
             ArtRealm
           </strong>
         </div>
@@ -693,6 +693,7 @@ import { useGenerate } from '@/composables/useGenerate'
 import { useChatStore } from '@/stores/chatStore'
 import { useSkillStore } from '@/stores/skillStore'
 import { readSkillFile } from '@/features/skill/parse'
+import { assetUrl } from '@/utils/assets'
 
 import { polishPrompt } from '@/api/aiping'
 import {

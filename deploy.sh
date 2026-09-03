@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# 项目绝对路径：脚本可从任意目录执行
+PROJECT_DIR="/Users/yjy/Desktop/aiping-创意项目/aiping-aidraw"
+cd "$PROJECT_DIR"
+
 SERVER="ubuntu@49.232.99.62"
 DOMAIN="artrealm.nextmak.cn"
 REMOTE_TMP="aidraw-dist"

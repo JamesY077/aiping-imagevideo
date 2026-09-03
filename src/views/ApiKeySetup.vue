@@ -2,7 +2,7 @@
   <div class="setup-page">
     <header class="setup-nav">
       <button class="brand" type="button" @click="router.push('/')">
-        <img class="brand-mark" src="/logo1.webp" alt="" />
+        <img class="brand-mark" :src="assetUrl('/logo1.webp')" alt="" />
         <span>ArtRealm</span>
       </button>
 
@@ -58,6 +58,7 @@ import { useRouter } from 'vue-router'
 import ApiKeyInput from '@/components/ApiKeyInput.vue'
 import { useApiStore } from '@/stores/apiStore'
 import { AIPING_PUBLIC_API_BASE_URL, isOpenAiBaseUrlFormat } from '@/api/config'
+import { assetUrl } from '@/utils/assets'
 
 const router = useRouter()
 const apiStore = useApiStore()
@@ -122,7 +123,7 @@ async function handleSubmit() {
   padding: 24px;
   color: rgba(255, 255, 255, 0.94);
   background:
-    url('/login-collage-bg.webp') center / cover no-repeat, #05060a;
+    url('https://artrealm-image-1314455608.cos.ap-beijing.myqcloud.com/site-assets/login-collage-bg.webp') center / cover no-repeat, #05060a;
   isolation: isolate;
 }
 
