@@ -109,6 +109,23 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
+    # —— 以下 /upload 反代为可选：仅当启用 server/upload-service（Seedance 2.0 本地上传图）时才需要。
+    # 没有这段反代时，POST /upload 会落到上面的 location /，被 try_files 转成静态文件并返回 405。
+    location /upload {
+        proxy_pass http://127.0.0.1:3100/upload;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        client_max_body_size 25m;
+        proxy_read_timeout 60s;
+    }
+
+    location = /upload/health {
+        proxy_pass http://127.0.0.1:3100/health;
+        proxy_set_header Host $host;
+    }
+
     location /api/ {
         proxy_pass https://aiping.cn;
         proxy_ssl_server_name on;
@@ -151,12 +168,22 @@ sudo systemctl reload nginx
 
 ```env
 VITE_API_BASE_URL=/api/v1
+# 默认留空：不启用图片上传服务
+VITE_UPLOAD_SERVICE_URL=
+VITE_UPLOAD_SERVICE_TOKEN=
 ```
 
 也就是：
 
 - 浏览器请求 `/api/v1/*`
 - 由 Nginx 转发到 `https://aiping.cn/api/v1/*`
+- 本地上传的图片**不经过 `/upload`**：MiniMax-H3 等支持 base64 的模型由前端压缩后以
+  dataURI 直传，线上无需改 Nginx，也不会触发 405
+- Seedance 2.0 的本地上传图必须公网 URL，未配置上传服务时会给出明确提示；
+  如需启用，见第七节（并给 Nginx 加 `/upload` 反代）
+
+> 关键点：线上 405 的根因是旧版前端把本地图 POST 到 `/upload`，而 Nginx 没有该反代。
+> 本版生产配置直接不请求 `/upload`，因此**重新发布前端即可修复，不需要改服务器配置**。
 
 ## 六、常见问题
 
@@ -168,3 +195,55 @@ VITE_API_BASE_URL=/api/v1
   ```bash
   ssh -t ubuntu@49.232.99.62 "sudo nginx -t && sudo systemctl reload nginx"
   ```
+- **本地上传图片时控制台报 `405 (Not Allowed)`**：只有旧版前端（或重新启用了上传服务）才会请求 `https://artrealm.nextmak.cn/upload`。当前生产配置（`.env.production` 的 `VITE_UPLOAD_SERVICE_URL` 留空）不请求该地址，重新执行 `./deploy.sh` 发布即可修复，无需改 Nginx。若以后启用上传服务，才需要第四节的 `location /upload` 反代 + 第七节的服务，快速验证：
+
+  ```bash
+  # 405 表示还没配好反代；返回 200 JSON 表示反代通了；返回 502 表示反代通了但 3100 服务没起
+  curl -s -i https://artrealm.nextmak.cn/upload/health
+  ```
+
+## 七、图片上传服务（可选，仅 Seedance 2.0 本地上传图需要）
+
+`server/upload-service` 是一个 Express 服务：接收前端 POST 的 base64 图片，用腾讯云 COS
+密钥上传并返回公网 HTTPS URL（Seedance 2.0 只接受公网 URL）。密钥只保存在服务端 `.env`。
+
+### 1）部署到服务器
+
+```bash
+# 本地把服务目录传到服务器家目录（排除 node_modules）
+rsync -av --exclude node_modules server/upload-service/ ubuntu@49.232.99.62:~/upload-service/
+
+# 服务器上安装依赖并启动（PM2 常驻）
+ssh -t ubuntu@49.232.99.62 "
+  cd ~/upload-service &&
+  npm install &&
+  sudo npm i -g pm2 2>/dev/null || npm i -g pm2 &&
+  pm2 start index.js --name aiping-upload &&
+  pm2 save &&
+  pm2 startup | tail -n 1
+"
+```
+
+### 2）服务端 `.env` 必改项
+
+`~/upload-service/.env`（或复制 `.env.example` 后填写）：
+
+```env
+PORT=3100
+COS_SECRET_ID=...
+COS_SECRET_KEY=...
+COS_BUCKET=artrealm-image-1314455608
+COS_REGION=ap-beijing
+PUBLIC_BASE_URL=https://artrealm-image-1314455608.cos.ap-beijing.myqcloud.com
+COS_PREFIX=seedance-uploads
+UPLOAD_TOKEN=换成一串随机字符串（与前端 VITE_UPLOAD_SERVICE_TOKEN 保持一致）
+# 部署在 Nginx 后必须置 1，否则所有用户的限流都会算成 127.0.0.1 一个 IP
+TRUST_PROXY=1
+```
+
+### 3）验证
+
+```bash
+curl -s https://artrealm.nextmak.cn/upload/health
+# 期望：{"ok":true,"service":"aiping-upload-service",...}
+```

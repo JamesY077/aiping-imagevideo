@@ -12,7 +12,7 @@ const ASPECT_RATIO_SIZE_MAP: Record<string, { width: number; height: number }> =
 }
 
 const SEEDREAM_5_LITE_SIZE_MAP: Record<string, { width: number; height: number }> = {
-  '21:9': { width: 3024, height: 1296 },
+  '21:9': { width: 3136, height: 1344 },
   '16:9': { width: 2848, height: 1600 },
   '3:2': { width: 2496, height: 1664 },
   '4:3': { width: 2304, height: 1728 },

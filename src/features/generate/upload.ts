@@ -102,50 +102,88 @@ async function assertSeedanceImageValid(dataUri: string): Promise<void> {
   }
 }
 
-/** 把 base64 dataURI 上传到 COS 代理服务，返回公网 HTTPS URL。 */
-async function uploadImageToPublicUrl(dataUri: string): Promise<string> {
-  if (!UPLOAD_SERVICE_URL) {
-    throw new AppError('当前未配置图片上传服务，无法把本地图片转换为公网 URL。')
+function resolveUploadServiceError(status: number, detail: string): AppError {
+  if (status === 401 || status === 403) {
+    return new AppError('图片上传服务鉴权失败，请检查上传服务的 token 配置。', {
+      code: 'UPLOAD_SERVICE_AUTH',
+    })
   }
 
+  if (status === 413) {
+    return new AppError('图片文件太大，请压缩后重试。', { code: 'UPLOAD_SERVICE_TOO_LARGE' })
+  }
+
+  if (status === 404 || status === 405) {
+    return new AppError(
+      '图片上传接口返回 404/405：线上服务器还没有正确配置 /upload 反向代理。' +
+        '请按 DEPLOYMENT.md 给 Nginx 加上 /upload 反代，并确认上传服务已在服务器运行。',
+      { code: 'UPLOAD_SERVICE_UNAVAILABLE' },
+    )
+  }
+
+  if (status >= 500) {
+    return new AppError('图片上传服务暂时不可用，请稍后重试。', { code: 'UPLOAD_SERVICE_UNAVAILABLE' })
+  }
+
+  return new AppError(`图片上传失败：${detail || '请稍后重试'}`, { code: 'UPLOAD_SERVICE_FAILED' })
+}
+
+/** 把 base64 dataURI POST 到 COS 代理服务，返回公网 HTTPS URL。 */
+async function postImageToUploadService(dataUri: string): Promise<string> {
+  if (!UPLOAD_SERVICE_URL) {
+    throw new AppError('当前未配置图片上传服务，无法把本地图片转换为公网 URL。', {
+      code: 'UPLOAD_SERVICE_UNAVAILABLE',
+    })
+  }
+
+  let resp: Response
   try {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (UPLOAD_SERVICE_TOKEN) headers.Authorization = `Bearer ${UPLOAD_SERVICE_TOKEN}`
 
-    const resp = await fetch(UPLOAD_SERVICE_URL, {
+    resp = await fetch(UPLOAD_SERVICE_URL, {
       method: 'POST',
       headers,
       body: JSON.stringify({ image: dataUri }),
     })
+  } catch {
+    throw new AppError('图片上传服务连接失败，请确认上传服务已启动且网络可达。', {
+      code: 'UPLOAD_SERVICE_UNAVAILABLE',
+    })
+  }
 
-    if (!resp.ok) {
-      let detail = ''
-      try {
-        const data = await resp.json()
-        detail = data?.error || JSON.stringify(data)
-      } catch {
-        detail = await resp.text().catch(() => '')
-      }
-      if (resp.status === 401 || resp.status === 403) {
-        throw new AppError('图片上传服务鉴权失败，请检查上传服务的 token 配置。')
-      }
-      if (resp.status === 413) {
-        throw new AppError('图片文件太大，请压缩后重试。')
-      }
-      if (resp.status >= 500) {
-        throw new AppError('图片上传服务暂时不可用，请稍后重试。')
-      }
-      throw new AppError(`图片上传失败：${detail || '请稍后重试'}`)
+  if (!resp.ok) {
+    let detail = ''
+    try {
+      const data = await resp.json()
+      detail = data?.error || JSON.stringify(data)
+    } catch {
+      detail = await resp.text().catch(() => '')
     }
+    throw resolveUploadServiceError(resp.status, detail)
+  }
 
-    const data = await resp.json()
-    if (!data?.url || typeof data.url !== 'string') {
-      throw new AppError('图片上传成功，但没有拿到图片地址，请稍后重试。')
-    }
-    return data.url
+  const data = await resp.json()
+  if (!data?.url || typeof data.url !== 'string') {
+    throw new AppError('图片上传成功，但没有拿到图片地址，请稍后重试。', { code: 'UPLOAD_SERVICE_FAILED' })
+  }
+  return data.url
+}
+
+/** 严格上传：任何失败都抛出，用于必须拿到公网 URL 的场景（Seedance 2.0）。 */
+async function uploadImageToPublicUrl(dataUri: string): Promise<string> {
+  return postImageToUploadService(dataUri)
+}
+
+/** 尽力上传：服务未配置 / 未反代 / 宕机时返回 null，调用方可降级为 dataURI 直传。 */
+async function tryUploadImageToPublicUrl(dataUri: string): Promise<string | null> {
+  try {
+    return await postImageToUploadService(dataUri)
   } catch (error: any) {
-    if (error instanceof AppError) throw error
-    throw new AppError('图片上传服务连接失败，请确认上传服务已启动且网络可达。')
+    if (error instanceof AppError && error.code === 'UPLOAD_SERVICE_UNAVAILABLE') {
+      return null
+    }
+    throw error
   }
 }
 
@@ -177,7 +215,12 @@ export async function ensurePublicImageUrlForModel(value: string): Promise<strin
   const preparedDataUri = await prepareLocalImageDataUri(value)
   if (!UPLOAD_SERVICE_URL) return preparedDataUri
 
-  return uploadImageToPublicUrl(preparedDataUri)
+  const publicUrl = await tryUploadImageToPublicUrl(preparedDataUri)
+  if (publicUrl) return publicUrl
+
+  // 上传服务未正确部署时降级为压缩后的 dataURI 直传，避免一个服务配置问题卡死生成。
+  console.warn('[upload] 图片上传服务不可用，本次降级为 dataURI 直传。')
+  return preparedDataUri
 }
 
 /**
@@ -190,7 +233,11 @@ export async function ensureMinimaxH3ImageForModel(value: string): Promise<strin
   const preparedDataUri = await prepareMinimaxH3ImageDataUri(value)
   if (!UPLOAD_SERVICE_URL) return preparedDataUri
 
-  return uploadImageToPublicUrl(preparedDataUri)
+  const publicUrl = await tryUploadImageToPublicUrl(preparedDataUri)
+  if (publicUrl) return publicUrl
+
+  console.warn('[upload] 图片上传服务不可用，MiniMax-H3 本次降级为 dataURI 直传。')
+  return preparedDataUri
 }
 
 /**

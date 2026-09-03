@@ -37,9 +37,15 @@ export async function buildImageParams(
     const { width, height } = aspectRatioToDimensions(aspectRatio, mode)
     imageParams.output_format = 'png'
     imageParams.watermark = false
-    imageParams.size = undefined
-    imageParams.width = width
-    imageParams.height = height
+    if (mode === 'seedream-5-lite') {
+      imageParams.size = aspectRatioToImageSize(aspectRatio, mode, 'x')
+      delete imageParams.width
+      delete imageParams.height
+    } else {
+      imageParams.size = undefined
+      imageParams.width = width
+      imageParams.height = height
+    }
   }
 
   return imageParams
