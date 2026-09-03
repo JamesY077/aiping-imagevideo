@@ -873,4 +873,47 @@ onBeforeUnmount(() => {
 :deep(.canvas-minimap svg) {
   background: var(--ac-surface-solid);
 }
+
+/* 移动端：工具栏改为可横向滑动的固定条，避免按钮被压缩成竖排文字 */
+@media (max-width: 640px) {
+  .canvas-back-btn {
+    top: 12px;
+    left: 12px;
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+
+  :deep(.canvas-toolbar) {
+    top: 60px;
+    left: 12px;
+    right: 12px;
+    transform: none;
+    width: auto;
+    max-width: none;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  :deep(.canvas-toolbar)::-webkit-scrollbar {
+    display: none;
+  }
+
+  :deep(.canvas-toolbar-button) {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .canvas-progress {
+    top: 108px;
+    width: calc(100vw - 24px);
+    padding: 8px 12px;
+  }
+}
 </style>

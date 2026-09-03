@@ -738,8 +738,35 @@ onBeforeUnmount(() => {
     font-size: 15px;
   }
 
+  .template-section {
+    width: min(100% - 24px, 1520px);
+  }
+
+  .template-head h2 {
+    font-size: 18px;
+  }
+
   .template-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .template-card strong {
+    margin-top: 7px;
+    font-size: 13px;
+  }
+
+  .template-visual {
+    border-radius: 10px;
+  }
+
+  .skill-download-btn {
+    right: 7px;
+    bottom: 7px;
+    min-width: 56px;
+    min-height: 28px;
+    padding: 0 10px;
+    font-size: 11px;
   }
 }
 </style>

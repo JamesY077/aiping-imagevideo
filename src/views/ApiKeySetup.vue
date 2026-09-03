@@ -34,6 +34,15 @@
             <ApiKeyInput v-model="apiKey" />
           </div>
 
+          <a
+            class="apikey-helper"
+            href="https://aiping.cn/user/apikey"
+            target="_blank"
+            rel="noopener"
+          >
+            快速获取AI Ping-APIKEY
+          </a>
+
           <label class="consent-row">
             <input type="checkbox" checked />
             <span>我确认访问地址为 OpenAI baseURL 格式，并理解密钥仅保存在本地浏览器。</span>
@@ -319,6 +328,29 @@ label {
   accent-color: #9c7dff;
 }
 
+.apikey-helper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  color: rgba(171, 214, 255, 0.88);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  transition: color var(--transition-base), transform var(--transition-base);
+}
+
+.apikey-helper::after {
+  content: '↗';
+  font-size: 12px;
+  line-height: 1;
+}
+
+.apikey-helper:hover {
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
 .submit-btn {
   width: 100%;
   min-height: 48px;
@@ -431,7 +463,12 @@ label {
   }
 
   .setup-nav {
+    grid-template-columns: 1fr auto;
     padding-bottom: 28px;
+  }
+
+  .nav-spacer {
+    display: none;
   }
 
   .nav-cta {
@@ -445,6 +482,14 @@ label {
 
   .copy {
     font-size: 14px;
+  }
+
+  .setup-form-card {
+    width: 100%;
+  }
+
+  .setup-shell {
+    gap: 24px;
   }
 
   .metric-row {

@@ -1,5 +1,5 @@
 <template>
-  <div class="chat-page">
+  <div class="chat-page" :style="{ height: appHeight, '--app-height': appHeight }">
     <div class="workspace-shell single-session-layout">
       <header class="top-nav">
         <div class="brand-lockup">
@@ -52,7 +52,7 @@
               type="button"
               :aria-expanded="isComposerControlsOpen"
               aria-controls="composer-control-panel"
-              @click="isComposerControlsOpen = !isComposerControlsOpen"
+              @click="toggleComposerControls"
             >
               <span class="summary-kicker">Creative Console</span>
               <span class="summary-chip summary-chip-strong">{{ mediaTypeLabel }}</span>
@@ -764,8 +764,20 @@ const isPolishing = ref(false)
 const isComposerExpanded = ref(false)
 const isComposerControlsOpen = ref(true)
 const COMPOSER_TEXTAREA_DEFAULT = 196
+const COMPOSER_TEXTAREA_MOBILE = 88
+const COMPOSER_TEXTAREA_MOBILE_EXPANDED = 160
 const COMPOSER_TEXTAREA_EXPANDED = 320
 const composerTextareaHeight = ref(COMPOSER_TEXTAREA_DEFAULT)
+const isMobileViewport = () => window.matchMedia('(max-width: 900px)').matches
+// 移动端页面高度跟随可视视口（地址栏收缩、软键盘弹出时保持输入区可见）
+const appHeight = ref('100dvh')
+function syncAppHeight() {
+  if (isMobileViewport() && window.visualViewport) {
+    appHeight.value = `${Math.round(window.visualViewport.height)}px`
+  } else {
+    appHeight.value = '100dvh'
+  }
+}
 const showAspectRatioMenu = ref(false)
 const uploadedFile = ref<UploadedFile | null>(null)
 const viduStartFrame = ref<UploadedFile | null>(null)
@@ -1808,11 +1820,28 @@ function insertCameraCommand(text: string) {
 async function toggleComposerExpanded() {
   const nextExpanded = !isComposerExpanded.value
   isComposerExpanded.value = nextExpanded
-  composerTextareaHeight.value = nextExpanded
-    ? Math.max(composerTextareaHeight.value, COMPOSER_TEXTAREA_EXPANDED)
-    : COMPOSER_TEXTAREA_DEFAULT
+  if (nextExpanded && isMobileViewport()) {
+    // 移动端展开输入框时收起参数面板，保证输入区完整可见
+    isComposerControlsOpen.value = false
+    composerTextareaHeight.value = COMPOSER_TEXTAREA_MOBILE_EXPANDED
+  } else {
+    composerTextareaHeight.value = nextExpanded
+      ? Math.max(composerTextareaHeight.value, COMPOSER_TEXTAREA_EXPANDED)
+      : isMobileViewport()
+        ? COMPOSER_TEXTAREA_MOBILE
+        : COMPOSER_TEXTAREA_DEFAULT
+  }
   await nextTick()
   promptInputRef.value?.focus()
+}
+
+function toggleComposerControls() {
+  isComposerControlsOpen.value = !isComposerControlsOpen.value
+  if (isComposerControlsOpen.value && isMobileViewport() && isComposerExpanded.value) {
+    // 移动端展开参数面板时收起输入框，防止底部输入区被挤出屏幕
+    isComposerExpanded.value = false
+    composerTextareaHeight.value = COMPOSER_TEXTAREA_MOBILE
+  }
 }
 
 function scrollChatToBottom() {
@@ -1822,6 +1851,12 @@ function scrollChatToBottom() {
 onMounted(async () => {
   settingsStore.loadFromStorage()
   sessionStorage.removeItem('artrealm_landing_pending_prompt')
+  if (isMobileViewport()) {
+    isComposerControlsOpen.value = false
+    composerTextareaHeight.value = COMPOSER_TEXTAREA_MOBILE
+  }
+  syncAppHeight()
+  window.visualViewport?.addEventListener('resize', syncAppHeight)
   if (route.query.type === 'image') {
     settingsStore.setMediaType('image')
     imageMode.value = 'text2image'
@@ -1843,6 +1878,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  window.visualViewport?.removeEventListener('resize', syncAppHeight)
   releaseUploadedFile(uploadedFile.value)
   releaseUploadedFile(viduStartFrame.value)
   releaseUploadedFile(viduEndFrame.value)
@@ -4598,6 +4634,186 @@ async function handleRegenerate(message: Message) {
   .top-nav-actions .sidebar-secondary-btn {
     min-height: 32px;
     padding: 0 11px;
+  }
+}
+
+/* 移动端布局收口：单列聊天 + 底部参数面板，优先保证聊天区可读、输入区可用 */
+@media (max-width: 900px) {
+  .chat-page {
+    height: var(--app-height, 100dvh);
+    padding: 8px;
+  }
+
+  .workspace-shell,
+  .single-session-layout {
+    height: 100%;
+    gap: 8px;
+  }
+
+  .workspace-main {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(40px, 1fr) minmax(0, auto);
+    gap: 8px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .chat-stage {
+    min-height: 0;
+    border-radius: 20px;
+  }
+
+  .composer-dock {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 0 0 auto;
+    min-height: 0;
+    /* 用实际可视高度（--app-height 跟随地址栏/软键盘）做硬上限，避免百分比解析异常 */
+    max-height: calc(var(--app-height, 100dvh) - 132px);
+    overflow: hidden;
+    border-radius: 20px;
+  }
+
+  .composer-console {
+    flex: 0 0 auto;
+    min-height: 0;
+    order: 0;
+    max-height: none;
+    overflow: visible;
+    border-radius: 20px;
+  }
+
+  /* 参数面板内部滚动，输入区固定在底部不被挤掉 */
+  .composer-control-panel {
+    flex: 0 0 auto;
+    min-height: 0;
+    max-height: max(calc(var(--app-height, 100dvh) - 375px), 0px);
+    overflow-y: auto;
+    padding: 10px;
+  }
+
+  /* 移动端恢复折叠开关：收起时只保留输入区 */
+  .composer-summary {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    min-height: 42px;
+    border-radius: 16px;
+  }
+
+  .composer-summary .summary-kicker {
+    display: none;
+  }
+
+  .composer-summary .summary-toggle {
+    width: auto;
+    flex: 0 0 auto;
+    align-self: center;
+    min-height: 32px;
+    margin-left: auto;
+  }
+
+  .input-shell {
+    flex: 0 0 auto;
+    border-radius: 18px;
+  }
+
+  .input-shell.expanded textarea {
+    min-height: 0;
+  }
+
+  .empty-state {
+    padding: 28px 18px;
+    border-radius: 22px;
+  }
+
+  .empty-copy {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 640px) {
+  .top-nav {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+  }
+
+  .top-nav .brand-lockup {
+    flex: 0 0 auto;
+  }
+
+  .top-nav .brand-title {
+    font-size: 20px;
+  }
+
+  .top-nav-actions {
+    flex: 1 1 auto;
+    width: auto;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 6px;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .top-nav-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .top-nav-actions .skill-create-btn,
+  .top-nav-actions .canvas-entry-btn,
+  .top-nav-actions .sidebar-secondary-btn {
+    flex: 0 0 auto;
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .top-nav-actions .canvas-entry-new {
+    display: none;
+  }
+
+  .chat-area {
+    padding: 8px 4px;
+    gap: 12px;
+  }
+
+  .empty-state h1 {
+    font-size: clamp(28px, 9vw, 40px);
+  }
+
+  .composer-summary {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .composer-summary::-webkit-scrollbar {
+    display: none;
+  }
+
+  .composer-summary .summary-chip {
+    flex: 0 0 auto;
+  }
+
+  .composer-actions {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .composer-actions .icon-btn,
+  .composer-actions .polish-btn,
+  .composer-actions .send-btn {
+    min-height: 40px;
+    min-width: 40px;
+    padding: 0 12px;
   }
 }
 

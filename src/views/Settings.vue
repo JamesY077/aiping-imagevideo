@@ -35,6 +35,14 @@
                 readonly
               />
               <p class="field-hint">如需修改 Base URL 或 API Key，请先点击“编辑配置”。</p>
+              <a
+                class="helper-link"
+                href="https://aiping.cn/user/apikey"
+                target="_blank"
+                rel="noopener"
+              >
+                快速获取AI Ping-APIKEY
+              </a>
             </div>
           </div>
           <div class="row">
@@ -135,6 +143,14 @@
           <p class="field-hint">服务地址可自由填写，仅支持 OpenAI baseURL 格式，例如：https://api.openai.com/v1。</p>
         </div>
         <ApiKeyInput v-model="newApiKey" />
+        <a
+          class="helper-link"
+          href="https://aiping.cn/user/apikey"
+          target="_blank"
+          rel="noopener"
+        >
+          快速获取AI Ping-APIKEY
+        </a>
         <div v-if="editStatus" :class="['status-msg', editStatusType]">{{ editStatus }}</div>
         <div class="btn-row">
           <button class="ghost-btn" @click="showEditConfig = false">取消</button>
@@ -662,6 +678,14 @@ label {
     align-items: stretch;
   }
 
+  .topbar {
+    padding-bottom: 12px;
+  }
+
+  .topbar-inner {
+    gap: 12px;
+  }
+
   .hero-card h2 {
     max-width: 100%;
     font-size: clamp(30px, 9vw, 42px);
@@ -675,6 +699,13 @@ label {
   .primary-btn,
   .danger-btn {
     width: 100%;
+  }
+
+  .topbar-inner .ghost-btn {
+    width: auto;
+    align-self: flex-start;
+    min-height: 38px;
+    padding: 0 16px;
   }
 
   .modal-overlay {
