@@ -79,10 +79,10 @@
 
     <!-- 结果预览（始终可见，工作流每步的产出） -->
     <div v-if="data.resultType === 'image' && data.resultUrl" class="gen-preview">
-      <img :src="data.resultUrl" alt="result" />
+      <img :src="data.resultUrl" alt="result" loading="lazy" decoding="async" />
     </div>
     <div v-else-if="data.resultType === 'video' && data.resultUrl" class="gen-preview">
-      <video :src="data.resultUrl" controls />
+      <video :src="data.resultUrl" controls preload="metadata" />
     </div>
     <div
       v-else-if="data.resultType === 'text' && data.resultText && !(editableResult && expanded)"

@@ -342,7 +342,7 @@
                     </div>
                     <div class="multimodal-thumb-row">
                       <div v-for="item in multimodalImages" :key="item.url" class="multimodal-thumb">
-                        <img :src="item.url" :alt="item.refLabel" />
+                        <img :src="item.url" :alt="item.refLabel" loading="lazy" decoding="async" />
                         <span class="multimodal-thumb-tag">{{ item.refLabel }}</span>
                         <button class="multimodal-thumb-remove" type="button" aria-label="移除" @click="removeMultimodalAsset('image', item)">×</button>
                       </div>
@@ -443,7 +443,7 @@
                       </div>
                       <div class="multimodal-thumb-row">
                         <div v-for="item in multimodalImages" :key="item.url" class="multimodal-thumb">
-                          <img :src="item.url" :alt="item.refLabel" />
+                          <img :src="item.url" :alt="item.refLabel" loading="lazy" decoding="async" />
                           <span class="multimodal-thumb-tag">{{ item.refLabel }}</span>
                           <button class="multimodal-thumb-remove" type="button" aria-label="移除" @click="removeMultimodalAsset('image', item)">×</button>
                         </div>

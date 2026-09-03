@@ -41,7 +41,7 @@
           @keydown.space.prevent="handleSkillTemplateClick"
         >
           <span class="template-visual" :class="[item.theme, { 'has-image': item.image }]">
-            <img v-if="item.image" :src="item.image" alt="" class="template-image" />
+            <img v-if="item.image" :src="item.image" alt="" class="template-image" loading="lazy" decoding="async" />
             <span v-else class="visual-glow" />
             <button
               class="skill-download-btn"
@@ -71,7 +71,7 @@
           @click="handleTemplateClick(item)"
         >
           <span class="template-visual" :class="[item.theme, { 'has-image': item.image, 'is-zoomed': item.title === '影视爆炸现场' }]">
-            <img v-if="item.image" :src="item.image" alt="" class="template-image" />
+            <img v-if="item.image" :src="item.image" alt="" class="template-image" loading="lazy" decoding="async" />
             <span v-else class="visual-glow" />
           </span>
           <strong>{{ item.title }}</strong>

@@ -195,7 +195,7 @@
             @click="insertRef('图片', i + 1)"
             :title="'点击在提示词插入 @图片' + (i + 1)"
           >
-            <img :src="url" alt="" />
+            <img :src="url" alt="" loading="lazy" decoding="async" />
             <span class="mm-tag">@图片{{ i + 1 }}</span>
             <button class="mm-del" @click.stop="removeMultimodal('multimodalImages', i)">✕</button>
           </span>
@@ -208,7 +208,7 @@
             @click="insertRef('视频', i + 1)"
             :title="'点击在提示词插入 @视频' + (i + 1)"
           >
-            <video :src="url" muted />
+            <video :src="url" muted preload="metadata" />
             <span class="mm-tag">@视频{{ i + 1 }}</span>
             <button class="mm-del" @click.stop="removeMultimodal('multimodalVideos', i)">✕</button>
           </span>

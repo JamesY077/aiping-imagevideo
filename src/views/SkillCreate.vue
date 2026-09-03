@@ -238,12 +238,15 @@ function goBack() {
                   v-if="msg.generateResult?.type === 'image'"
                   :src="msg.generateResult.url"
                   class="sc-test-media"
+                  loading="lazy"
+                  decoding="async"
                 />
                 <video
                   v-else-if="msg.generateResult?.type === 'video'"
                   :src="msg.generateResult.url"
                   class="sc-test-media"
                   controls
+                  preload="metadata"
                 />
               </template>
               <p v-if="!testResults.length" class="sc-test-empty">测试结果会显示在这里。</p>

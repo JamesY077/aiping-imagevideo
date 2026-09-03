@@ -1,7 +1,7 @@
 <template>
   <article class="result-card image-result">
     <button class="media-frame" type="button" :style="thumbnailStyle" @click="openPreview">
-      <img :src="result.url" alt="Generated image" referrerpolicy="no-referrer" />
+      <img :src="result.url" alt="Generated image" referrerpolicy="no-referrer" loading="lazy" decoding="async" />
       <span class="media-chip">图片</span>
       <span class="media-overlay">点击查看原图</span>
     </button>
