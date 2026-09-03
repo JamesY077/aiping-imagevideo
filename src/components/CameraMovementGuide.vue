@@ -117,17 +117,17 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
   padding: 5px 10px;
   font-size: 12px;
   line-height: 1;
-  color: var(--text-secondary, #6b7280);
-  background: var(--surface-color, #fff);
-  border: 1px solid var(--border-color, #e5e7eb);
+  color: rgba(255, 255, 255, 0.66);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 .camera-guide-trigger:hover {
-  color: var(--text-primary, #111827);
-  border-color: #c7b7e0;
-  background: #faf7ff;
+  color: rgba(255, 255, 255, 0.92);
+  border-color: rgba(167, 139, 250, 0.5);
+  background: rgba(255, 255, 255, 0.10);
 }
 .camera-guide-trigger.compact {
   padding: 4px 8px;
@@ -142,10 +142,10 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
   width: 320px;
   max-width: min(320px, 86vw);
   padding: 14px;
-  background: #fff;
-  border: 1px solid var(--border-color, #e5e7eb);
+  background: #1c1c1e;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(15, 15, 15, 0.14);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
   text-align: left;
 }
 
@@ -157,32 +157,32 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
 }
 .camera-guide-head strong {
   font-size: 13px;
-  color: var(--text-primary, #111827);
+  color: rgba(255, 255, 255, 0.92);
 }
 .camera-guide-close {
   width: 20px;
   height: 20px;
   line-height: 18px;
   font-size: 16px;
-  color: #9ca3af;
+  color: rgba(255, 255, 255, 0.55);
   background: transparent;
   border: none;
   border-radius: 6px;
   cursor: pointer;
 }
 .camera-guide-close:hover {
-  background: #f3f4f6;
-  color: #374151;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .camera-guide-desc {
   margin: 0 0 10px;
   font-size: 11.5px;
   line-height: 1.6;
-  color: var(--text-secondary, #6b7280);
+  color: rgba(255, 255, 255, 0.66);
 }
 .camera-guide-desc b {
-  color: #7c5cbf;
+  color: #b79bff;
 }
 
 .camera-guide-groups {
@@ -199,7 +199,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
 .camera-guide-group-title {
   flex: 0 0 52px;
   font-size: 11px;
-  color: #9ca3af;
+  color: rgba(255, 255, 255, 0.45);
 }
 .camera-guide-tags {
   display: flex;
@@ -210,16 +210,16 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
   padding: 3px 8px;
   font-size: 11.5px;
   line-height: 1.4;
-  color: #5b4a86;
-  background: #f4f0fb;
-  border: 1px solid #e6ddf5;
+  color: #d6c8ff;
+  background: rgba(167, 139, 250, 0.14);
+  border: 1px solid rgba(167, 139, 250, 0.28);
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
 }
 .camera-guide-tag:hover {
-  background: #ebe3fa;
-  border-color: #c7b7e0;
+  background: rgba(167, 139, 250, 0.22);
+  border-color: rgba(167, 139, 250, 0.5);
 }
 
 .camera-guide-tips {
@@ -227,15 +227,15 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
   padding-left: 16px;
   font-size: 11px;
   line-height: 1.7;
-  color: var(--text-secondary, #6b7280);
+  color: rgba(255, 255, 255, 0.66);
 }
 .camera-guide-tips b {
-  color: var(--text-primary, #374151);
+  color: rgba(255, 255, 255, 0.92);
 }
 .camera-guide-tips code {
   padding: 0 3px;
   font-size: 10.5px;
-  background: #f3f4f6;
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 4px;
 }
 
@@ -245,26 +245,26 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
   align-items: center;
   gap: 6px;
   padding: 8px 10px;
-  background: #faf7ff;
-  border: 1px dashed #d9cbf0;
+  background: rgba(167, 139, 250, 0.10);
+  border: 1px dashed rgba(167, 139, 250, 0.4);
   border-radius: 8px;
 }
 .camera-guide-example-label {
   font-size: 10.5px;
-  color: #9ca3af;
+  color: rgba(255, 255, 255, 0.45);
 }
 .camera-guide-example code {
   flex: 1 1 100%;
   font-size: 11.5px;
   line-height: 1.5;
-  color: #4b3f6b;
+  color: #e6dfff;
 }
 .camera-guide-example-insert {
   margin-left: auto;
   padding: 3px 10px;
   font-size: 11px;
   color: #fff;
-  background: linear-gradient(135deg, #5f4b8b, #c86b4a);
+  background: linear-gradient(135deg, #7c5cbf, #e0885a);
   border: none;
   border-radius: 999px;
   cursor: pointer;

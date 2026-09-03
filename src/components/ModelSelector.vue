@@ -193,9 +193,14 @@ select {
   font-size: 14px;
   border: 1px solid var(--color-border);
   border-radius: 999px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.08);
   color: var(--color-text);
   outline: none;
+}
+
+select option {
+  background: #1c1c1e;
+  color: #f5f5f7;
 }
 
 .compact select {
@@ -203,6 +208,7 @@ select {
   padding: 0 26px 0 8px;
   border-radius: 10px;
   font-size: 11px;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 select:focus {

@@ -409,16 +409,16 @@ function insertRef(kind: '图片' | '视频' | '音频', index: number) {
 <style scoped>
 .mm-assets {
   padding: 8px 10px 10px;
-  border-top: 1px solid var(--border-color, #e5e7eb);
+  border-top: 1px solid rgba(255, 255, 255, 0.10);
 }
 .mm-hint {
   font-size: 11px;
   line-height: 1.5;
-  color: var(--text-secondary, #6b7280);
+  color: rgba(255, 255, 255, 0.66);
   margin-bottom: 6px;
 }
 .mm-hint b {
-  color: var(--text-primary, #111827);
+  color: rgba(255, 255, 255, 0.92);
   font-weight: 600;
 }
 .mm-group {
@@ -434,8 +434,8 @@ function insertRef(kind: '图片' | '视频' | '音频', index: number) {
   border-radius: 6px;
   overflow: hidden;
   cursor: pointer;
-  border: 1px solid var(--border-color, #e5e7eb);
-  background: #f3f4f6;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -447,11 +447,11 @@ function insertRef(kind: '图片' | '视频' | '音频', index: number) {
   object-fit: cover;
 }
 .mm-item--audio {
-  background: #eef2ff;
+  background: rgba(99, 102, 241, 0.16);
 }
 .mm-audio-ico {
   font-size: 18px;
-  color: #6366f1;
+  color: #a5b4fc;
 }
 .mm-tag {
   position: absolute;
