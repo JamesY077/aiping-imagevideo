@@ -13,6 +13,7 @@
 | 目录属主 | `www-data:www-data` |
 | Nginx 站点配置 | `/etc/nginx/sites-available/aiping-aidraw`（软链到 `sites-enabled/`） |
 | API 转发 | `/api/ -> https://aiping.cn`（浏览器请求 `/api/v1/*`，Nginx 转发到 `https://aiping.cn/api/v1/*`） |
+| 静态资源 COS 桶 | `artrealm-image-1314455608`（`site-assets/` 前缀，公有读，生产静态图从该桶加载） |
 | SSL 证书 | Let's Encrypt：`/etc/letsencrypt/live/artrealm.nextmak.cn/` |
 
 > ⚠️ 关键点：站点根目录属主是 `www-data`，`ubuntu` 用户没有直接写权限，且 `scp` 无法使用 sudo。
@@ -37,6 +38,8 @@ cd /Users/yjy/Desktop/aiping-创意项目/aiping-aidraw
 运行中需要输入的只有三样：服务器登录密码（ssh/scp，可能多次）、第 4 步的 `y`、sudo 密码。
 
 完成后浏览器打开 `https://artrealm.nextmak.cn`，若仍是旧版按 `Cmd + Shift + R` 强制刷新。
+
+> 注意：`deploy.sh` 只发布 `dist/`，不处理 `public/` 下的静态图；新增或替换静态图时还需按「五、生产环境说明 → 静态资源发布」同步到 COS。
 
 ## 三、手动分步命令（不用脚本时）
 
@@ -162,6 +165,19 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
+#### 可选优化：给带哈希的静态资源加长缓存
+
+`dist/assets/*` 文件名带内容哈希，可安全长缓存，减轻回源压力：
+
+```nginx
+location /assets/ {
+    expires 30d;
+    add_header Cache-Control "public, immutable";
+}
+```
+
+非必需，不影响功能；加上后 reload Nginx 即可生效。
+
 ## 五、生产环境说明
 
 项目生产环境（`.env.production`）默认读取：
@@ -171,12 +187,16 @@ VITE_API_BASE_URL=/api/v1
 # 默认留空：不启用图片上传服务
 VITE_UPLOAD_SERVICE_URL=
 VITE_UPLOAD_SERVICE_TOKEN=
+# 静态图片走 COS 公有读直连
+VITE_CDN_ASSET_BASE=https://artrealm-image-1314455608.cos.ap-beijing.myqcloud.com/site-assets
 ```
 
 也就是：
 
 - 浏览器请求 `/api/v1/*`
 - 由 Nginx 转发到 `https://aiping.cn/api/v1/*`
+- 静态图片（logo、背景图、模板封面、Skill 封面等）通过 `VITE_CDN_ASSET_BASE` 指向 COS
+  公有读地址，不占用 Nginx 站点带宽
 - 本地上传的图片**不经过 `/upload`**：MiniMax-H3 等支持 base64 的模型由前端压缩后以
   dataURI 直传，线上无需改 Nginx，也不会触发 405
 - Seedance 2.0 的本地上传图必须公网 URL，未配置上传服务时会给出明确提示；
@@ -184,6 +204,27 @@ VITE_UPLOAD_SERVICE_TOKEN=
 
 > 关键点：线上 405 的根因是旧版前端把本地图 POST 到 `/upload`，而 Nginx 没有该反代。
 > 本版生产配置直接不请求 `/upload`，因此**重新发布前端即可修复，不需要改服务器配置**。
+
+### 静态资源发布（`public/` → COS）
+
+- 前端 `public/` 下的图片生产环境一律走 `VITE_CDN_ASSET_BASE`；本地开发留空时走本地 `public/`，不依赖外网。
+- 新增或替换静态图时，需把同名文件上传到 COS `artrealm-image-1314455608` 桶的 `site-assets/` 前缀，再发布前端；否则生产环境图片 404（本地开发正常）。
+- 上传方式：COS 控制台、COSBrowser，或用 coscmd CLI：
+
+  ```bash
+  # 安装与配置（一次性）
+  pip install coscmd
+  coscmd config -a <SecretId> -s <SecretKey> -b artrealm-image-1314455608 -r ap-beijing
+
+  # 单个文件 / 整个目录同步（保持 public/ 的相对路径）
+  coscmd upload public/logo1.webp site-assets/logo1.webp
+  coscmd upload -r --skipmd5 public/ site-assets/
+  ```
+
+- 两张背景图地址硬编码在代码里：`src/views/LandingPage.vue`（`home-collage-bg.webp`）与
+  `src/views/ApiKeySetup.vue`（`login-collage-bg.webp`）。更换 COS 桶或启用 CDN 加速域名时，
+  除改 `VITE_CDN_ASSET_BASE` 外还需同步修改这两处代码。
+- CDN 加速域名生效后，把 `VITE_CDN_ASSET_BASE` 换成 `https://cdn.artrealm.nextmak.cn/site-assets`，重新构建发布即可。
 
 ## 六、常见问题
 
@@ -201,6 +242,9 @@ VITE_UPLOAD_SERVICE_TOKEN=
   # 405 表示还没配好反代；返回 200 JSON 表示反代通了；返回 502 表示反代通了但 3100 服务没起
   curl -s -i https://artrealm.nextmak.cn/upload/health
   ```
+
+- **本地正常、线上图片 404 / 裂图**：静态图走 COS。确认对应文件已上传到 `site-assets/` 前缀、文件名一致，且 `.env.production` 的 `VITE_CDN_ASSET_BASE` 指向正确桶；本地正常而线上裂图，大概率是 COS 上没有同步新图。
+- **更换 COS 桶或启用 CDN 域名后，首页/登录页背景图仍是旧地址**：这两张背景图在代码中硬编码（`src/views/LandingPage.vue`、`src/views/ApiKeySetup.vue`），需要改代码后重新发布，只改环境变量不会生效。
 
 ## 七、图片上传服务（可选，仅 Seedance 2.0 本地上传图需要）
 
