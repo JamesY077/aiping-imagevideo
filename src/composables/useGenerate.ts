@@ -73,8 +73,8 @@ async function buildVideoParams(
   aspectRatio: string,
   duration: number,
   videoRequestMode: ModelCapability['videoRequestMode'],
-  // Kling 系列「是否生成声音」：native 生成带声音的视频，off 无声音（默认）。
-  klingAudio: 'native' | 'off' = 'off',
+  // 可灵声音开关：新协议使用 sound=on/off。
+  klingSound: 'on' | 'off' = 'off',
   // 视频分辨率档位（当前仅 MiniMax-H3 使用：768P / 2K）。
   videoResolution: string | null = null
 ): Promise<VideoGenerateRequest> {
@@ -125,21 +125,20 @@ async function buildVideoParams(
 
       if (uploadValue) {
         videoParams.image = uploadValue
-        // 声音字段跟随开关：开启则 on，否则 off（与 audio=native/off 保持一致）。
-        videoParams.sound = klingAudio === 'native' ? 'on' : 'off'
+        // 声音字段跟随开关：可灵新协议为 on/off。
+        videoParams.sound = klingSound
         deleteVideoRatio(videoParams)
       } else {
-        // 声音字段跟随开关：开启则 on，否则 off（与 audio=native/off 保持一致）。
-        videoParams.sound = klingAudio === 'native' ? 'on' : 'off'
+        // 声音字段跟随开关：可灵新协议为 on/off。
+        videoParams.sound = klingSound
         setVideoRatio(videoParams, getKlingAspectRatio(aspectRatio))
       }
       videoParams.model_name = model || undefined
-      // Kling 系列「是否生成声音」：native 生成带声音的视频，off 无声音（默认）。
-      videoParams.klingAudio = klingAudio
       break
     case 'kling-omni':
       videoParams.model_name = model || undefined
       videoParams.mode = 'pro'
+      videoParams.sound = klingSound
       setVideoRatio(videoParams, getKlingAspectRatio(aspectRatio))
       if (uploadValues.length >= 2) {
         videoParams.image_list = [
@@ -150,8 +149,6 @@ async function buildVideoParams(
         videoParams.images = uploadValues
       }
       delete videoParams.resolution
-      // Kling 系列「是否生成声音」：native 生成带声音的视频，off 无声音（默认）。
-      videoParams.klingAudio = klingAudio
       break
 
     case 'kling-o1':
@@ -287,7 +284,6 @@ async function buildVideoParams(
       delete videoParams.style
       delete videoParams.payload
       delete videoParams.extra_body
-      delete videoParams.klingAudio
       break
     }
     case 'seedance-2': {
@@ -350,7 +346,7 @@ export function useGenerate() {
     uploadedFile?: UploadInput,
     aspectRatio = '1:1',
     duration = 6,
-    // Kling 系列「是否生成声音」：true 生成带声音的视频（audio=native），false 无声音（默认）。
+    // 可灵系列是否生成声音：true 对应 sound=on，false 对应 off。
     klingSound = false,
     // Skill 规范：非空时，实际下发给模型的提示词会携带该 skill 规范，
     // 但聊天区仍展示用户输入的原始 prompt。
@@ -427,7 +423,7 @@ export function useGenerate() {
 
         capability?.videoRequestMode,
         // Kling 系列「是否生成声音」：开启则 audio=native，否则 off（默认）。
-        klingSound ? 'native' : 'off',
+        klingSound ? 'on' : 'off',
         videoResolution
       )
 
@@ -445,7 +441,8 @@ export function useGenerate() {
         },
         3000,
         100,
-        task.provider
+        task.provider,
+        task.providerCreateEndpoint,
       )
 
       const videoUrl = finalStatus.video_url || finalStatus.data?.[0]?.url || ''

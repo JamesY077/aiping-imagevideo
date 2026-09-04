@@ -134,11 +134,6 @@ export interface VideoGenerateRequest {
   duration?: number
   mode?: string
   sound?: 'on' | 'off' | string
-  /**
-   * Kling 系列「是否生成声音」：native 表示生成与画面适配的声音，off 表示无声音（默认）。
-   * 该值最终会作为请求体的 `audio` 字段下发（与 Seedance 的布尔型 audio 区分开）。
-   */
-  klingAudio?: 'native' | 'off'
   keep_original_sound?: 'yes' | 'no' | string
 
 
@@ -181,6 +176,8 @@ export interface VideoGenerateResponse {
   off_peak?: boolean
   credits?: number
   created_at?: string
+  aiping_id?: string
+  providerCreateEndpoint?: string
 }
 
 export interface VideoStatusResponse {
@@ -205,6 +202,8 @@ export interface VideoStatusResponse {
     url: string
     thumbnail?: string
     duration: number
+    watermarked_url?: string
   }>
   error?: string
+  aiping_id?: string
 }

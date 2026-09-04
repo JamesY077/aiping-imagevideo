@@ -9,13 +9,13 @@ export const viduQ3ProFastModel: VideoModelModule = {
   displayName: 'Vidu Q3 Pro Fast',
   capability: {
     mediaType: 'video',
-    inputs: ['text', 'image'],
+    inputs: ['image'],
     localUploadInputs: ['image'],
-    availabilityNote: 'supports-image-upload',
+    availabilityNote: 'requires-image-upload',
     videoRequestMode: 'viduq3-fast',
   },
   adapter: createViduProvider({
-    canonicalModel: 'viduq3-pro-fast',
+    canonicalModel: 'ViduQ3-Pro-Fast',
     aliases: viduQ3ProFastAliases,
     defaultTextAspectRatio: '4:3',
     defaultTextResolution: '1080p',
@@ -43,12 +43,12 @@ export const viduQ3ProFastModel: VideoModelModule = {
   }),
   example: createModelExample({
     title: 'Vidu Q3 Pro Fast 视频生成示例',
-    description: '使用 ViduQ3-Pro-Fast 快速生成 5 秒视频；传入 images 可切换为图生视频。',
+    description: '使用 ViduQ3-Pro-Fast 快速生成 5 秒图生视频。',
     request: {
       model: 'ViduQ3-Pro-Fast',
       prompt: '一位宇航员在月球表面弹吉他，地球在远处升起，梦幻电影感',
+      images: ['https://example.com/first-frame.jpg'],
       duration: 5,
-      aspect_ratio: '4:3',
       resolution: '1080p',
     },
     code: `import { generateVideo } from '@/api/aiping'
@@ -56,8 +56,8 @@ export const viduQ3ProFastModel: VideoModelModule = {
 await generateVideo({
   model: 'ViduQ3-Pro-Fast',
   prompt: '一位宇航员在月球表面弹吉他，地球在远处升起，梦幻电影感',
+  images: ['https://example.com/first-frame.jpg'],
   duration: 5,
-  aspect_ratio: '4:3',
   resolution: '1080p',
 })`,
   }),

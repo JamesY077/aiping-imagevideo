@@ -15,7 +15,7 @@ export const viduQ3ProModel: VideoModelModule = {
     videoRequestMode: 'viduq3-fast',
   },
   adapter: createViduProvider({
-    canonicalModel: 'viduq3-pro',
+    canonicalModel: 'ViduQ3-Pro',
     aliases: viduQ3ProAliases,
     defaultTextAspectRatio: '4:3',
     defaultTextResolution: '1080p',

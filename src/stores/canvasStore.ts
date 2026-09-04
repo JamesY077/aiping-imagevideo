@@ -945,7 +945,7 @@ export const useCanvasStore = defineStore('canvas', () => {
       const supportedModes = getSupportedVideoModes(model).map((m) => m.value)
       const videoMode: VideoGenerationMode = supportedModes.includes(node.data.videoMode as VideoGenerationMode)
         ? (node.data.videoMode as VideoGenerationMode)
-        : 'text2video'
+        : supportedModes[0] || 'text2video'
 
       // 依据不同生成方式组装视频请求的文件输入（buildVideoParams 支持单文件或文件数组）。
       let videoInput: UploadInput = null
@@ -1083,8 +1083,8 @@ export const useCanvasStore = defineStore('canvas', () => {
         node.data.aspectRatio || '16:9',
         node.data.duration || 5,
         capability?.videoRequestMode,
-        // Kling 系列「是否生成声音」：开启则 audio=native，否则 off（默认）。
-        node.data.klingSound ? 'native' : 'off',
+        // 可灵系列是否生成声音：新协议使用 sound=on/off。
+        node.data.klingSound ? 'on' : 'off',
         node.data.resolution || null,
       )
 
@@ -1099,6 +1099,7 @@ export const useCanvasStore = defineStore('canvas', () => {
         3000,
         100,
         task.provider,
+        task.providerCreateEndpoint,
       )
       const videoUrl = finalStatus.video_url || finalStatus.data?.[0]?.url
       if (!videoUrl) throw new Error('视频生成完成但未返回有效地址。')

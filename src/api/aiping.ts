@@ -12,6 +12,8 @@ import type {
 } from '@/types/api'
 import { getImageProvider } from '@/api/providers/image'
 import { getVideoProvider } from '@/api/providers/video'
+import { getKlingStatusEndpoints } from '@/api/providers/video/common'
+import { VIDU_TASKS_ENDPOINT } from '@/api/providers/video/viduShared'
 import {
   SEEDANCE_TASKS_ENDPOINT,
   buildSeedanceContent,
@@ -551,13 +553,14 @@ export async function generateVideo(params: VideoGenerateRequest): Promise<Video
 
   const fullBody = provider.buildRequestBody(preparedParams)
   const videoEndpoint = provider.getEndpoint(fullBody)
-  const normalizeResponse = provider.normalizeResponse || ((data: VideoGenerateResponse) => data)
+  const normalizeResponse = provider.normalizeResponse
+    || ((data: VideoGenerateResponse, _providerCreateEndpoint?: string) => data)
 
 
   debugLog(`generateVideo provider=${provider.provider} trying full body:`, sanitizeDebugBody(fullBody))
   try {
     const response = await client.post(videoEndpoint, fullBody)
-    return normalizeResponse(response.data)
+    return normalizeResponse(response.data, videoEndpoint)
   } catch (error: any) {
     debugLog('generateVideo error:', {
       status: error.response?.status,
@@ -585,8 +588,7 @@ export async function generateVideo(params: VideoGenerateRequest): Promise<Video
       if (fullBody.ratio) minimalBody.ratio = fullBody.ratio
       if (fullBody.size) minimalBody.size = fullBody.size
       if (fullBody.resolution) minimalBody.resolution = fullBody.resolution
-      // Kling 系列的 audio 是字符串（native/off），Seedance 等是布尔值，两种都需保留。
-      if (typeof fullBody.audio === 'boolean' || typeof fullBody.audio === 'string') minimalBody.audio = fullBody.audio
+      if (fullBody.sound) minimalBody.sound = fullBody.sound
       if (fullBody.movement_amplitude) minimalBody.movement_amplitude = fullBody.movement_amplitude
       if (typeof fullBody.off_peak === 'boolean') minimalBody.off_peak = fullBody.off_peak
       if (typeof fullBody.watermark === 'boolean') minimalBody.watermark = fullBody.watermark
@@ -602,16 +604,6 @@ export async function generateVideo(params: VideoGenerateRequest): Promise<Video
 
       for (const providerFallbackBody of provider.buildFallbackBodies?.(fullBody) || []) {
         pushUniqueBody(fallbackBodies, providerFallbackBody)
-      }
-
-      if (provider.provider === 'vidu' && minimalBody.images && !minimalBody.image) {
-        const viduImages = minimalBody.images
-        const viduImageBody: Record<string, unknown> = {
-          ...minimalBody,
-          image: Array.isArray(viduImages) ? viduImages[0] : viduImages,
-        }
-        delete viduImageBody.images
-        pushUniqueBody(fallbackBodies, viduImageBody)
       }
 
       if (minimalBody.aspect_ratio && minimalBody.ratio) {
@@ -630,7 +622,7 @@ export async function generateVideo(params: VideoGenerateRequest): Promise<Video
         try {
           const fallbackEndpoint = provider.getEndpoint(body)
           const response = await client.post(fallbackEndpoint, body)
-          return normalizeResponse(response.data)
+          return normalizeResponse(response.data, fallbackEndpoint)
         } catch (fallbackError: any) {
           lastError = fallbackError
           if (![400, 422].includes(fallbackError.response?.status)) {
@@ -684,22 +676,32 @@ function normalizeVideoStatus(data: any, taskId: string, provider?: string): Vid
     : task
 
   const creations = Array.isArray(normalized?.creations) ? normalized.creations : undefined
-  const normalizedData = normalized?.data || creations?.map((creation: any) => ({
-    url: creation.url || creation.video_url,
-    thumbnail: creation.thumbnail || creation.cover_url || creation.cover,
-    duration: creation.duration || normalized?.duration || normalized?.seconds || 0,
-  })).filter((item: any) => item.url)
+  const taskVideos = normalized?.task_result?.videos
+  const normalizedData = normalized?.data
+    || (Array.isArray(taskVideos) ? taskVideos : creations)?.map((creation: any) => ({
+      url: creation.url || creation.video_url,
+      thumbnail: creation.thumbnail || creation.cover_url || creation.cover,
+      watermarked_url: creation.watermark_url || creation.watermarked_url,
+      duration: Number(creation.duration) || normalized?.duration || normalized?.seconds || 0,
+    })).filter((item: any) => item.url)
 
-  return {
+  const result: VideoStatusResponse = {
     ...normalized,
     id: normalized?.id || normalized?.task_id || taskId,
     task_id: normalized?.task_id || taskId,
     status: normalized?.status || normalized?.state || 'pending',
     video_url: normalized?.video_url || normalized?.url || normalizedData?.[0]?.url,
     data: normalizedData,
-    error: normalized?.error || normalized?.err_msg || normalized?.message,
+    error: normalized?.error || normalized?.task_status_msg || normalized?.err_msg || normalized?.message || normalized?.err_code,
     provider: normalized?.provider || provider,
+    model: normalized?.model || data?.model || '',
   }
+
+  if (normalized?.final_unit_deduction !== undefined) {
+    result.usage = { total_cost: normalized.final_unit_deduction }
+  }
+
+  return result
 }
 
 /**
@@ -724,7 +726,11 @@ function normalizeMinimaxH3Status(data: any, taskId: string): VideoStatusRespons
   }
 }
 
-export async function getVideoStatusWithProvider(taskId: string, provider?: string): Promise<VideoStatusResponse> {
+export async function getVideoStatusWithProvider(
+  taskId: string,
+  provider?: string,
+  providerCreateEndpoint?: string,
+): Promise<VideoStatusResponse> {
   const normalizedProvider = provider?.toLowerCase()
 
   // Seedance 2.0 走独立的任务查询接口：/multimodal/sd/videos/contents/generations/tasks/{task_id}
@@ -742,14 +748,11 @@ export async function getVideoStatusWithProvider(taskId: string, provider?: stri
     }
   }
 
-  // Kling Omni 系列（Kling-V3-Omni / Kling-Video-O1）走 omni-video 接口，
-  // 其任务状态查询走通用的 /videos/{taskId}，直接命中即可，避免 /multimodal/kling/videos/{taskId} 的 404。
+  // 可灵任务按创建能力拆分查询路径，优先使用创建接口返回的路径。
   const endpoints = normalizedProvider === 'vidu'
-    ? [`/videos/vidu/tasks/${taskId}/creations`, `/videos/${taskId}`]
-    : normalizedProvider === 'kling-omni'
-      ? [`/videos/${taskId}`, `/multimodal/kling/videos/${taskId}`]
-    : normalizedProvider === 'kling'
-      ? [`/multimodal/kling/videos/${taskId}`, `/videos/${taskId}`]
+    ? [`${VIDU_TASKS_ENDPOINT}/${taskId}/creations`]
+    : normalizedProvider === 'kling' || normalizedProvider === 'kling-omni'
+      ? getKlingStatusEndpoints(providerCreateEndpoint || '', taskId)
     : normalizedProvider === 'minimax-h3'
       ? [`${MINIMAX_H3_QUERY_TASKS_ENDPOINT}/${taskId}`]
     : [`/videos/${taskId}`]

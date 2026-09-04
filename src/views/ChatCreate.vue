@@ -836,6 +836,9 @@ const viduVideoModeOptions: Array<{ value: VideoMode; label: string }> = [
   { value: 'image2video', label: '图生视频' },
   { value: 'startEnd2video', label: '首尾帧生视频' },
 ]
+const viduQ3ProFastVideoModeOptions: Array<{ value: VideoMode; label: string }> = [
+  { value: 'image2video', label: '图生视频' },
+]
 const minimaxHailuoVideoModeOptions: Array<{ value: VideoMode; label: string }> = [
   ...viduVideoModeOptions,
   { value: 'subjectReference2video', label: '主体参考视频' },
@@ -878,6 +881,7 @@ const activeMessages = computed(() => chatStore.messages)
 const activeSessionGenerating = computed(() => chatStore.isGenerating)
 const modelCapability = computed(() => getModelCapability(settingsStore.selectedModel))
 const isViduVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'viduq3-fast')
+const isViduQ3ProFastModel = computed(() => isViduVideoModel.value && settingsStore.selectedModel?.toLowerCase() === 'viduq3-pro-fast')
 const isMinimaxHailuoVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'minimax-hailuo')
 const isKlingMultimodalVideoModel = computed(() => {
   const mode = modelCapability.value?.videoRequestMode
@@ -923,6 +927,7 @@ const activeVideoModeOptions = computed(() => {
   if (isKlingOmniVideoModel.value) return klingOmniVideoModeOptions
   if (isSeedanceVideoModel.value) return seedanceVideoModeOptions
   if (isKlingMultimodalVideoModel.value) return viduVideoModeOptions
+  if (isViduQ3ProFastModel.value) return viduQ3ProFastVideoModeOptions
   return viduVideoModeOptions
 
 })
@@ -1180,7 +1185,7 @@ function handleMediaTypeChange(nextType: MediaType) {
   settingsStore.setMediaType(nextType)
   ensureSupportedAspectRatio()
   imageMode.value = 'text2image'
-  videoMode.value = 'text2video'
+  videoMode.value = activeVideoModeOptions.value[0]?.value || 'text2video'
   removeUploadedFile()
   removeViduFrames()
   removeMotionControlFiles()
@@ -1861,6 +1866,9 @@ onMounted(async () => {
     settingsStore.setMediaType('image')
     imageMode.value = 'text2image'
   }
+  if (!activeVideoModeOptions.value.some((option) => option.value === videoMode.value)) {
+    videoMode.value = activeVideoModeOptions.value[0]?.value || 'text2video'
+  }
   ensureSupportedAspectRatio()
   ensureSupportedVideoDuration()
   ensureWelcomeMessage()
@@ -1906,7 +1914,7 @@ watch(
       clearMultimodalAssets()
     }
     if (!activeVideoModeOptions.value.some((option) => option.value === videoMode.value)) {
-      videoMode.value = 'text2video'
+      videoMode.value = activeVideoModeOptions.value[0]?.value || 'text2video'
       removeViduFrames()
       removeMotionControlFiles()
       clearMultimodalAssets()

@@ -272,6 +272,9 @@ export function getSupportedVideoModes(modelId: string | null | undefined): Vide
   const mode = getModelCapability(modelId)?.videoRequestMode
   switch (mode) {
     case 'viduq3-fast':
+      if (modelId?.toLowerCase() === 'viduq3-pro-fast') {
+        return buildVideoModeOptions(['image2video'])
+      }
       return buildVideoModeOptions(['text2video', 'image2video', 'startEnd2video'])
     case 'kling-omni':
       return buildVideoModeOptions(['text2video', 'referenceImage2video', 'startEnd2video'])
@@ -330,7 +333,7 @@ export function isSeedance2Model(modelId: string | null | undefined): boolean {
 
 /**
  * 判断某个模型是否属于 Kling 系列（基于 videoRequestMode）。
- * Kling 系列支持通过 `audio: native/off` 生成带声音的视频，
+ * Kling 系列支持通过 `sound: on/off` 生成带声音的视频，
  * 因此视频节点会针对该系列展示「是否生成声音」开关。
  */
 export function isKlingVideoModel(modelId: string | null | undefined): boolean {
@@ -346,7 +349,7 @@ export function isKlingVideoModel(modelId: string | null | undefined): boolean {
  */
 export const PREFERRED_DEFAULT_MODEL_IDS: Record<MediaType, string[]> = {
   image: ['Qwen-Image-2.0-Pro', 'Doubao-Seedream-5.0-lite'],
-  video: ['Kling-V2.6', 'Kling-V3', 'ViduQ3-Pro-Fast', 'MiniMax-Hailuo-2.3'],
+  video: ['Kling-V2.6', 'Kling-V3', 'ViduQ3-Pro', 'ViduQ3-Pro-Fast', 'MiniMax-Hailuo-2.3'],
 }
 
 /**

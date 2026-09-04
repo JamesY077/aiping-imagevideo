@@ -25,10 +25,17 @@ const DEFAULT_TEXT_FIELDS = [
   'aspect_ratio',
   'resolution',
   'style',
+  'audio',
   'movement_amplitude',
   'seed',
   'payload',
   'off_peak',
+  'bgm',
+  'watermark',
+  'wm_position',
+  'wm_url',
+  'meta_data',
+  'callback_url',
 ]
 
 const DEFAULT_IMAGE_FIELDS = [
@@ -43,7 +50,19 @@ const DEFAULT_IMAGE_FIELDS = [
   'seed',
   'payload',
   'off_peak',
+  'audio',
+  'audio_type',
+  'voice_id',
+  'is_rec',
+  'bgm',
+  'watermark',
+  'wm_position',
+  'wm_url',
+  'meta_data',
+  'callback_url',
 ]
+
+export const VIDU_TASKS_ENDPOINT = '/multimodal/vidu/tasks'
 
 function createRandomSeed(): number {
   return Math.floor(Math.random() * 1_000_000_000)
@@ -60,10 +79,10 @@ export function isViduStartEndToVideoBody(body: Record<string, unknown>): boolea
 }
 
 export function getViduEndpoint(body: Record<string, unknown>): string {
-  if (isViduStartEndToVideoBody(body)) return '/videos/vidu/start-end2video'
+  if (isViduStartEndToVideoBody(body)) return '/multimodal/vidu/videos/start-end2video'
   return isViduImageToVideoBody(body)
-    ? '/videos/vidu/img2video'
-    : '/videos/vidu/text2video'
+    ? '/multimodal/vidu/videos/img2video'
+    : '/multimodal/vidu/videos/text2video'
 }
 
 export function normalizeViduResponse(data: any) {
@@ -75,10 +94,18 @@ export function normalizeViduResponse(data: any) {
       created: data.created || (data.created_at ? Math.floor(new Date(data.created_at).getTime() / 1000) : Math.floor(Date.now() / 1000)),
       status: data.status || data.state || 'pending',
       provider: data.provider || 'vidu',
-      model: data.model,
+      model: data.model || '',
+      aiping_id: data.aiping_id,
     }
   }
-  return data ? { ...data, provider: data.provider || 'vidu' } : data
+  return data
+    ? {
+        ...data,
+        provider: data.provider || 'vidu',
+        model: data.model || '',
+        aiping_id: data.aiping_id,
+      }
+    : data
 }
 
 function normalizeViduImages(body: Record<string, unknown>) {
@@ -151,7 +178,7 @@ function applyViduDefaults(body: Record<string, unknown>, config: ViduModelConfi
     delete body.aspect_ratio
     delete body.ratio
     delete body.size
-    delete body.style
+    if (config.enableStyle === false) delete body.style
   } else {
     delete body.images
     delete body.image
@@ -162,8 +189,6 @@ function applyViduDefaults(body: Record<string, unknown>, config: ViduModelConfi
     delete body.video_list
     delete body.ratio
     delete body.size
-    delete body.audio
-    delete body.watermark
     delete body.extra_body
     body.aspect_ratio = body.aspect_ratio || config.defaultTextAspectRatio
     body.resolution = body.resolution || config.defaultTextResolution

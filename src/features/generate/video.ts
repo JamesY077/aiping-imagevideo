@@ -6,7 +6,8 @@ export async function pollVideoStatus(
   onProgress?: (progress: number) => void,
   interval = 3000,
   maxAttempts = 100,
-  provider?: string
+  provider?: string,
+  providerCreateEndpoint?: string,
 ): Promise<VideoStatusResponse> {
   // MiniMax-H3 多模态参考 / 首尾帧 / 2K 场景耗时更长，避免 5 分钟窗口过早判超时。
   const resolvedMaxAttempts = provider?.toLowerCase() === 'minimax-h3'
@@ -14,7 +15,7 @@ export async function pollVideoStatus(
     : maxAttempts
 
   for (let i = 0; i < resolvedMaxAttempts; i++) {
-    const status = await getVideoStatusWithProvider(taskId, provider)
+    const status = await getVideoStatusWithProvider(taskId, provider, providerCreateEndpoint)
     const normalizedStatus = (status.status || status.state)?.toLowerCase()
     if (typeof status.progress === 'number' && onProgress) {
       onProgress(status.progress)

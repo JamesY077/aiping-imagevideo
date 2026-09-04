@@ -76,7 +76,7 @@ export function buildKlingMultimodalVideoRequestBody(
     negative_prompt: params.negative_prompt || '',
     duration: String(params.duration || params.seconds || 5),
     mode: params.mode || 'pro',
-    sound: params.sound || (image ? 'off' : 'on'),
+    sound: params.sound || 'off',
     callback_url: params.callback_url || '',
     external_task_id: params.external_task_id || '',
   }
@@ -88,9 +88,6 @@ export function buildKlingMultimodalVideoRequestBody(
   } else {
     body.aspect_ratio = params.aspect_ratio || params.ratio || '1:1'
   }
-
-  // Kling 系列「是否生成声音」：native 生成带声音的视频，off 无声音（默认）。
-  if (params.klingAudio) body.audio = params.klingAudio
 
   return body
 }
@@ -148,8 +145,7 @@ export function buildKlingOmniVideoRequestBody(
     body.image_list = imageList
   }
 
-  // Kling 系列「是否生成声音」：native 生成带声音的视频，off 无声音（默认）。
-  if (params.klingAudio) body.audio = params.klingAudio
+  if (params.sound) body.sound = params.sound
 
   return body
 }
@@ -169,7 +165,25 @@ export function getKlingOmniVideoEndpoint(): string {
   return '/multimodal/kling/videos/omni-video'
 }
 
-export function normalizeKlingMultimodalVideoGenerateResponse(data: any): VideoGenerateResponse {
+export function getKlingStatusEndpoints(createEndpoint: string, taskId?: string): string[] {
+  const endpoint = createEndpoint.replace(/\/+$/, '')
+  const taskIdPath = taskId ? `/${encodeURIComponent(taskId)}` : ''
+  const capabilityEndpoints = [
+    '/multimodal/kling/videos/text2video',
+    '/multimodal/kling/videos/image2video',
+    '/multimodal/kling/videos/omni-video',
+    '/multimodal/kling/videos/multi-image2video',
+    '/multimodal/kling/videos/motion-control',
+    '/multimodal/kling/videos/video-extend',
+  ]
+  if (capabilityEndpoints.includes(endpoint)) return [`${endpoint}${taskIdPath}`]
+  return capabilityEndpoints.map((candidate) => `${candidate}${taskIdPath}`)
+}
+
+export function normalizeKlingMultimodalVideoGenerateResponse(
+  data: any,
+  providerCreateEndpoint = '',
+): VideoGenerateResponse {
   const task = data?.data || data
   const taskId = task?.task_id || data?.task_id || data?.id || ''
   const createdAt = task?.created_at || data?.created_at || Date.now()
@@ -184,6 +198,8 @@ export function normalizeKlingMultimodalVideoGenerateResponse(data: any): VideoG
     status: task?.task_status || task?.status || 'pending',
     state: task?.task_status || task?.state,
     provider: task?.provider || data?.provider || 'kling',
+    providerCreateEndpoint,
+    aiping_id: data?.aiping_id,
     model,
   }
 }
@@ -194,10 +210,13 @@ export function normalizeKlingMultimodalVideoGenerateResponse(data: any): VideoG
  * /videos/{taskId}，而非 /multimodal/kling/videos/{taskId}。这里返回独立的
  * provider 标识 'kling-omni'，让轮询逻辑直接命中正确接口，避免注定 404 的请求。
  */
-export function normalizeKlingOmniVideoGenerateResponse(data: any): VideoGenerateResponse {
+export function normalizeKlingOmniVideoGenerateResponse(
+  data: any,
+  providerCreateEndpoint = '',
+): VideoGenerateResponse {
   return {
-    ...normalizeKlingMultimodalVideoGenerateResponse(data),
+    ...normalizeKlingMultimodalVideoGenerateResponse(data, providerCreateEndpoint),
     provider: 'kling-omni',
+    providerCreateEndpoint,
   }
 }
-

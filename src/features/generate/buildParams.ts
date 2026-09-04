@@ -58,8 +58,8 @@ export async function buildVideoParams(
   aspectRatio: string,
   duration: number,
   videoRequestMode: ModelCapability['videoRequestMode'],
-  // Kling 系列「是否生成声音」：native 生成带声音的视频，off 无声音（默认）。
-  klingAudio: 'native' | 'off' = 'off',
+  // 可灵声音开关：新协议使用 sound=on/off。
+  klingSound: 'on' | 'off' = 'off',
   // 视频分辨率档位（当前仅 MiniMax-H3 使用：768P / 2K）。
   videoResolution: string | null = null
 ): Promise<VideoGenerateRequest> {
@@ -112,22 +112,20 @@ export async function buildVideoParams(
         // 首尾帧生视频：首帧作为 image，尾帧作为 image_tail。
         videoParams.image = uploadValues[0]
         videoParams.image_tail = uploadValues[1]
-        // 声音字段跟随开关：开启则 on，否则 off（与 audio=native/off 保持一致）。
-        videoParams.sound = klingAudio === 'native' ? 'on' : 'off'
+        // 声音字段跟随开关：可灵新协议为 on/off。
+        videoParams.sound = klingSound
         deleteVideoRatio(videoParams)
       } else if (uploadValue) {
         videoParams.image = uploadValue
-        // 声音字段跟随开关：开启则 on，否则 off（与 audio=native/off 保持一致）。
-        videoParams.sound = klingAudio === 'native' ? 'on' : 'off'
+        // 声音字段跟随开关：可灵新协议为 on/off。
+        videoParams.sound = klingSound
         deleteVideoRatio(videoParams)
       } else {
-        // 声音字段跟随开关：开启则 on，否则 off（与 audio=native/off 保持一致）。
-        videoParams.sound = klingAudio === 'native' ? 'on' : 'off'
+        // 声音字段跟随开关：可灵新协议为 on/off。
+        videoParams.sound = klingSound
         setVideoRatio(videoParams, getKlingAspectRatio(aspectRatio))
       }
       videoParams.model_name = model || undefined
-      // Kling 系列「是否生成声音」：native 生成带声音的视频，off 无声音（默认）。
-      videoParams.klingAudio = klingAudio
       break
 
 
@@ -137,6 +135,7 @@ export async function buildVideoParams(
       // - 参考生视频：多张参考图作为无 type 的 image_list（多图主体，上限 7）。
       videoParams.model_name = model || undefined
       videoParams.mode = 'pro'
+      videoParams.sound = klingSound
       setVideoRatio(videoParams, getKlingAspectRatio(aspectRatio))
 
       const startFrameIndex = uploadedFiles.findIndex((file) => file.purpose === 'start-frame')
@@ -159,8 +158,6 @@ export async function buildVideoParams(
           .map((value) => ({ image_url: value }))
       }
       delete videoParams.resolution
-      // Kling 系列「是否生成声音」：native 生成带声音的视频，off 无声音（默认）。
-      videoParams.klingAudio = klingAudio
       break
     }
 
@@ -300,7 +297,6 @@ export async function buildVideoParams(
       delete videoParams.style
       delete videoParams.payload
       delete videoParams.extra_body
-      delete videoParams.klingAudio
       break
     }
     case 'seedance-2': {

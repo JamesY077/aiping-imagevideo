@@ -9,6 +9,6 @@ export interface VideoProviderAdapter {
   buildRequestBody: (params: VideoGenerateRequest) => Record<string, unknown>
   getEndpoint: (body: Record<string, unknown>) => string
   buildFallbackBodies?: (body: Record<string, unknown>) => Record<string, unknown>[]
-  normalizeResponse?: (data: any) => VideoGenerateResponse
+  normalizeResponse?: (data: any, providerCreateEndpoint?: string) => VideoGenerateResponse
   statusEndpoints?: (taskId: string) => string[]
 }
