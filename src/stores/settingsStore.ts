@@ -48,6 +48,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const selectedModel = ref<string | null>(null)
   const aspectRatio = ref('1:1')
   const videoDuration = ref(6)
+  // 简易模式单轮批量生成数量（1-5），默认 1 张/条。
+  const batchSize = ref(1)
   // 视频分辨率档位（当前仅 MiniMax-H3 暴露 768P / 2K 选择）。
   const videoResolution = ref<'768P' | '2K'>('768P')
   const promptPolishModel = ref('')
@@ -62,6 +64,10 @@ export const useSettingsStore = defineStore('settings', () => {
       selectedModel.value = settings.selectedModel || null
       aspectRatio.value = settings.aspectRatio || (mediaType.value === 'video' ? '16:9' : '1:1')
       videoDuration.value = settings.videoDuration || getDefaultVideoDuration(selectedModel.value)
+      const parsedBatchSize = Number(settings.batchSize)
+      batchSize.value = Number.isFinite(parsedBatchSize) && parsedBatchSize >= 1 && parsedBatchSize <= 5
+        ? Math.round(parsedBatchSize)
+        : 1
       videoResolution.value = settings.videoResolution === '2K' ? '2K' : '768P'
       promptPolishModel.value = settings.promptPolishModel || ''
       promptPolishSystemPrompt.value = settings.promptPolishSystemPrompt || ''
@@ -77,6 +83,7 @@ export const useSettingsStore = defineStore('settings', () => {
         selectedModel: selectedModel.value,
         aspectRatio: aspectRatio.value,
         videoDuration: videoDuration.value,
+        batchSize: batchSize.value,
         videoResolution: videoResolution.value,
         promptPolishModel: promptPolishModel.value,
         promptPolishSystemPrompt: promptPolishSystemPrompt.value,
@@ -110,6 +117,7 @@ export const useSettingsStore = defineStore('settings', () => {
     selectedModel,
     aspectRatio,
     videoDuration,
+    batchSize,
     videoResolution,
     promptPolishModel,
     promptPolishSystemPrompt,

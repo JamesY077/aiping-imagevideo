@@ -60,6 +60,7 @@
               <span class="summary-chip">{{ activeGenerateModeLabel }}</span>
               <span class="summary-chip">{{ selectedAspectRatioOption.label }}</span>
               <span v-if="settingsStore.mediaType === 'video'" class="summary-chip">{{ selectedVideoDurationLabel }}</span>
+              <span v-if="settingsStore.batchSize > 1" class="summary-chip">批量 ×{{ settingsStore.batchSize }}</span>
               <span v-if="materialSummaryLabel" class="summary-chip" :class="{ attention: needsMaterialAttention }">{{ materialSummaryLabel }}</span>
               <span v-if="skillStore.activeSkill" class="summary-chip summary-chip-skill">Skill：{{ skillStore.activeSkill.name }}</span>
               <span class="summary-spacer" />
@@ -123,12 +124,13 @@
                 </div>
               </div>
 
-              <div class="meta-pill meta-pill-ratio">
+              <div class="meta-pill meta-pill-ratio" :class="{ 'ratio-locked': isFrameRatioLocked }">
                 <span class="meta-pill-label">比例</span>
                 <div class="ratio-selector" :class="{ open: showAspectRatioMenu }">
                   <button
                     class="ratio-current-btn"
                     type="button"
+                    :disabled="isFrameRatioLocked"
                     :aria-expanded="showAspectRatioMenu"
                     aria-label="选择比例"
                     @click="showAspectRatioMenu = !showAspectRatioMenu"
@@ -198,7 +200,31 @@
                 </div>
               </div>
 
+              <div class="meta-pill meta-pill-duration duration-slot batch-size-slot">
+                <span class="meta-pill-label">单轮数量</span>
+                <div class="duration-selector">
+                  <div class="duration-select-wrap">
+                    <select
+                      id="batch-size"
+                      v-model.number="settingsStore.batchSize"
+                      class="duration-select"
+                      @change="settingsStore.saveToStorage()"
+                    >
+                      <option v-for="size in [1, 2, 4, 5]" :key="size" :value="size">{{ size }} 个</option>
+                    </select>
+                    <span class="duration-caret" aria-hidden="true">▾</span>
+                  </div>
+                </div>
+              </div>
+
             </div>
+
+            <p v-if="isFrameRatioLocked" class="ratio-lock-note">
+              图生 / 尾帧 / 首尾帧模式下，视频比例由上传图片决定，不支持手动调整
+            </p>
+            <p v-if="videoMode === 'startEnd2video'" class="ratio-lock-note">
+              首尾帧上传图片比例需要一致
+            </p>
 
 
 
@@ -226,6 +252,7 @@
                     <span class="upload-label">{{ videoMode === 'endFrame2video' ? '尾帧图' : '参考图' }}</span>
                     <span class="upload-hint">{{ videoMode === 'endFrame2video' ? '作为视频结尾画面（MiniMax-H3），支持 PNG / JPG / WebP 等格式' : '用于图生视频，支持 PNG / JPG / WebP 等格式' }}</span>
                   </div>
+                  <img v-if="uploadedFile" class="upload-thumb" :src="uploadedFile.url" alt="已上传素材" />
                   <span v-if="uploadedFile" class="pill-filename">{{ uploadedFile.name }}</span>
                   <button v-if="uploadedFile" class="text-btn" type="button" @click="() => removeUploadedFile()">移除</button>
                 </div>
@@ -376,6 +403,7 @@
                     <span class="upload-label">主体参考</span>
                     <span class="upload-hint">上传人物主体图片生成 S2V 视频，支持 PNG / JPG / WebP 等格式</span>
                   </div>
+                  <img v-if="uploadedFile" class="upload-thumb" :src="uploadedFile.url" alt="已上传素材" />
                   <span v-if="uploadedFile" class="pill-filename">{{ uploadedFile.name }}</span>
                   <button v-if="uploadedFile" class="text-btn" type="button" @click="() => removeUploadedFile()">移除</button>
                 </div>
@@ -521,6 +549,7 @@
                   <span class="upload-label">参考图</span>
                   <span class="upload-hint">用于图生图，支持 PNG / JPG / WebP 等格式</span>
                 </div>
+                <img v-if="uploadedFile" class="upload-thumb" :src="uploadedFile.url" alt="已上传素材" />
                 <span v-if="uploadedFile" class="pill-filename">{{ uploadedFile.name }}</span>
                 <button v-if="uploadedFile" class="text-btn" type="button" @click="() => removeUploadedFile()">移除</button>
               </div>
@@ -541,6 +570,8 @@
                 >
                   +
                 </button>
+                <img v-if="uploadedFile?.type === 'image'" class="upload-thumb" :src="uploadedFile.url" alt="已上传素材" />
+                <span v-else-if="uploadedFile" class="upload-thumb upload-thumb-file" aria-hidden="true">🎬</span>
                 <span v-if="uploadedFile" class="pill-filename">{{ uploadedFile.name }}</span>
                 <button v-if="uploadedFile" class="text-btn" type="button" @click="() => removeUploadedFile()">移除</button>
               </div>
@@ -908,6 +939,10 @@ const isKlingReferenceMode = computed(() => isKlingOmniVideoModel.value && video
 
 const isSeedanceVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'seedance-2')
 const isMinimaxH3VideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'minimax-h3')
+// MiniMax-H3 帧图模式（图生 / 尾帧 / 首尾帧）：比例由上传图片决定，不支持手动调整。
+const isFrameRatioLocked = computed(
+  () => isMinimaxH3VideoModel.value && ['image2video', 'endFrame2video', 'startEnd2video'].includes(videoMode.value),
+)
 // 多模态参考：Seedance 2.0 与 MiniMax-H3 共用「素材 + @ 引用」面板。
 const isMultimodalReferenceMode = computed(() => (isSeedanceVideoModel.value || isMinimaxH3VideoModel.value) && videoMode.value === 'multimodalReference2video')
 const isEditVideoMode = computed(() => isSeedanceVideoModel.value && videoMode.value === 'editVideo')
@@ -1011,6 +1046,9 @@ function getAspectRatioOption(value: string): AspectRatioOption | null {
 
 const aspectRatioOptions = computed(() => {
   if (settingsStore.mediaType !== 'video') return ASPECT_RATIO_OPTIONS
+  if (isFrameRatioLocked.value) {
+    return [getAspectRatioOption('adaptive')].filter((option): option is AspectRatioOption => !!option)
+  }
   // MiniMax-H3 的具体比例列表依赖生成方式（仅图生/参考模式提供 adaptive）。
   const supported = getSupportedAspectRatios(settingsStore.selectedModel, videoMode.value)
   return supported
@@ -1163,7 +1201,7 @@ function buildSessionWelcomeMessage(): Omit<Message, 'id' | 'timestamp'> {
       '',
       '🖼️ 图像生成：支持「文生图」与「图生图」两种方式，快速把创意变成画面。',
       '🎬 视频生成：覆盖文生视频、图生视频、首尾帧生视频、主体参考视频与动作控制等多种玩法。',
-      '📐 参数可调：可自由选择画面比例、视频时长，快速匹配不同创作场景。',
+      '📐 参数可调：可自由选择画面比例、单轮数量与视频时长，快速匹配不同创作场景。',
       '✨ AI 润色：一键把简短描述扩写成更专业的提示词（需先在「设置」中配置润色模型）。',
       '🧩 无限画布（BETA）：想要多画面并行、串联复杂创作流程？点击左侧「无限画布」体验节点式创作。',
 
@@ -1229,11 +1267,17 @@ function selectAspectRatio(value: string) {
 }
 
 function handleAspectRatioMenuSelect(value: string) {
+  if (isFrameRatioLocked.value) return
   selectAspectRatio(value)
   showAspectRatioMenu.value = false
 }
 
+watch(isFrameRatioLocked, (locked) => {
+  if (locked) showAspectRatioMenu.value = false
+})
+
 function ensureSupportedAspectRatio() {
+  if (isFrameRatioLocked.value) return
   if (!aspectRatioOptions.value.length) return
   if (aspectRatioOptions.value.some((option) => option.value === settingsStore.aspectRatio)) return
   settingsStore.aspectRatio = aspectRatioOptions.value[0]?.value || '1:1'
@@ -2017,7 +2061,7 @@ async function handleSend() {
 
   await nextTick()
   scrollChatToBottom()
-  await generate(prompt, ioType, settingsStore.selectedModel, file, settingsStore.aspectRatio, settingsStore.videoDuration, false, skillStore.activeSkill?.content || null, settingsStore.videoResolution)
+  await generate(prompt, ioType, settingsStore.selectedModel, file, settingsStore.aspectRatio, settingsStore.videoDuration, false, skillStore.activeSkill?.content || null, settingsStore.videoResolution, settingsStore.batchSize)
 
 
 
@@ -2034,6 +2078,7 @@ async function handleRegenerate(message: Message) {
     const model = userMsg.model || settingsStore.selectedModel
     const aspectRatio = userMsg.aspectRatio || settingsStore.aspectRatio
     const duration = userMsg.duration || settingsStore.videoDuration
+    const batchSize = userMsg.batchSize || settingsStore.batchSize
     await generate(
       userMsg.content,
       resolveGenerateIoType(settingsStore.mediaType, userMsg.uploadedFiles?.[0] || userMsg.uploadedFile),
@@ -2044,6 +2089,7 @@ async function handleRegenerate(message: Message) {
       false,
       skillStore.activeSkill?.content || null,
       settingsStore.videoResolution,
+      batchSize,
     )
     await nextTick()
     scrollChatToBottom()
@@ -2495,6 +2541,7 @@ async function handleRegenerate(message: Message) {
 
 .composer-control-panel {
   max-height: min(42vh, 420px);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 9px;
@@ -2607,6 +2654,8 @@ async function handleRegenerate(message: Message) {
 .media-switch,
 .video-mode-switch {
   display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   padding: 2px;
   gap: 2px;
 }
@@ -2719,6 +2768,21 @@ async function handleRegenerate(message: Message) {
   color: rgba(71, 85, 105, 0.7);
 }
 
+.ratio-lock-note {
+  margin: 6px 2px 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(100, 116, 139, 0.82);
+}
+
+.meta-pill-ratio.ratio-locked .ratio-selector {
+  opacity: 0.62;
+}
+
+.ratio-current-btn:disabled {
+  cursor: default;
+}
+
 .ratio-dropdown {
   position: absolute;
   right: 0;
@@ -2773,10 +2837,13 @@ async function handleRegenerate(message: Message) {
 .duration-selector,
 .upload-mini-row {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px 8px;
   min-height: 36px;
-  padding: 0 12px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 4px 12px;
 }
 
 .duration-selector {
@@ -2817,6 +2884,67 @@ async function handleRegenerate(message: Message) {
   gap: 8px;
   width: 100%;
   align-items: stretch;
+}
+
+/* 上传成功态：绿色描边 + 缩略图，避免文件名与按钮挤压排版 */
+.upload-mini-row.has-file,
+.upload-card-row.has-file,
+.subject-reference-card.has-file {
+  border-color: rgba(52, 211, 153, 0.38);
+  background: rgba(52, 211, 153, 0.07);
+}
+
+.upload-mini-row.has-file .upload-icon-btn {
+  background: rgba(52, 211, 153, 0.14);
+  border-color: rgba(52, 211, 153, 0.4);
+  color: rgba(52, 211, 153, 0.95);
+}
+
+.upload-thumb {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  object-fit: cover;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.upload-thumb-file {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+/* 上传行内的“移除”按钮：小胶囊 + 删除态 */
+.upload-mini-row .text-btn,
+.subject-reference-card .text-btn {
+  flex: 0 0 auto;
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid rgba(248, 113, 113, 0.30);
+  border-radius: 999px;
+  background: rgba(248, 113, 113, 0.08);
+  color: rgba(248, 113, 113, 0.92);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.upload-mini-row .text-btn::before,
+.subject-reference-card .text-btn::before {
+  content: '✕';
+  margin-right: 4px;
+  font-size: 9px;
+  opacity: 0.85;
+}
+
+.upload-mini-row .text-btn:hover,
+.subject-reference-card .text-btn:hover {
+  border-color: rgba(248, 113, 113, 0.52);
+  background: rgba(248, 113, 113, 0.16);
+  color: #fca5a5;
 }
 
 .skill-control-row {
@@ -2954,7 +3082,8 @@ async function handleRegenerate(message: Message) {
   display: inline-flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 78px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .upload-label {
@@ -2968,12 +3097,15 @@ async function handleRegenerate(message: Message) {
   font-size: 10px;
   line-height: 1.1;
   color: rgba(71, 85, 105, 0.72);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .frame-upload-grid {
   width: 100%;
   display: grid;
-  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 8px;
 }
 
@@ -3228,7 +3360,9 @@ async function handleRegenerate(message: Message) {
 }
 
 .pill-filename {
-  max-width: 180px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(180px, 100%);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3571,6 +3705,10 @@ async function handleRegenerate(message: Message) {
   .ratio-selector,
   .ratio-current-btn {
     width: 100%;
+  }
+
+  .meta-pill-ratio {
+    flex-wrap: wrap;
   }
 
   .ratio-dropdown {
@@ -4238,6 +4376,7 @@ async function handleRegenerate(message: Message) {
   flex: 1 1 auto;
   min-height: 0;
   max-height: none;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -4373,6 +4512,7 @@ async function handleRegenerate(message: Message) {
   flex: 1 1 auto;
   min-height: 0;
   max-height: none;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 16px;
   border: 0;

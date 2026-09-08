@@ -1,9 +1,10 @@
 import { generateImage, generateVideo } from '@/api/aiping'
+import { getImageProvider } from '@/api/providers/image'
 import { useChatStore } from '@/stores/chatStore'
-import type { GenerateType, UploadedFile } from '@/types/chat'
+import type { GenerateResult, GenerateType, UploadedFile } from '@/types/chat'
 import { getModelCapability } from '@/types/model'
 import type { ModelCapability, ModelIOType } from '@/types/model'
-import type { ImageGenerateRequest, VideoGenerateRequest } from '@/types/api'
+import type { ImageGenerateRequest, ImageGenerateResponse, VideoGenerateRequest, VideoStatusResponse } from '@/types/api'
 import { validatePromptOrThrow } from '@/utils/errorHandling'
 import { normalizeErrorMessage, showErrorMessage } from '@/utils/errors'
 import { aspectRatioToDimensions, aspectRatioToImageSize } from '@/features/generate/aspectRatio'
@@ -336,6 +337,75 @@ async function buildVideoParams(
 }
 
 
+const MAX_BATCH_SIZE = 5
+
+function normalizeBatchSize(value: number): number {
+  const parsed = Math.round(Number(value))
+  return Number.isFinite(parsed) ? Math.min(MAX_BATCH_SIZE, Math.max(1, parsed)) : 1
+}
+
+function buildImageResult(
+  response: ImageGenerateResponse,
+  model: string | null,
+  aspectRatio: string,
+  capability: ModelCapability | null
+): GenerateResult {
+  const url = response.data[0]?.url || ''
+  if (!url) {
+    throw new Error('图片生成完成但未返回有效图片地址，请稍后重试或切换模型。')
+  }
+
+  return buildImageResultFromUrl(url, response, model, aspectRatio, capability)
+}
+
+function buildImageResultFromUrl(
+  url: string,
+  response: ImageGenerateResponse,
+  model: string | null,
+  aspectRatio: string,
+  capability: ModelCapability | null
+): GenerateResult {
+  return {
+    type: 'image',
+    url,
+    model: response.model || model || 'Qwen-Image-2.0-Pro',
+    provider: response.provider,
+    cost: resolveRealCost(response) / Math.max(response.data.length, 1),
+    aspectRatio,
+    createdAt: Date.now(),
+    size: aspectRatioToDimensions(aspectRatio, capability?.imageRequestMode),
+  }
+}
+
+function buildVideoResult(
+  finalStatus: VideoStatusResponse,
+  model: string | null,
+  aspectRatio: string
+): GenerateResult {
+  const videoUrl = finalStatus.video_url || finalStatus.data?.[0]?.url || ''
+  if (!videoUrl) {
+    throw new Error('视频生成完成但未返回有效视频地址，请稍后重试或切换模型。')
+  }
+
+  return {
+    type: 'video',
+    url: videoUrl,
+    model: finalStatus.model || model || '',
+    provider: finalStatus.provider,
+    cost: resolveRealCost(finalStatus),
+    aspectRatio,
+    createdAt: Date.now(),
+    size: aspectRatioToDimensions(aspectRatio),
+    thumbnail: finalStatus.data?.[0]?.thumbnail,
+    duration: finalStatus.seconds || finalStatus.data?.[0]?.duration,
+  }
+}
+
+function describeBatchFailure(successCount: number, total: number, errors: string[]): string | undefined {
+  if (!errors.length) return undefined
+  return `本轮共 ${total} 个任务，已成功生成 ${successCount} 个；失败原因：${errors.join('；')}`
+}
+
 export function useGenerate() {
   const chatStore = useChatStore()
 
@@ -352,13 +422,16 @@ export function useGenerate() {
     // 但聊天区仍展示用户输入的原始 prompt。
     skillContent: string | null = null,
     // 视频分辨率档位（MiniMax-H3 使用：768P / 2K，其余模型忽略）。
-    videoResolution: string | null = null
+    videoResolution: string | null = null,
+    // 简易模式单轮批量生成数量，限制为 1-5。
+    batchSize = 1
   ) {
 
     validatePromptOrThrow(prompt)
 
     chatStore.isGenerating = true
     const generateType = ioTypeToGenerateType(ioType)
+    const requestedBatchSize = normalizeBatchSize(batchSize)
 
     chatStore.addMessage({
       type: 'user',
@@ -369,6 +442,7 @@ export function useGenerate() {
       aspectRatio,
       model: model || undefined,
       duration,
+      batchSize: requestedBatchSize,
     })
 
     const assistantId = chatStore.addMessage({
@@ -376,6 +450,8 @@ export function useGenerate() {
       content: '',
       generateType,
       generateStatus: 'pending',
+      batchSize: requestedBatchSize,
+      progress: 0,
     })
 
     try {
@@ -392,24 +468,79 @@ export function useGenerate() {
           capability?.imageRequestMode
         )
 
-
-        const result = await generateImage(imageParams)
-        const url = result.data[0]?.url || ''
-        if (!url) {
-          throw new Error('图片生成完成但未返回有效图片地址，请稍后重试或切换模型。')
+        if (requestedBatchSize === 1) {
+          const result = await generateImage(imageParams)
+          const imageResult = buildImageResult(result, model, aspectRatio, capability)
+          chatStore.updateMessage(assistantId, {
+            generateStatus: 'completed',
+            generateResult: imageResult,
+            generateResults: [imageResult],
+            progress: 100,
+          })
+          return
         }
+
+        const imageResults: GenerateResult[] = []
+        const imageErrors: string[] = []
+
+        // Qwen 图片接口支持 OpenAI 风格的 n 参数，单次请求即可返回多张，且比
+        // 高并发请求更稳定；Doubao 等其他图片模型会忽略 n，走并发补齐。
+        if (getImageProvider(imageParams).provider === 'qwen') {
+          try {
+            const batchResult = await generateImage({ ...imageParams, n: requestedBatchSize })
+            const batchResults = batchResult.data
+              .filter((item) => !!item.url)
+              .slice(0, requestedBatchSize)
+              .map((item) => buildImageResultFromUrl(item.url as string, batchResult, model, aspectRatio, capability))
+            imageResults.push(...batchResults)
+            if (imageResults.length) {
+              chatStore.updateMessage(assistantId, {
+                progress: Math.min(99, Math.round((imageResults.length / requestedBatchSize) * 100)),
+              })
+            }
+            if (imageResults.length >= requestedBatchSize) {
+              chatStore.updateMessage(assistantId, {
+                generateStatus: 'completed',
+                generateResult: imageResults[0],
+                generateResults: imageResults,
+                progress: 100,
+              })
+              return
+            }
+          } catch {
+            // 批量接口异常时回退到并发请求补齐，错误最终由并发结果汇总。
+          }
+        }
+
+        const remainingCount = requestedBatchSize - imageResults.length
+        if (remainingCount > 0) {
+          const imageTasks = Array.from({ length: remainingCount }, async () => {
+            const result = await generateImage({ ...imageParams })
+            const imageResult = buildImageResult(result, model, aspectRatio, capability)
+            imageResults.push(imageResult)
+            chatStore.updateMessage(assistantId, {
+              progress: Math.min(99, Math.round((imageResults.length / requestedBatchSize) * 100)),
+            })
+            return imageResult
+          })
+          const imageSettled = await Promise.allSettled(imageTasks)
+          for (const item of imageSettled) {
+            if (item.status === 'rejected') {
+              imageErrors.push(normalizeErrorMessage(item.reason, '部分图片生成失败'))
+            }
+          }
+        }
+
+        if (!imageResults.length) {
+          throw new Error(imageErrors[0] || '批量图片生成失败，请稍后重试。')
+        }
+
         chatStore.updateMessage(assistantId, {
           generateStatus: 'completed',
-          generateResult: {
-            type: 'image',
-            url,
-            model: result.model || model || 'Qwen-Image-2.0-Pro',
-            provider: result.provider,
-            cost: resolveRealCost(result),
-            aspectRatio,
-            createdAt: Date.now(),
-            size: aspectRatioToDimensions(aspectRatio, capability?.imageRequestMode),
-          },
+          generateResult: imageResults[0],
+          generateResults: imageResults,
+          partialError: describeBatchFailure(imageResults.length, requestedBatchSize, imageErrors),
+          progress: 100,
         })
         return
       }
@@ -427,42 +558,110 @@ export function useGenerate() {
         videoResolution
       )
 
+      if (requestedBatchSize === 1) {
+        const task = await generateVideo(videoParams)
+        if (!task.id) {
+          throw new Error('视频任务创建成功但未返回任务 ID，请稍后重试或切换模型。')
+        }
+        chatStore.updateMessage(assistantId, { generateStatus: 'processing' })
 
-      const task = await generateVideo(videoParams)
-      if (!task.id) {
-        throw new Error('视频任务创建成功但未返回任务 ID，请稍后重试或切换模型。')
+        const finalStatus = await pollVideoStatus(
+          task.id,
+          (progress) => {
+            chatStore.updateMessage(assistantId, { progress })
+          },
+          3000,
+          100,
+          task.provider,
+          task.providerCreateEndpoint,
+        )
+
+        const videoResult = buildVideoResult(finalStatus, model, aspectRatio)
+        chatStore.updateMessage(assistantId, {
+          generateStatus: 'completed',
+          generateResult: videoResult,
+          generateResults: [videoResult],
+          progress: 100,
+        })
+        return
       }
-      chatStore.updateMessage(assistantId, { generateStatus: 'processing' })
 
-      const finalStatus = await pollVideoStatus(
-        task.id,
-        (progress) => {
-          chatStore.updateMessage(assistantId, { progress })
-        },
-        3000,
-        100,
-        task.provider,
-        task.providerCreateEndpoint,
+      const videoTasks: Awaited<ReturnType<typeof generateVideo>>[] = []
+      const videoCreateErrors: string[] = []
+      const videoCreateSettled = await Promise.allSettled(
+        Array.from({ length: requestedBatchSize }, () => generateVideo({ ...videoParams }))
       )
-
-      const videoUrl = finalStatus.video_url || finalStatus.data?.[0]?.url || ''
-      if (!videoUrl) {
-        throw new Error('视频生成完成但未返回有效视频地址，请稍后重试或切换模型。')
+      for (const item of videoCreateSettled) {
+        if (item.status === 'rejected') {
+          videoCreateErrors.push(normalizeErrorMessage(item.reason, '部分视频任务创建失败'))
+          continue
+        }
+        if (!item.value.id) {
+          videoCreateErrors.push('视频任务创建成功但未返回任务 ID。')
+          continue
+        }
+        videoTasks.push(item.value)
       }
+
+      if (!videoTasks.length) {
+        throw new Error(videoCreateErrors[0] || '批量视频任务创建失败，请稍后重试。')
+      }
+
+      chatStore.updateMessage(assistantId, {
+        generateStatus: 'processing',
+        progress: Math.max(2, Math.round((videoTasks.length / requestedBatchSize) * 10)),
+      })
+
+      const videoTaskProgress = videoTasks.map(() => 0)
+      const videoTaskCompleted = videoTasks.map(() => false)
+      const videoResults: GenerateResult[] = []
+      const videoPollErrors: string[] = []
+
+      const updateVideoBatchProgress = () => {
+        const overall = videoTasks.reduce((sum, _task, index) => (
+          sum + (videoTaskCompleted[index] ? 100 : Math.max(0, Math.min(100, videoTaskProgress[index])))
+        ), 0)
+        chatStore.updateMessage(assistantId, {
+          progress: Math.min(99, Math.round(overall / videoTasks.length)),
+        })
+      }
+
+      const videoPollTasks = videoTasks.map(async (task, index) => {
+        const finalStatus = await pollVideoStatus(
+          task.id,
+          (progress) => {
+            videoTaskProgress[index] = progress
+            updateVideoBatchProgress()
+          },
+          3000,
+          100,
+          task.provider,
+          task.providerCreateEndpoint,
+        )
+        videoTaskCompleted[index] = true
+        updateVideoBatchProgress()
+        const videoResult = buildVideoResult(finalStatus, model, aspectRatio)
+        videoResults.push(videoResult)
+        return videoResult
+      })
+
+      const videoSettled = await Promise.allSettled(videoPollTasks)
+      for (const item of videoSettled) {
+        if (item.status === 'rejected') {
+          videoPollErrors.push(normalizeErrorMessage(item.reason, '部分视频生成失败'))
+        }
+      }
+      const allVideoErrors = [...videoCreateErrors, ...videoPollErrors]
+      if (!videoResults.length) {
+        throw new Error(allVideoErrors[0] || '批量视频生成失败，请稍后重试。')
+      }
+
       chatStore.updateMessage(assistantId, {
         generateStatus: 'completed',
-        generateResult: {
-          type: 'video',
-          url: videoUrl,
-          model: finalStatus.model,
-          provider: finalStatus.provider,
-          cost: resolveRealCost(finalStatus),
-          aspectRatio,
-          createdAt: Date.now(),
-          size: aspectRatioToDimensions(aspectRatio),
-          thumbnail: finalStatus.data?.[0]?.thumbnail,
-          duration: finalStatus.seconds || finalStatus.data?.[0]?.duration,
-        },
+        generateResult: videoResults[0],
+        generateResults: videoResults,
+        partialError: describeBatchFailure(videoResults.length, requestedBatchSize, allVideoErrors),
+        progress: 100,
       })
     } catch (e: unknown) {
       const isTimeout = e instanceof Error && (e.message.includes('timeout') || e.message.includes('超时'))

@@ -42,16 +42,28 @@
             <div class="progress-fill" :style="{ width: `${displayProgress}%` }" />
           </div>
         </div>
-        <ImageResult
-          v-if="message.generateStatus === 'completed' && message.generateResult?.type === 'image'"
-          :result="message.generateResult"
-          @regenerate="$emit('regenerate', message)"
-        />
-        <VideoResult
-          v-if="message.generateStatus === 'completed' && message.generateResult?.type === 'video'"
-          :result="message.generateResult"
-          @regenerate="$emit('regenerate', message)"
-        />
+        <div
+          v-if="message.generateStatus === 'completed' && resultItems.length"
+          class="result-list"
+          :class="{ 'has-multiple': resultItems.length > 1, 'stack-rows': isVideoBatch }"
+        >
+          <div v-if="resultItems.length > 1" class="batch-note">本轮共生成 {{ resultItems.length }} 个结果</div>
+          <template v-for="(result, index) in resultItems" :key="`${result.url}-${index}`">
+            <ImageResult
+              v-if="result.type === 'image'"
+              :result="result"
+              @regenerate="$emit('regenerate', message)"
+            />
+            <VideoResult
+              v-else-if="result.type === 'video'"
+              :result="result"
+              @regenerate="$emit('regenerate', message)"
+            />
+          </template>
+        </div>
+        <div v-if="message.generateStatus === 'completed' && message.partialError" class="partial-warning">
+          {{ message.partialError }}
+        </div>
         <div v-if="message.generateStatus === 'failed'" class="error">
           <span>{{ message.error || '生成失败' }}</span>
           <button class="retry-btn" @click="$emit('regenerate', message)">重新尝试</button>
@@ -89,6 +101,15 @@ defineEmits<{
 }>()
 
 const previewFiles = computed(() => props.message.uploadedFiles?.length ? props.message.uploadedFiles : props.message.uploadedFile ? [props.message.uploadedFile] : [])
+const isVideoBatch = computed(() => props.message.generateType === 'video' && resultItems.value.length > 1)
+
+const resultItems = computed(() => (
+  props.message.generateResults?.length
+    ? props.message.generateResults
+    : props.message.generateResult
+      ? [props.message.generateResult]
+      : []
+))
 
 const imageTips = [
   '正在理解画面主体与空间关系…',
@@ -119,7 +140,8 @@ const isActiveGeneration = computed(() => props.message.generateStatus === 'pend
 const currentTip = computed(() => tips.value[tipIndex.value % tips.value.length])
 const loadingText = computed(() => {
   const kind = props.message.generateType === 'video' ? '视频' : '图片'
-  return props.message.generateStatus === 'pending' ? `${kind}任务准备中` : `${kind}生成进行中`
+  const batchLabel = props.message.batchSize && props.message.batchSize > 1 ? `（共 ${props.message.batchSize} 个）` : ''
+  return props.message.generateStatus === 'pending' ? `${kind}批量任务准备中${batchLabel}` : `${kind}批量生成进行中${batchLabel}`
 })
 const progressLabel = computed(() => {
   if (displayProgress.value >= 88) return '收尾渲染中'
@@ -294,6 +316,32 @@ onBeforeUnmount(clearGenerationTimers)
   margin-top: 6px;
 }
 
+.result-list {
+  margin-top: 6px;
+}
+
+.result-list.has-multiple {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+/* 视频批量结果：一行一个，纵向堆叠 */
+.result-list.stack-rows {
+  grid-template-columns: 1fr;
+}
+
+.batch-note {
+  grid-column: 1 / -1;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(10, 132, 255, 0.08);
+  color: rgba(30, 64, 175, 0.86);
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .generation-progress {
   display: flex;
   flex-direction: column;
@@ -440,6 +488,16 @@ onBeforeUnmount(clearGenerationTimers)
   background: var(--color-danger-soft);
   color: var(--color-danger);
   flex-wrap: wrap;
+}
+
+.partial-warning {
+  margin-top: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  background: rgba(234, 179, 8, 0.12);
+  color: #92610e;
 }
 
 .retry-btn {

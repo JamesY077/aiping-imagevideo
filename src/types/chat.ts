@@ -29,6 +29,12 @@ export interface Message {
   generateType?: GenerateType
   generateStatus?: GenerateStatus
   generateResult?: GenerateResult
+  /** 批量生成结果；批量模式下可能有多条，单条时通常只有一项。 */
+  generateResults?: GenerateResult[]
+  /** 用户发起本轮生成时选择的单轮生成数量（1-5）。 */
+  batchSize?: number
+  /** 批量生成出现部分失败时，用于展示的提示信息。 */
+  partialError?: string
   error?: string
   progress?: number
   uploadedFile?: UploadedFile
@@ -70,4 +76,3 @@ export interface UploadedFile {
     height: number
   }
 }
-
