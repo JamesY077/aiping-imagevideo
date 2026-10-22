@@ -29,7 +29,22 @@
       :aria-current="item.path === activePath ? 'page' : undefined"
       @click="go(item.path)"
     >
-      <span class="island-icon" aria-hidden="true">{{ item.icon }}</span>
+      <span class="island-icon" aria-hidden="true">
+        <svg v-if="item.key === 'skill'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round">
+          <path d="M12 3.2 13.9 9l5.8 1.9-5.8 1.9L12 18.6l-1.9-5.8L4.3 10.9 10.1 9z" />
+          <path d="M18.6 16.4v3M17.1 17.9h3" />
+        </svg>
+        <svg v-else-if="item.key === 'media'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round">
+          <rect x="3.2" y="4.8" width="17.6" height="14.4" rx="3.4" />
+          <path d="M10.4 9.6 15 12l-4.6 2.4z" fill="currentColor" stroke="none" />
+          <circle cx="7.3" cy="8.6" r="0.9" fill="currentColor" stroke="none" />
+        </svg>
+        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round">
+          <rect x="9" y="3.2" width="6" height="11" rx="3" />
+          <path d="M5.6 11.4a6.4 6.4 0 0 0 12.8 0" />
+          <path d="M12 17.8v3" />
+        </svg>
+      </span>
       <span class="island-label">{{ item.label }}</span>
     </button>
   </nav>
@@ -47,22 +62,22 @@ const route = useRoute()
 const items = [
   {
     path: '/skill',
+    key: 'skill',
     label: 'Skill 创作',
-    icon: '✦',
     accent: '#a78bfa',
     accentSoft: 'rgba(167, 139, 250, 0.22)',
   },
   {
     path: '/studio',
+    key: 'media',
     label: '图片视频生成',
-    icon: '◈',
     accent: '#38bdf8',
     accentSoft: 'rgba(56, 189, 248, 0.20)',
   },
   {
     path: '/voice',
+    key: 'voice',
     label: '配音创作',
-    icon: '♪',
     accent: '#fb923c',
     accentSoft: 'rgba(251, 146, 60, 0.22)',
   },
@@ -85,14 +100,17 @@ function go(path: string) {
   flex-direction: column;
   gap: 4px;
   width: 58px;
-  padding: 9px 8px;
+  padding: 10px 8px;
   transform: translateY(-50%);
   overflow: hidden;
-  border-radius: 999px;
+  /* 注意：这里不能用 999px。胶囊高度约 215px，超大圆角会被压缩成椭圆角，
+     把首尾两个按钮裁掉。固定圆角才能保证四角不被切割。 */
+  border-radius: 28px;
   transition:
     width 280ms cubic-bezier(0.16, 1, 0.3, 1),
     background 220ms ease,
-    border-color 220ms ease;
+    border-color 220ms ease,
+    box-shadow 220ms ease;
 }
 
 /* 深色页面上的胶囊 */
@@ -117,7 +135,7 @@ function go(path: string) {
 
 .studio-island:hover,
 .studio-island:focus-within {
-  width: 188px;
+  width: 200px;
 }
 
 .studio-island.tone-dark:hover,
@@ -199,13 +217,17 @@ function go(path: string) {
 .island-label {
   opacity: 0;
   white-space: nowrap;
-  transition: opacity 120ms ease;
+  transform: translateX(-6px);
+  transition:
+    opacity 160ms ease,
+    transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .studio-island:hover .island-label,
 .studio-island:focus-within .island-label {
   opacity: 1;
-  transition-delay: 70ms;
+  transform: translateX(0);
+  transition-delay: 60ms;
 }
 
 .island-divider {
@@ -256,7 +278,7 @@ function go(path: string) {
   .studio-island,
   .studio-island:hover,
   .studio-island:focus-within {
-    left: 8px;
+    left: 6px;
     width: 52px;
     padding: 8px 6px;
   }
