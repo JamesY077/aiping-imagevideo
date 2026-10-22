@@ -1,19 +1,17 @@
 <template>
-  <div class="voice-page">
+  <div class="studio-page voice-page" :style="{ '--studio-accent': accent }">
     <StudioIsland />
-    <div class="voice-aurora" aria-hidden="true" />
 
-    <header class="top-nav">
-      <button class="brand-lockup" type="button" aria-label="返回 ArtRealm 首页" @click="router.push('/')">
-        <img class="brand-title-logo" :src="assetUrl('/logo1.webp')" alt="" />
-        <strong class="brand-title">ArtRealm</strong>
-      </button>
-
-      <nav class="nav-actions" aria-label="功能导航">
-        <button class="nav-ghost" type="button" @click="router.push('/canvas')">无限画布</button>
-        <button class="nav-ghost" type="button" @click="router.push('/settings')">设置</button>
-      </nav>
-    </header>
+    <StudioHeader
+      kicker="Voice Studio"
+      title="配音创作"
+      subtitle="文本转语音、音色演绎与多角色对白将在这里完成"
+      accent="#fb923c"
+    >
+      <template #actions>
+        <span class="studio-chip">施工中</span>
+      </template>
+    </StudioHeader>
 
     <main class="voice-main">
       <section class="voice-hero">
@@ -30,7 +28,7 @@
       </section>
 
       <section class="voice-grid" aria-label="规划中的能力">
-        <article v-for="item in plannedFeatures" :key="item.title" class="feature-card">
+        <article v-for="item in plannedFeatures" :key="item.title" class="studio-panel feature-card">
           <span class="feature-icon" aria-hidden="true">{{ item.icon }}</span>
           <h2>{{ item.title }}</h2>
           <p>{{ item.desc }}</p>
@@ -38,7 +36,7 @@
         </article>
       </section>
 
-      <section class="model-panel" aria-labelledby="voice-model-title">
+      <section class="studio-panel model-panel" aria-labelledby="voice-model-title">
         <div class="panel-head">
           <div>
             <p class="panel-kicker">Ready Models</p>
@@ -62,12 +60,11 @@
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
-import { assetUrl } from '@/utils/assets'
 import { VOICE_MODELS } from '@/features/voice/models'
+import StudioHeader from '@/components/StudioHeader.vue'
 import StudioIsland from '@/components/StudioIsland.vue'
 
-const router = useRouter()
+const accent = 'var(--studio-accent-voice)'
 const voiceModels = VOICE_MODELS
 
 const plannedFeatures = [
@@ -100,96 +97,6 @@ const plannedFeatures = [
 
 <style scoped>
 .voice-page {
-  position: relative;
-  min-height: 100dvh;
-  overflow-x: hidden;
-  color: #fff;
-  background:
-    radial-gradient(circle at 18% -10%, rgba(251, 146, 60, 0.16), transparent 52%),
-    radial-gradient(circle at 84% 6%, rgba(120, 90, 255, 0.20), transparent 48%),
-    linear-gradient(180deg, #06060b 0%, #05050a 100%);
-  isolation: isolate;
-  /* 左侧悬浮岛预留的通道 */
-  padding-left: 84px;
-}
-
-.voice-aurora {
-  position: absolute;
-  top: -180px;
-  right: 12%;
-  width: 560px;
-  height: 460px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 180, 120, 0.26), transparent 68%);
-  filter: blur(80px);
-  pointer-events: none;
-}
-
-.top-nav {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  width: min(100% - 48px, 1320px);
-  height: 76px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  backdrop-filter: blur(14px);
-}
-
-.brand-lockup {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: #fff;
-  cursor: pointer;
-}
-
-.brand-title-logo {
-  width: 28px;
-  height: 28px;
-  border-radius: 9px;
-  object-fit: cover;
-}
-
-.brand-title {
-  font-family: var(--font-family-display);
-  font-size: 17px;
-  font-weight: 800;
-  letter-spacing: -0.05em;
-}
-
-.nav-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.nav-ghost {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  padding: 0 14px;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: transparent;
-  color: rgba(214, 224, 245, 0.62);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: color var(--transition-base), background var(--transition-base), border-color var(--transition-base);
-}
-
-.nav-ghost:hover {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
   color: #fff;
 }
 

@@ -1,8 +1,6 @@
 <script setup lang="ts">
-// 创作 Skill 页面：左侧对话框 + 右侧 Markdown 编辑框。
-// 顶部提供模版例子专区；生成结果直接进入编辑框、支持修改与下载；
-// 底部「效果测试」可对当前 skill 做图片/视频测试。
-import { ref, computed, nextTick } from 'vue'
+// 创作 Skill 页面：左侧对话生成，右侧 Skill 文档编辑 + 效果测试。
+import { computed, nextTick, ref } from 'vue'
 import { generateSkill, type SkillTurn } from '@/features/skill/generate'
 import { parseSkillContent } from '@/features/skill/parse'
 import { ARTSKILLS_DISPLAY_NAME } from '@/features/skill/models'
@@ -10,11 +8,14 @@ import { useSkillStore } from '@/stores/skillStore'
 import { useGenerate } from '@/composables/useGenerate'
 import { useChatStore } from '@/stores/chatStore'
 import { imageModelModules, videoModelModules } from '@/models'
+import StudioHeader from '@/components/StudioHeader.vue'
 import StudioIsland from '@/components/StudioIsland.vue'
 
 const skillStore = useSkillStore()
 const chatStore = useChatStore()
 const { generate } = useGenerate()
+
+const accent = 'var(--studio-accent-skill)'
 
 // —— 模版例子专区 ——
 const templates = [
@@ -26,27 +27,40 @@ const templates = [
   { title: '3D 卡通角色', prompt: '帮我创作一个 3D 卡通角色设计 skill，生成三视图、表情和动作参考。' },
   { title: '游戏场景概念', prompt: '帮我创作一个游戏场景概念设计 skill，强调世界观、光影、氛围和镜头叙事。' },
   { title: '电商产品主图', prompt: '帮我创作一个电商产品主图 skill，突出卖点、质感、背景和促销构图。' },
-  { title: '美食摄影', prompt: '帮我创作一个美食摄影 skill，用于生成高质感菜品、食材和餐桌场景。' },
-  { title: '建筑室内空间', prompt: '帮我创作一个室内设计提案 skill，生成空间效果图、材质与灯光方案。' },
-  { title: '漫剧分镜', prompt: '帮我创作一个漫剧分镜 skill，输出章节镜头、台词和画面连续性规范。' },
-  { title: '儿童绘本', prompt: '帮我创作一个儿童绘本 skill，生成温暖治愈的插画、角色与跨页叙事。' },
+  { title: '美食摄影', prompt: '帮我创作一个美食摄影 skill，生成高质感产品美食的食材和餐厅氛围图。' },
+  { title: '建筑室内空间', prompt: '帮我创作一个建筑与室内概念方案 skill，生成空间效果图与材质灯光方案。' },
+  { title: '漫剧分镜', prompt: '帮我创作一个漫剧分镜 skill，输出章节镜头、台词和画面节奏规范。' },
+  { title: '儿童绘本', prompt: '帮我创作一个儿童绘本 skill，生成温暖治愈的插画、角色和页版设计。' },
 ]
+
+const quickTemplates = templates.slice(0, 4)
 
 // —— 对话 ——
 const input = ref('')
 const messages = ref<Array<{ role: 'user' | 'assistant'; content: string }>>([])
 const isGenerating = ref(false)
+const messagesRef = ref<HTMLElement | null>(null)
 
-// —— Markdown 编辑框 ——
+// —— Skill 文档 ——
 const markdown = ref('')
+const rightTab = ref<'editor' | 'test'>('editor')
+const applied = ref(false)
 
 const skillName = computed(() => {
   if (!markdown.value.trim()) return ARTSKILLS_DISPLAY_NAME
   return parseSkillContent(markdown.value).name
 })
 
+const charCount = computed(() => markdown.value.trim().length)
+
 function useTemplate(prompt: string) {
   input.value = prompt
+}
+
+async function scrollToBottom() {
+  await nextTick()
+  const el = messagesRef.value
+  if (el) el.scrollTop = el.scrollHeight
 }
 
 async function send() {
@@ -55,12 +69,13 @@ async function send() {
   input.value = ''
   messages.value.push({ role: 'user', content: text })
   isGenerating.value = true
+  scrollToBottom()
   try {
     const history: SkillTurn[] = messages.value
       .slice(0, -1)
       .filter((m) => m.role === 'user' || m.role === 'assistant')
       .map((m) => ({ role: m.role, content: m.content }))
-    // 若已有生成内容，把当前 markdown 作为上下文交给模型继续修改。
+    // 把当前 markdown 作为上下文，便于模型基于已有内容继续修改。
     if (markdown.value.trim()) {
       history.push({ role: 'assistant', content: markdown.value })
     }
@@ -72,9 +87,9 @@ async function send() {
     markdown.value = result.content
     messages.value.push({
       role: 'assistant',
-      content: `已按 ${ARTSKILLS_DISPLAY_NAME} 生成 Skill，可在右侧编辑框查看与修改。`,
+      content: `已按 ${ARTSKILLS_DISPLAY_NAME} 生成 Skill，可在右侧编辑、应用或下载。`,
     })
-    await nextTick()
+    rightTab.value = 'editor'
   } catch (e) {
     messages.value.push({
       role: 'assistant',
@@ -82,6 +97,7 @@ async function send() {
     })
   } finally {
     isGenerating.value = false
+    scrollToBottom()
   }
 }
 
@@ -103,10 +119,8 @@ function applyAsActiveSkill() {
   applied.value = true
   setTimeout(() => (applied.value = false), 2000)
 }
-const applied = ref(false)
 
 // —— 效果测试 ——
-const showTest = ref(false)
 const testType = ref<'image' | 'video'>('image')
 const testPrompt = ref('')
 const imageModelId = imageModelModules[0]?.id || ''
@@ -122,652 +136,739 @@ async function runTest() {
   if (testType.value === 'image') {
     await generate(text, 'text2image', imageModelId, undefined, '1:1', 6, false, markdown.value || null)
   } else {
-    await generate(text, 'text2video', videoModelId, undefined, '16:9', 5, false, markdown.value || null)
+    await generate(text, 'text2video', videoModelId, undefined, '16:9', 6, false, markdown.value || null)
   }
 }
-
 </script>
 
 <template>
-  <div class="skill-create">
-    <StudioIsland tone="light" />
-    <header class="sc-header">
-      <div class="sc-title-block">
-        <span class="sc-title-kicker">Skill Studio</span>
-        <h1>创作 Skill</h1>
-      </div>
-      <div class="sc-model">当前模型：{{ ARTSKILLS_DISPLAY_NAME }}</div>
-    </header>
+  <div class="studio-page skill-create" :style="{ '--studio-accent': accent }">
+    <StudioIsland />
 
-    <!-- 模版例子专区 -->
-    <section class="sc-templates">
-      <span class="sc-templates-label">模版例子</span>
-      <div class="sc-templates-list">
-        <button
-          v-for="tpl in templates"
-          :key="tpl.title"
-          class="sc-template"
-          @click="useTemplate(tpl.prompt)"
-        >
-          {{ tpl.title }}
-        </button>
-      </div>
-    </section>
+    <StudioHeader
+      kicker="Skill Studio"
+      title="创作 Skill"
+      subtitle="一句话生成标准化 Skill 文档，可编辑、可应用到生成、可下载复用"
+      :accent="'#a78bfa'"
+    >
+      <template #actions>
+        <span class="studio-chip model-chip">
+          <span class="model-dot" aria-hidden="true" />
+          {{ ARTSKILLS_DISPLAY_NAME }}
+        </span>
+      </template>
+    </StudioHeader>
 
-    <div class="sc-body">
-      <!-- 左：对话框 -->
-      <section class="sc-chat">
-        <div class="sc-messages">
-          <p v-if="!messages.length" class="sc-empty">
-            在下方输入一句话，例如：“帮我创作一个影视风格的 skill”，即可生成标准化 Skill 文件。
-          </p>
-          <div
-            v-for="(msg, i) in messages"
-            :key="i"
-            class="sc-msg"
-            :class="msg.role"
+    <main class="skill-main">
+      <!-- 灵感模板 -->
+      <section class="template-strip" aria-label="模版例子">
+        <span class="template-strip-label">灵感模板</span>
+        <div class="template-strip-list studio-scroll">
+          <button
+            v-for="tpl in templates"
+            :key="tpl.title"
+            class="template-chip"
+            type="button"
+            @click="useTemplate(tpl.prompt)"
           >
-            <span class="sc-msg-role">{{ msg.role === 'user' ? '你' : ARTSKILLS_DISPLAY_NAME }}</span>
-            <p>{{ msg.content }}</p>
-          </div>
-          <div v-if="isGenerating" class="sc-msg assistant">
-            <span class="sc-msg-role">{{ ARTSKILLS_DISPLAY_NAME }}</span>
-            <p>正在生成 Skill…</p>
-          </div>
-        </div>
-        <div class="sc-input">
-          <div class="sc-composer">
-            <textarea
-              v-model="input"
-              rows="2"
-              placeholder="描述你想要的 skill，例如：帮我创作一个影视风格的 skill"
-              @keydown.enter.exact.prevent="send"
-            ></textarea>
-            <div class="sc-composer-footer">
-              <span class="sc-composer-hint">Enter 发送 · Shift + Enter 换行</span>
-              <button class="sc-send" :disabled="isGenerating || !input.trim()" @click="send">
-                <span>{{ isGenerating ? '生成中…' : '发送' }}</span>
-                <span class="sc-send-icon">↑</span>
-              </button>
-            </div>
-          </div>
+            {{ tpl.title }}
+          </button>
         </div>
       </section>
 
-      <!-- 右：Markdown 编辑框 -->
-      <section class="sc-editor">
-        <div class="sc-editor-toolbar">
-          <span class="sc-editor-title">Skill 内容（可编辑）</span>
-          <div class="sc-editor-actions">
-            <button :disabled="!markdown.trim()" @click="applyAsActiveSkill">
-              {{ applied ? '已应用 ✓' : '应用到生成' }}
-            </button>
-            <button :disabled="!markdown.trim()" @click="downloadSkill">下载 .md</button>
-          </div>
-        </div>
-        <textarea
-          v-model="markdown"
-          class="sc-md"
-          placeholder="生成后的 Skill 内容将显示在这里，支持自行修改。"
-        />
-
-        <!-- 效果测试 -->
-        <div class="sc-test">
-          <button class="sc-test-toggle" @click="showTest = !showTest">
-            效果测试 {{ showTest ? '▲' : '▼' }}
-          </button>
-          <div v-if="showTest" class="sc-test-panel">
-            <div class="sc-test-type">
-              <label><input v-model="testType" type="radio" value="image" /> 图片测试</label>
-              <label><input v-model="testType" type="radio" value="video" /> 视频测试</label>
+      <div class="workbench">
+        <!-- 左：需求对话 -->
+        <section class="studio-panel chat-panel">
+          <header class="studio-panel-head">
+            <div class="studio-panel-headings">
+              <span class="studio-kicker">Conversation</span>
+              <h2 class="studio-panel-title">需求对话</h2>
             </div>
-            <div class="sc-test-input">
-              <input
-                v-model="testPrompt"
-                placeholder="输入测试提示词，将携带当前 Skill 规范生成"
-                @keydown.enter.prevent="runTest"
-              />
-              <button :disabled="chatStore.isGenerating || !testPrompt.trim()" @click="runTest">
-                {{ chatStore.isGenerating ? '生成中…' : '开始测试' }}
+            <span class="studio-panel-meta">{{ messages.length }} 条</span>
+          </header>
+
+          <div ref="messagesRef" class="messages studio-scroll">
+            <div v-if="!messages.length" class="chat-empty">
+              <span class="chat-empty-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3.4 13.8 8.6 19 10.4 13.8 12.2 12 17.4 10.2 12.2 5 10.4 10.2 8.6z" />
+                  <path d="M18.4 15.6v3.2M16.8 17.2h3.2" />
+                </svg>
+              </span>
+              <h3>描述你想要的创作规范</h3>
+              <p>说明题材、风格、镜头和输出要求，模型会整理成结构化 Skill 文档。</p>
+              <div class="chat-empty-actions">
+                <button
+                  v-for="tpl in quickTemplates"
+                  :key="tpl.title"
+                  type="button"
+                  class="quick-card"
+                  @click="useTemplate(tpl.prompt)"
+                >
+                  <span class="quick-card-title">{{ tpl.title }}</span>
+                  <span class="quick-card-desc">{{ tpl.prompt }}</span>
+                </button>
+              </div>
+            </div>
+
+            <div v-for="(msg, i) in messages" :key="i" class="msg" :class="msg.role">
+              <span class="msg-role">{{ msg.role === 'user' ? '你' : ARTSKILLS_DISPLAY_NAME }}</span>
+              <p class="msg-content">{{ msg.content }}</p>
+            </div>
+
+            <div v-if="isGenerating" class="msg assistant">
+              <span class="msg-role">{{ ARTSKILLS_DISPLAY_NAME }}</span>
+              <p class="msg-content typing">
+                <span class="typing-dot" />
+                <span class="typing-dot" />
+                <span class="typing-dot" />
+              </p>
+            </div>
+          </div>
+
+          <div class="composer">
+            <textarea
+              v-model="input"
+              class="studio-field composer-input"
+              rows="3"
+              placeholder="描述你的需求，例如：帮我创作一个影视风格的 skill…"
+              @keydown.enter.exact.prevent="send"
+            />
+            <div class="composer-foot">
+              <span class="composer-hint">Enter 发送 · Shift + Enter 换行</span>
+              <button
+                class="studio-btn studio-btn--primary composer-send"
+                type="button"
+                :disabled="isGenerating || !input.trim()"
+                @click="send"
+              >
+                <span>{{ isGenerating ? '生成中…' : '发送' }}</span>
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
               </button>
             </div>
-            <div class="sc-test-results">
+          </div>
+        </section>
+
+        <!-- 右：文档与测试 -->
+        <section class="studio-panel doc-panel">
+          <header class="studio-panel-head">
+            <div class="studio-panel-headings">
+              <span class="studio-kicker">Skill Document</span>
+              <h2 class="studio-panel-title">{{ skillName }}</h2>
+            </div>
+            <div class="doc-tabs" role="tablist" aria-label="文档视图">
+              <button
+                type="button"
+                class="doc-tab"
+                :class="{ active: rightTab === 'editor' }"
+                role="tab"
+                :aria-selected="rightTab === 'editor'"
+                @click="rightTab = 'editor'"
+              >
+                Skill 内容
+              </button>
+              <button
+                type="button"
+                class="doc-tab"
+                :class="{ active: rightTab === 'test' }"
+                role="tab"
+                :aria-selected="rightTab === 'test'"
+                @click="rightTab = 'test'"
+              >
+                效果测试
+              </button>
+            </div>
+          </header>
+
+          <div class="doc-toolbar">
+            <span class="doc-meta">
+              <span class="doc-meta-dot" :class="{ ready: !!charCount }" aria-hidden="true" />
+              {{ charCount ? `${charCount} 字符 · Markdown` : '还没有内容' }}
+            </span>
+            <div class="doc-actions">
+              <button class="studio-btn" type="button" :disabled="!markdown.trim()" @click="applyAsActiveSkill">
+                {{ applied ? '已应用 ✓' : '应用为当前 Skill' }}
+              </button>
+              <button class="studio-btn" type="button" :disabled="!markdown.trim()" @click="downloadSkill">
+                下载 .md
+              </button>
+            </div>
+          </div>
+
+          <div v-show="rightTab === 'editor'" class="doc-body">
+            <textarea
+              v-model="markdown"
+              class="studio-field doc-editor studio-scroll"
+              placeholder="生成的 Skill 内容会显示在这里，支持直接修改。"
+              spellcheck="false"
+            />
+          </div>
+
+          <div v-show="rightTab === 'test'" class="test-body">
+            <div class="test-controls">
+              <div class="test-type" role="tablist" aria-label="测试类型">
+                <button
+                  type="button"
+                  class="test-type-btn"
+                  :class="{ active: testType === 'image' }"
+                  @click="testType = 'image'"
+                >
+                  图片测试
+                </button>
+                <button
+                  type="button"
+                  class="test-type-btn"
+                  :class="{ active: testType === 'video' }"
+                  @click="testType = 'video'"
+                >
+                  视频测试
+                </button>
+              </div>
+              <div class="test-input-row">
+                <input
+                  v-model="testPrompt"
+                  class="studio-field test-input"
+                  placeholder="输入测试提示词，会携带当前 Skill 规范一起生成"
+                  @keydown.enter.prevent="runTest"
+                />
+                <button
+                  class="studio-btn studio-btn--primary"
+                  type="button"
+                  :disabled="chatStore.isGenerating || !testPrompt.trim()"
+                  @click="runTest"
+                >
+                  {{ chatStore.isGenerating ? '生成中…' : '开始测试' }}
+                </button>
+              </div>
+            </div>
+
+            <div class="test-results studio-scroll">
+              <p v-if="!testResults.length" class="test-empty">
+                测试结果会显示在这里。生成一次即可验证当前 Skill 的效果。
+              </p>
               <template v-for="msg in testResults" :key="msg.id">
                 <img
                   v-if="msg.generateResult?.type === 'image'"
                   :src="msg.generateResult.url"
-                  class="sc-test-media"
+                  class="test-media"
                   loading="lazy"
                   decoding="async"
+                  alt="测试结果"
                 />
                 <video
                   v-else-if="msg.generateResult?.type === 'video'"
                   :src="msg.generateResult.url"
-                  class="sc-test-media"
+                  class="test-media"
                   controls
                   preload="metadata"
                 />
               </template>
-              <p v-if="!testResults.length" class="sc-test-empty">测试结果会显示在这里。</p>
             </div>
           </div>
-        </div>
-      </section>
-    </div>
+        </section>
+      </div>
+    </main>
   </div>
 </template>
 
 <style scoped>
 .skill-create {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
   height: 100dvh;
-  color: var(--color-text);
-  /* 左侧悬浮岛胶囊预留通道 */
-  padding-left: 84px;
-  background:
-    radial-gradient(circle at 12% 0%, rgba(10, 132, 255, 0.10), transparent 30%),
-    radial-gradient(circle at 92% 4%, rgba(0, 0, 0, 0.05), transparent 26%),
-    linear-gradient(180deg, #fdfcf8 0%, #f6f4ef 52%, #f2f0eb 100%);
+  overflow: hidden;
 }
-.sc-header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 14px 24px;
-  border-bottom: 1px solid var(--color-border);
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-}
-.sc-title-block {
+
+.skill-main {
   display: flex;
   flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  padding: 0 28px 22px;
+}
+
+/* ---------- 灵感模板 ---------- */
+
+.template-strip {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 0 0 auto;
+  padding: 2px 2px 0;
+}
+
+.template-strip-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--studio-text-hint);
+}
+
+.template-strip-list {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 4px 2px 6px;
+}
+
+.template-chip {
+  flex: 0 0 auto;
+  padding: 7px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--studio-text-soft);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--transition-base),
+    border-color var(--transition-base),
+    color var(--transition-base),
+    transform var(--transition-base);
+}
+
+.template-chip:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--studio-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--studio-accent) 14%, transparent);
+  color: #fff;
+}
+
+/* ---------- 工作台 ---------- */
+
+.workbench {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(330px, 0.82fr) minmax(0, 1.18fr);
+  gap: 16px;
+  min-height: 0;
+}
+
+/* ---------- 对话面板 ---------- */
+
+.messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.chat-empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 0 8px;
+  text-align: center;
+}
+
+.chat-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--studio-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--studio-accent) 14%, transparent);
+  color: var(--studio-accent);
+}
+
+.chat-empty-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.chat-empty h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.chat-empty p {
+  max-width: 300px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--studio-text-hint);
+}
+
+.chat-empty-actions {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.quick-card {
+  display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 0;
-}
-.sc-title-kicker {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  opacity: 0.52;
-}
-.sc-header h1 {
-  font-size: 18px;
-  font-weight: 700;
-  margin: 0;
-  letter-spacing: -0.01em;
-}
-.sc-model {
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  padding: 7px 13px;
-  border-radius: 999px;
-  border: 1px solid var(--color-border);
-  background: rgba(255, 255, 255, 0.62);
-  white-space: nowrap;
-}
-.sc-templates {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 24px;
-  border-bottom: 1px solid var(--color-border);
-  background: rgba(255, 255, 255, 0.42);
-}
-.sc-templates-label {
-  font-size: 13px;
-  color: var(--color-text-hint);
-  white-space: nowrap;
-}
-.sc-templates-list {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.sc-template {
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid var(--color-border-strong);
-  color: var(--color-text-secondary);
-  padding: 7px 13px;
-  border-radius: 999px;
-  cursor: pointer;
-  font-size: 13px;
-  box-shadow: var(--color-shadow-soft);
-  transition: border-color var(--transition-base), color var(--transition-base), background var(--transition-base), transform var(--transition-base);
-}
-.sc-template:hover {
-  border-color: rgba(10, 132, 255, 0.40);
-  color: var(--color-accent-strong);
-  background: #ffffff;
-  transform: translateY(-1px);
-}
-.sc-body {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 380px 1fr;
-  min-height: 0;
-}
-.sc-chat {
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid var(--color-border);
-  min-height: 0;
-  background: rgba(255, 255, 255, 0.44);
-}
-.sc-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-}
-.sc-empty,
-.sc-test-empty {
-  color: var(--color-text-hint);
-  font-size: 13px;
-  line-height: 1.6;
-}
-.sc-msg {
-  margin-bottom: 14px;
-}
-.sc-msg-role {
-  font-size: 12px;
-  color: var(--color-text-hint);
-}
-.sc-msg p {
-  margin: 4px 0 0;
-  padding: 10px 13px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
-  background: var(--color-surface-strong);
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
-  line-height: 1.5;
-  white-space: pre-wrap;
-  box-shadow: var(--color-shadow-soft);
-}
-.sc-msg.user p {
-  background: var(--color-user-bubble);
-  border-color: transparent;
-  color: var(--color-text-inverse);
-}
-.sc-input {
-  padding: 12px 14px 14px;
-  border-top: 1px solid var(--color-border);
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-}
-.sc-composer {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  background: var(--color-surface-strong);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 16px;
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
-  transition: border-color var(--transition-base), box-shadow var(--transition-base);
-}
-.sc-composer:focus-within {
-  border-color: rgba(10, 132, 255, 0.48);
-  box-shadow: 0 0 0 4px var(--color-accent-soft);
-}
-.sc-composer textarea {
-  width: 100%;
-  flex: 1;
-  resize: none;
-  min-height: 58px;
-  max-height: 140px;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: var(--color-text);
-  padding: 2px;
-  font-family: inherit;
-  font-size: 14px;
-  line-height: 1.6;
-}
-.sc-composer-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.sc-composer-hint {
-  font-size: 12px;
-  color: var(--color-text-hint);
-}
-.sc-send {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  background: var(--color-accent);
-  border: none;
-  color: #fff;
-  border-radius: 12px;
-  padding: 8px 14px;
-  cursor: pointer;
-  font-weight: 600;
-  box-shadow: 0 10px 24px rgba(77, 101, 255, 0.2);
-  transition: background var(--transition-base), transform var(--transition-base), opacity var(--transition-base);
-}
-.sc-send:hover:not(:disabled) {
-  background: var(--color-accent-strong);
-  transform: translateY(-1px);
-}
-.sc-send:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.sc-send-icon {
-  display: inline-grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.2);
-  font-size: 14px;
-  line-height: 1;
-}
-.sc-editor {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  padding: 18px;
-}
-.sc-editor-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-.sc-editor-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--color-text);
-}
-.sc-editor-actions {
-  display: flex;
-  gap: 8px;
-}
-.sc-editor-actions button {
-  background: var(--color-surface-strong);
-  border: 1px solid var(--color-border-strong);
-  color: var(--color-text-secondary);
-  border-radius: 12px;
-  padding: 8px 13px;
-  cursor: pointer;
-  font-size: 13px;
-  box-shadow: var(--color-shadow-soft);
-  transition: border-color var(--transition-base), color var(--transition-base), background var(--transition-base), transform var(--transition-base);
-}
-.sc-editor-actions button:hover:not(:disabled) {
-  background: #ffffff;
-  border-color: rgba(10, 132, 255, 0.40);
-  color: var(--color-accent-strong);
-  transform: translateY(-1px);
-}
-.sc-editor-actions button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.sc-md {
-  flex: 1;
-  min-height: 200px;
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 14px;
-  color: var(--color-text);
-  padding: 14px;
-  font-family: 'SFMono-Regular', Menlo, monospace;
-  font-size: 13px;
-  line-height: 1.6;
-  resize: none;
-  box-shadow: var(--color-shadow-soft);
-  transition: border-color var(--transition-base), box-shadow var(--transition-base);
-}
-.sc-md:focus {
-  border-color: rgba(10, 132, 255, 0.48);
-  box-shadow: 0 0 0 4px var(--color-accent-soft);
-}
-.sc-test {
-  margin-top: 12px;
-}
-.sc-test-toggle {
-  background: var(--color-surface-strong);
-  border: 1px solid var(--color-border-strong);
-  color: var(--color-text-secondary);
-  border-radius: 12px;
-  padding: 10px 14px;
-  cursor: pointer;
-  width: 100%;
+  background: rgba(255, 255, 255, 0.035);
   text-align: left;
-  font-weight: 600;
-  box-shadow: var(--color-shadow-soft);
-  transition: border-color var(--transition-base), color var(--transition-base), background var(--transition-base);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background var(--transition-base),
+    border-color var(--transition-base);
 }
-.sc-test-toggle:hover {
-  background: #ffffff;
-  border-color: rgba(10, 132, 255, 0.40);
-  color: var(--color-accent-strong);
+
+.quick-card:hover {
+  border-color: color-mix(in srgb, var(--studio-accent) 38%, transparent);
+  background: color-mix(in srgb, var(--studio-accent) 10%, transparent);
 }
-.sc-test-panel {
-  border: 1px solid var(--color-border);
-  border-top: none;
-  border-radius: 0 0 12px 12px;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.58);
+
+.quick-card-title {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.88);
 }
-.sc-test-type {
+
+.quick-card-desc {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--studio-text-hint);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.msg {
   display: flex;
-  gap: 16px;
-  margin-bottom: 10px;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.msg-role {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--studio-text-hint);
+}
+
+.msg-content {
+  padding: 10px 14px;
+  border-radius: 14px;
   font-size: 13px;
-  color: var(--color-text-secondary);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
-.sc-test-type label {
+
+.msg.user {
+  align-items: flex-end;
+}
+
+.msg.user .msg-content {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.08));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.msg.assistant .msg-content {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--studio-text-soft);
+}
+
+.typing {
   display: inline-flex;
+  gap: 4px;
   align-items: center;
-  gap: 6px;
-  cursor: pointer;
 }
-.sc-test-input {
+
+.typing-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--studio-accent);
+  animation: typing 1.1s infinite ease-in-out;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes typing {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+.composer {
+  flex: 0 0 auto;
+  padding: 12px 14px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.composer-input {
+  padding: 11px 13px;
+  font-size: 13px;
+  line-height: 1.6;
+  max-height: 132px;
+}
+
+.composer-foot {
   display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
 }
-.sc-test-input input {
-  flex: 1;
-  background: var(--color-surface-strong);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 12px;
-  color: var(--color-text);
-  padding: 9px 11px;
-  box-shadow: var(--color-shadow-soft);
-  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+
+.composer-hint {
+  font-size: 11px;
+  color: var(--studio-text-hint);
 }
-.sc-test-input input:focus {
-  border-color: rgba(10, 132, 255, 0.48);
-  box-shadow: 0 0 0 4px var(--color-accent-soft);
-}
-.sc-test-input button {
-  background: var(--color-accent);
-  border: none;
-  color: #fff;
-  border-radius: 12px;
+
+.composer-send {
+  min-height: 36px;
   padding: 0 16px;
-  cursor: pointer;
-  box-shadow: 0 10px 24px rgba(77, 101, 255, 0.2);
-  transition: background var(--transition-base), transform var(--transition-base), opacity var(--transition-base);
-}
-.sc-test-input button:hover:not(:disabled) {
-  background: var(--color-accent-strong);
-  transform: translateY(-1px);
-}
-.sc-test-input button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.sc-test-results {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.sc-test-media {
-  max-width: 160px;
-  max-height: 160px;
-  border-radius: 12px;
-  border: 1px solid var(--color-border-strong);
-  object-fit: cover;
-  background: #fff;
-  box-shadow: var(--color-shadow-soft);
-}
-.sc-composer textarea::placeholder,
-.sc-md::placeholder,
-.sc-test-input input::placeholder {
-  color: var(--color-text-hint);
 }
 
-.skill-create {
-  --color-text: rgba(255, 255, 255, 0.92);
-  --color-text-secondary: rgba(255, 255, 255, 0.68);
-  --color-text-hint: rgba(255, 255, 255, 0.46);
-  --color-text-inverse: #0a0a0c;
-  --color-surface-strong: #1c1f26;
-  --color-border: rgba(255, 255, 255, 0.10);
-  --color-border-strong: rgba(255, 255, 255, 0.16);
-  --color-accent: #3b82f6;
-  --color-accent-strong: #8fb0ff;
-  --color-accent-soft: rgba(92, 132, 255, 0.14);
-  --color-user-bubble: linear-gradient(135deg, #f7f7f2 0%, #d9dce3 100%);
-  --color-shadow-soft: 0 14px 40px rgba(0, 0, 0, 0.28);
-  color: var(--color-text);
-  background:
-    radial-gradient(circle at 12% 0%, rgba(92, 132, 255, 0.18), transparent 30%),
-    radial-gradient(circle at 92% 4%, rgba(124, 92, 255, 0.14), transparent 26%),
-    linear-gradient(180deg, #070707 0%, #0b0d12 52%, #111318 100%);
+.composer-send svg {
+  width: 15px;
+  height: 15px;
 }
 
-.sc-header,
-.sc-input {
-  background: rgba(10, 10, 12, 0.82);
+/* ---------- 文档面板 ---------- */
+
+.doc-panel {
+  overflow: hidden;
 }
 
-.sc-templates,
-.sc-chat {
+.doc-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.04);
 }
 
-.sc-template,
-.sc-composer,
-.sc-editor-actions button,
-.sc-md,
-.sc-test-toggle,
-.sc-test-panel,
-.sc-test-input input {
-  background: #1c1f26;
-  border-color: #2b3342;
-  color: var(--color-text);
-  box-shadow: var(--color-shadow-soft);
+.doc-tab {
+  padding: 6px 13px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--studio-text-hint);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--transition-base),
+    color var(--transition-base);
 }
 
-.sc-msg p {
-  background: #151923;
-  border-color: #2b3342;
+.doc-tab:hover {
+  color: rgba(255, 255, 255, 0.82);
 }
 
-.sc-template:hover,
-.sc-editor-actions button:hover:not(:disabled),
-.sc-test-toggle:hover {
-  background: #242b38;
-  border-color: rgba(92, 132, 255, 0.48);
-  color: var(--color-accent-strong);
-}
-
-.sc-send,
-.sc-test-input button {
-  background: linear-gradient(135deg, #3b82f6 0%, #7c5cff 100%);
+.doc-tab.active {
+  background: color-mix(in srgb, var(--studio-accent) 20%, transparent);
   color: #fff;
 }
 
-.sc-send:hover:not(:disabled),
-.sc-test-input button:hover:not(:disabled) {
-  background: linear-gradient(135deg, #5b9cff 0%, #8d76ff 100%);
+.doc-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.sc-composer:focus-within,
-.sc-md:focus,
-.sc-test-input input:focus {
-  border-color: rgba(92, 132, 255, 0.58);
-  box-shadow: 0 0 0 4px rgba(92, 132, 255, 0.14), var(--color-shadow-soft);
+.doc-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--studio-text-hint);
+  white-space: nowrap;
 }
 
-.sc-test-media {
-  background: #0d1016;
+.doc-meta-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
 }
 
-@media (max-width: 760px) {
+.doc-meta-dot.ready {
+  background: #4ade80;
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
+}
+
+.doc-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.doc-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding: 14px;
+}
+
+.doc-editor {
+  flex: 1;
+  min-height: 0;
+  padding: 16px 18px;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.75;
+}
+
+/* ---------- 效果测试 ---------- */
+
+.test-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.test-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.test-type {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.test-type-btn {
+  padding: 5px 13px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--studio-text-hint);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--transition-base),
+    color var(--transition-base);
+}
+
+.test-type-btn.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.test-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.test-input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 13px;
+  font-size: 12.5px;
+}
+
+.test-results {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  min-height: 0;
+  padding: 16px 18px;
+  overflow-y: auto;
+  align-content: start;
+}
+
+.test-empty {
+  grid-column: 1 / -1;
+  padding: 28px 0;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--studio-text-hint);
+}
+
+.test-media {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.24);
+  object-fit: cover;
+}
+
+/* ---------- 响应式 ---------- */
+
+@media (max-width: 1180px) {
+  .workbench {
+    grid-template-columns: minmax(300px, 0.9fr) minmax(0, 1.1fr);
+  }
+}
+
+@media (max-width: 980px) {
   .skill-create {
-    padding-left: 66px;
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
   }
 
-  .sc-header {
-    padding: 10px 14px;
-    gap: 10px;
+  .skill-main {
+    padding: 0 16px 20px;
   }
 
-  .sc-model {
-    display: none;
-  }
-
-  .sc-templates {
-    padding: 10px 14px;
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .sc-templates-list {
-    width: 100%;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    padding-bottom: 2px;
-  }
-
-  .sc-templates-list::-webkit-scrollbar {
-    display: none;
-  }
-
-  .sc-template {
-    flex: 0 0 auto;
-  }
-
-  .sc-body {
+  .workbench {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 42%) minmax(0, 1fr);
+    grid-auto-rows: minmax(0, auto);
   }
 
-  .sc-chat {
-    border-right: none;
-    border-bottom: 1px solid var(--color-border);
+  .chat-panel {
+    min-height: 460px;
   }
 
-  .sc-editor-toolbar {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .sc-editor-actions button {
-    padding: 6px 10px;
-    font-size: 12px;
-  }
-
-  .sc-md {
-    min-height: 140px;
+  .doc-panel {
+    min-height: 520px;
   }
 }
 </style>

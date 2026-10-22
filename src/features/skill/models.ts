@@ -11,9 +11,7 @@ export const ARTSKILLS_DISPLAY_NAME = 'ArtSkills-V1'
  * 与 PRD 保持一致：随机调用其中之一，或由设置手动指定。
  */
 export const ARTSKILLS_BACKEND_MODELS = [
-  'DeepSeek-V4-Pro-0813',
-  'Kimi-K3',
-  'MiniMax-M3',
+  'DeepSeek-V4.1-Flash-1017',
 ] as const
 
 export type ArtSkillsBackendModel = (typeof ARTSKILLS_BACKEND_MODELS)[number]

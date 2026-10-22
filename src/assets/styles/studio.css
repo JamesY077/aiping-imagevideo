@@ -1,0 +1,240 @@
+/* =========================================================================
+ * Studio 三个创作分区（Skill / 图片视频 / 配音）的统一视觉层
+ * 目标：同一套背景、面板、标题、控件语言，只有强调色随分区变化。
+ * ========================================================================= */
+
+:root {
+  --studio-accent-skill: #a78bfa;
+  --studio-accent-media: #38bdf8;
+  --studio-accent-voice: #fb923c;
+
+  --studio-gutter: 84px;
+  --studio-max-width: 1480px;
+
+  --studio-panel-bg: rgba(255, 255, 255, 0.045);
+  --studio-panel-bg-strong: rgba(255, 255, 255, 0.065);
+  --studio-panel-border: rgba(255, 255, 255, 0.085);
+  --studio-panel-radius: 24px;
+
+  --studio-text: rgba(255, 255, 255, 0.92);
+  --studio-text-soft: rgba(255, 255, 255, 0.62);
+  --studio-text-hint: rgba(255, 255, 255, 0.40);
+
+  --studio-field-bg: rgba(255, 255, 255, 0.05);
+  --studio-field-border: rgba(255, 255, 255, 0.10);
+}
+
+/* ---------- 页面底色 ---------- */
+
+.studio-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  padding-left: var(--studio-gutter);
+  color: var(--studio-text);
+  background:
+    radial-gradient(1200px 620px at 14% -8%, rgba(122, 92, 255, 0.18), transparent 62%),
+    radial-gradient(900px 520px at 92% 2%, rgba(56, 189, 248, 0.10), transparent 58%),
+    radial-gradient(900px 620px at 62% 108%, rgba(251, 146, 60, 0.07), transparent 60%),
+    linear-gradient(180deg, #07070b 0%, #08080d 46%, #0b0b12 100%);
+  isolation: isolate;
+  overflow-x: hidden;
+}
+
+.studio-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.028) 1px, transparent 1px);
+  background-size: 76px 76px;
+  mask-image: radial-gradient(circle at 50% 26%, #000 0 30%, transparent 76%);
+}
+
+.studio-page > header,
+.studio-page > main {
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 1100px) {
+  .studio-page {
+    --studio-gutter: 76px;
+  }
+}
+
+@media (max-width: 900px) {
+  .studio-page {
+    --studio-gutter: 68px;
+  }
+}
+
+@media (max-width: 640px) {
+  .studio-page {
+    --studio-gutter: 62px;
+  }
+}
+
+/* ---------- 面板 ---------- */
+
+.studio-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--studio-panel-border);
+  border-radius: var(--studio-panel-radius);
+  background: var(--studio-panel-bg);
+  box-shadow:
+    0 26px 70px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  backdrop-filter: blur(26px) saturate(140%);
+}
+
+.studio-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.studio-panel-headings {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.studio-kicker {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--studio-accent, #8b7dff) 78%, #ffffff 22%);
+}
+
+.studio-panel-title {
+  font-family: var(--font-family-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.studio-panel-meta {
+  font-size: 12px;
+  color: var(--studio-text-hint);
+  white-space: nowrap;
+}
+
+/* ---------- 通用控件 ---------- */
+
+.studio-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.78);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--transition-base),
+    border-color var(--transition-base),
+    color var(--transition-base),
+    transform var(--transition-base);
+}
+
+.studio-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.20);
+  color: #fff;
+}
+
+.studio-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.studio-btn--primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(226, 230, 240, 0.88));
+  color: #08080a;
+}
+
+.studio-btn--primary:hover:not(:disabled) {
+  background: #fff;
+  color: #08080a;
+}
+
+.studio-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--studio-text-soft);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.studio-field {
+  width: 100%;
+  border: 1px solid var(--studio-field-border);
+  border-radius: 16px;
+  background: var(--studio-field-bg);
+  color: var(--studio-text);
+  font: inherit;
+  resize: none;
+  transition:
+    border-color var(--transition-base),
+    background var(--transition-base),
+    box-shadow var(--transition-base);
+}
+
+.studio-field::placeholder {
+  color: var(--studio-text-hint);
+}
+
+.studio-field:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--studio-accent, #8b7dff) 55%, transparent);
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--studio-accent, #8b7dff) 16%, transparent);
+}
+
+/* ---------- 滚动条 ---------- */
+
+.studio-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.studio-scroll::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.studio-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.studio-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}

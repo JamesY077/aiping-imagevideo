@@ -2,33 +2,45 @@
   <div class="chat-page" :style="{ height: appHeight, '--app-height': appHeight }">
     <StudioIsland />
     <div class="workspace-shell single-session-layout">
-      <header class="top-nav">
-        <div class="brand-lockup">
-          <strong class="brand-title">
-            <img class="brand-title-logo" :src="assetUrl('/logo1.webp')" alt="" />
-            ArtRealm
-          </strong>
-        </div>
-
-        <div class="top-nav-actions">
-          <button class="canvas-entry-btn" type="button" @click="router.push('/canvas')">
-            <span class="canvas-entry-text">无限画布</span>
-            <span class="canvas-entry-new" aria-label="测试版功能">BETA</span>
-          </button>
-          <button class="sidebar-secondary-btn" type="button" @click="router.push('/settings')">
-            设置
-          </button>
-        </div>
-      </header>
+      <StudioHeader
+        kicker="Image & Video Studio"
+        title="图片视频生成"
+        subtitle="输入主体、风格、光线与构图，批量生成后逐条返回结果"
+        accent="#38bdf8"
+      />
 
 
       <main class="workspace-main">
         <section class="chat-stage">
           <div class="chat-area" ref="chatAreaRef">
             <div v-if="activeMessages.length === 0" class="empty-state">
-              <p class="empty-kicker">Simple Create · Agentic Visual Canvas</p>
-              <h1>把一句想法变成一张可交付视觉。</h1>
-              <p class="empty-copy">输入主体、风格、光线、构图和用途；系统会在这个简洁工作台里完成生成、查看、下载与再次迭代。</p>
+              <span class="empty-badge" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3.4 13.8 8.6 19 10.4 13.8 12.2 12 17.4 10.2 12.2 5 10.4 10.2 8.6z" />
+                  <path d="M18.4 15.6v3.2M16.8 17.2h3.2" />
+                </svg>
+              </span>
+              <p class="empty-kicker">Image &amp; Video Studio</p>
+              <h1>把一句想法，变成可交付的画面。</h1>
+              <p class="empty-copy">描述主体、风格、光线、构图和用途；生成、查看、下载与迭代都在这一块工作台里完成。</p>
+
+              <div class="quick-starts">
+                <button
+                  v-for="item in quickStarts"
+                  :key="item.title"
+                  class="quick-start"
+                  type="button"
+                  @click="applyQuickPrompt(item.prompt)"
+                >
+                  <span class="quick-start-head">
+                    <span class="quick-start-title">{{ item.title }}</span>
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </span>
+                  <span class="quick-start-desc">{{ item.desc }}</span>
+                </button>
+              </div>
             </div>
 
 
@@ -39,6 +51,27 @@
               @regenerate="handleRegenerate"
               @copy-prompt="handleCopyPrompt"
             />
+
+            <div v-if="!hasUserMessages" class="quick-start-block">
+              <p class="quick-start-label">试试这些起点</p>
+              <div class="quick-starts">
+                <button
+                  v-for="item in quickStarts"
+                  :key="item.title"
+                  class="quick-start"
+                  type="button"
+                  @click="applyQuickPrompt(item.prompt)"
+                >
+                  <span class="quick-start-head">
+                    <span class="quick-start-title">{{ item.title }}</span>
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </span>
+                  <span class="quick-start-desc">{{ item.desc }}</span>
+                </button>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -711,10 +744,11 @@
 
 <script setup lang="ts">
 import { ref, nextTick, onMounted, computed, watch, onBeforeUnmount } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import ChatBubble from '@/components/ChatBubble.vue'
 import ModelSelector from '@/components/ModelSelector.vue'
 import CameraMovementGuide from '@/components/CameraMovementGuide.vue'
+import StudioHeader from '@/components/StudioHeader.vue'
 import StudioIsland from '@/components/StudioIsland.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT } from '@/stores/settingsStore'
@@ -722,7 +756,6 @@ import { useGenerate } from '@/composables/useGenerate'
 import { useChatStore } from '@/stores/chatStore'
 import { useSkillStore } from '@/stores/skillStore'
 import { readSkillFile } from '@/features/skill/parse'
-import { assetUrl } from '@/utils/assets'
 
 import { polishPrompt } from '@/api/aiping'
 import {
@@ -751,7 +784,6 @@ import {
   validateUploadFileKind,
 } from '@/features/generate/fileFormats'
 
-const router = useRouter()
 const route = useRoute()
 const settingsStore = useSettingsStore()
 const chatStore = useChatStore()
@@ -819,6 +851,44 @@ const motionControlCharacterOrientation = ref<'image' | 'video'>('image')
 const referenceUrl = ref('')
 
 const inputText = ref('')
+
+// 空状态快捷示例：点击后直接填入提示词，不自动发送。
+const quickStarts = [
+  {
+    title: '产品主视觉',
+    desc: '磨砂玻璃香水瓶 · 柔光侧逆光 · 极简石台',
+    prompt:
+      '一只磨砂玻璃质感的香水瓶立在浅灰色石台上，柔和侧逆光，极简背景，高级产品主视觉，8K 细节。',
+  },
+  {
+    title: '电影感人像',
+    desc: '雨夜霓虹街头 · 浅景深 · 青橙色调',
+    prompt:
+      '电影感中景：雨夜霓虹街头，人物侧脸回望，浅景深，青橙色调，胶片颗粒，35mm 镜头。',
+  },
+  {
+    title: '场景概念',
+    desc: '未来城市空中花园 · 黄昏暖光',
+    prompt:
+      '未来城市空中花园概念场景，黄昏暖光穿过玻璃连廊，宏大远景，概念艺术风格，细腻光影。',
+  },
+  {
+    title: '视频运镜',
+    desc: '晨雾森林 · 缓慢推进镜头',
+    prompt:
+      '镜头缓慢向前推进，穿过晨雾中的森林，阳光穿透树叶形成丁达尔光束，电影级调色。',
+  },
+]
+
+function applyQuickPrompt(text: string) {
+  inputText.value = text
+  nextTick(() => {
+    const el = promptInputRef.value
+    if (!el) return
+    el.focus()
+    el.setSelectionRange(text.length, text.length)
+  })
+}
 type ImageMode = 'text2image' | 'image2image'
 type VideoMode = VideoGenerationMode
 
@@ -907,6 +977,7 @@ const hasPromptPolishModelConfigured = computed(() => !!settingsStore.promptPoli
 const polishDisabledReason = '请前往设置完成 AI 润色模型设置'
 
 const activeMessages = computed(() => chatStore.messages)
+const hasUserMessages = computed(() => chatStore.messages.some((m) => m.type === 'user'))
 const activeSessionGenerating = computed(() => chatStore.isGenerating)
 const modelCapability = computed(() => getModelCapability(settingsStore.selectedModel))
 const isViduVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'viduq3-fast')
@@ -4936,5 +5007,191 @@ async function handleRegenerate(message: Message) {
   .chat-page {
     padding-left: 62px;
   }
+}
+
+/* =========================================================================
+ * Studio 统一视觉 v2：与 Skill / 配音分区共用同一套背景与面板语言
+ * ========================================================================= */
+
+.chat-page {
+  --surface-glass: rgba(255, 255, 255, 0.045);
+  --surface-glass-strong: rgba(255, 255, 255, 0.07);
+  --surface-line: rgba(255, 255, 255, 0.085);
+  --surface-shadow-soft: 0 26px 70px rgba(0, 0, 0, 0.38);
+  background:
+    radial-gradient(1200px 620px at 14% -8%, rgba(122, 92, 255, 0.18), transparent 62%),
+    radial-gradient(900px 520px at 92% 2%, rgba(56, 189, 248, 0.10), transparent 58%),
+    radial-gradient(900px 620px at 62% 108%, rgba(251, 146, 60, 0.07), transparent 60%),
+    linear-gradient(180deg, #07070b 0%, #08080d 46%, #0b0b12 100%);
+}
+
+.chat-page::before {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.028) 1px, transparent 1px);
+  background-size: 76px 76px;
+  mask-image: radial-gradient(circle at 50% 26%, #000 0 30%, transparent 76%);
+}
+
+.workspace-shell,
+.single-session-layout {
+  width: min(100%, 1480px);
+}
+
+.chat-stage {
+  border-radius: 26px;
+}
+
+/* ---------- 空状态 ---------- */
+
+.empty-state {
+  display: flex;
+  width: min(100%, 760px);
+  flex-direction: column;
+  align-items: center;
+  margin: clamp(18px, 4vh, 40px) auto 0;
+  text-align: center;
+}
+
+.empty-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(56, 189, 248, 0.32);
+  border-radius: 16px;
+  background: rgba(56, 189, 248, 0.14);
+  color: #7dd3fc;
+}
+
+.empty-badge svg {
+  width: 22px;
+  height: 22px;
+}
+
+.empty-state .empty-kicker {
+  color: rgba(125, 211, 252, 0.82);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.empty-state h1 {
+  max-width: 20ch;
+  margin: 12px auto 0;
+  font-size: clamp(30px, 3.6vw, 46px);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.empty-copy {
+  max-width: 540px;
+  margin: 14px auto 0;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.quick-starts {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.quick-start-block {
+  width: 100%;
+  margin-top: 18px;
+}
+
+.quick-start-label {
+  margin-bottom: 10px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.quick-start-block .quick-starts {
+  margin-top: 0;
+}
+
+.quick-start {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    transform 180ms ease;
+}
+
+.quick-start:hover {
+  transform: translateY(-1px);
+  border-color: rgba(56, 189, 248, 0.38);
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.quick-start-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.quick-start-title {
+  font-size: 13px;
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.quick-start-head svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.quick-start-desc {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+@media (max-width: 780px) {
+  .quick-starts {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- 参数台 ---------- */
+
+.composer-console {
+  border-color: rgba(255, 255, 255, 0.10);
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow:
+    0 26px 70px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.send-btn.ready {
+  background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%);
+  color: #04121c;
 }
 </style>
