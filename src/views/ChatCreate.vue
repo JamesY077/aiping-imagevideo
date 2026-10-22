@@ -75,53 +75,54 @@
           </div>
         </section>
 
-        <section class="composer-dock" :class="{ 'ratio-open': showAspectRatioMenu, 'params-collapsed': !isComposerControlsOpen, 'mode-agent': composerMode === 'agent' }">
-          <div class="composer-tabs" role="tablist" aria-label="创作模式">
-            <button
-              class="composer-tab"
-              :class="{ 'is-active': composerMode === 'media' }"
-              type="button"
-              role="tab"
-              :aria-selected="composerMode === 'media'"
-              @click="composerMode = 'media'"
-            >
-              图片视频模式
-            </button>
-            <button
-              class="composer-tab"
-              :class="{ 'is-active': composerMode === 'agent' }"
-              type="button"
-              role="tab"
-              :aria-selected="composerMode === 'agent'"
-              @click="composerMode = 'agent'"
-            >
-              Agent 模式
-              <span class="composer-tab-badge">Beta</span>
-            </button>
+        <section class="composer-dock" :class="{ 'ratio-open': showAspectRatioMenu, 'mode-agent': composerMode === 'agent' }">
+          <div class="composer-bar">
+            <div class="composer-tabs" role="tablist" aria-label="创作模式">
+              <button
+                class="composer-tab"
+                :class="{ 'is-active': composerMode === 'media' }"
+                type="button"
+                role="tab"
+                :aria-selected="composerMode === 'media'"
+                @click="composerMode = 'media'"
+              >
+                图片视频模式
+              </button>
+              <button
+                class="composer-tab"
+                :class="{ 'is-active': composerMode === 'agent' }"
+                type="button"
+                role="tab"
+                :aria-selected="composerMode === 'agent'"
+                @click="composerMode = 'agent'"
+              >
+                Agent 模式
+                <span class="composer-tab-badge">Beta</span>
+              </button>
+            </div>
+            <span class="composer-bar-model" :title="`${selectedModelLabel} ${selectedVideoDurationLabel}`">
+              <span class="composer-bar-dot" aria-hidden="true" />
+              {{ selectedModelLabel }}
+              <span v-if="settingsStore.mediaType === 'video'" class="composer-bar-extra">{{ selectedVideoDurationLabel }}</span>
+            </span>
           </div>
 
-          <div class="composer-console" :class="{ open: isComposerControlsOpen, 'ratio-open': showAspectRatioMenu }">
-            <button
-              class="composer-summary"
-              type="button"
-              :aria-expanded="isComposerControlsOpen"
-              aria-controls="composer-control-panel"
-              @click="toggleComposerControls"
-            >
-              <span class="summary-kicker">Creative Console</span>
-              <span class="summary-chip summary-chip-strong">{{ mediaTypeLabel }}</span>
-              <span class="summary-chip">{{ selectedModelLabel }}</span>
-              <span class="summary-chip">{{ activeGenerateModeLabel }}</span>
-              <span class="summary-chip">{{ selectedAspectRatioOption.label }}</span>
-              <span v-if="settingsStore.mediaType === 'video'" class="summary-chip">{{ selectedVideoDurationLabel }}</span>
-              <span v-if="settingsStore.batchSize > 1" class="summary-chip">批量 ×{{ settingsStore.batchSize }}</span>
-              <span v-if="materialSummaryLabel" class="summary-chip" :class="{ attention: needsMaterialAttention }">{{ materialSummaryLabel }}</span>
-              <span v-if="skillStore.activeSkill" class="summary-chip summary-chip-skill">Skill：{{ skillStore.activeSkill.name }}</span>
-              <span class="summary-spacer" />
-              <span class="summary-toggle">{{ isComposerControlsOpen ? '收起参数' : '展开参数与素材' }}</span>
-            </button>
-
-            <div v-show="isComposerControlsOpen" id="composer-control-panel" class="composer-control-panel" :class="{ 'ratio-open': showAspectRatioMenu }">
+          <div class="composer-console" :class="{ 'ratio-open': showAspectRatioMenu }">
+            <div id="composer-control-panel" class="composer-control-panel" :class="{ 'ratio-open': showAspectRatioMenu }">
+              <div class="composer-section-head">
+                <span class="composer-section-title">参数设置</span>
+                <span class="composer-section-meta">
+                  <span class="composer-section-chip">{{ mediaTypeLabel }}</span>
+                  <span class="composer-section-chip">{{ activeGenerateModeLabel }}</span>
+                  <span
+                    v-if="materialSummaryLabel"
+                    class="composer-section-chip"
+                    :class="{ attention: needsMaterialAttention }"
+                  >
+                    {{ materialSummaryLabel }}
+                  </span>
+                </span>
+              </div>
               <div class="composer-meta-row composer-meta-row-top">
                 <div class="dock-pills dock-pills-primary">
               <div class="meta-pill meta-pill-type">
@@ -864,7 +865,6 @@ const motionControlImageInput = ref<HTMLInputElement | null>(null)
 const motionControlVideoInput = ref<HTMLInputElement | null>(null)
 const isPolishing = ref(false)
 const isComposerExpanded = ref(false)
-const isComposerControlsOpen = ref(true)
 /** 左栏分签：图片视频模式 / Agent 模式 */
 const composerMode = ref<'media' | 'agent'>('media')
 const COMPOSER_TEXTAREA_DEFAULT = 104
@@ -1232,10 +1232,6 @@ const materialSummaryLabel = computed(() => {
     if (videoMode.value === 'subjectReference2video') return uploadedFile.value ? '主体参考已添加' : '主体图待上传'
   }
   return uploadedFile.value ? `素材：${uploadedFile.value.name}` : '素材可选'
-})
-
-watch(needsMaterialAttention, (needsAttention) => {
-  if (needsAttention) isComposerControlsOpen.value = true
 })
 
 const inputPlaceholder = computed(() => {
@@ -1980,8 +1976,7 @@ async function toggleComposerExpanded() {
   const nextExpanded = !isComposerExpanded.value
   isComposerExpanded.value = nextExpanded
   if (nextExpanded && isMobileViewport()) {
-    // 移动端展开输入框时收起参数面板，保证输入区完整可见
-    isComposerControlsOpen.value = false
+    // 移动端展开输入框时使用更高的输入区
     composerTextareaHeight.value = COMPOSER_TEXTAREA_MOBILE_EXPANDED
   } else {
     composerTextareaHeight.value = nextExpanded
@@ -1994,15 +1989,6 @@ async function toggleComposerExpanded() {
   promptInputRef.value?.focus()
 }
 
-function toggleComposerControls() {
-  isComposerControlsOpen.value = !isComposerControlsOpen.value
-  if (isComposerControlsOpen.value && isMobileViewport() && isComposerExpanded.value) {
-    // 移动端展开参数面板时收起输入框，防止底部输入区被挤出屏幕
-    isComposerExpanded.value = false
-    composerTextareaHeight.value = COMPOSER_TEXTAREA_MOBILE
-  }
-}
-
 function scrollChatToBottom() {
   chatAreaRef.value?.scrollTo({ top: chatAreaRef.value.scrollHeight, behavior: 'smooth' })
 }
@@ -2011,7 +1997,6 @@ onMounted(async () => {
   settingsStore.loadFromStorage()
   sessionStorage.removeItem('artrealm_landing_pending_prompt')
   if (isMobileViewport()) {
-    isComposerControlsOpen.value = false
     composerTextareaHeight.value = COMPOSER_TEXTAREA_MOBILE
   }
   syncAppHeight()
@@ -5240,13 +5225,23 @@ async function handleRegenerate(message: Message) {
  * v4 分签 + Agent 面板（所有宽度通用）
  * ========================================================================= */
 
+.composer-bar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 54px;
+  padding-right: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.005));
+}
+
 .composer-tabs {
   display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  padding: 10px 12px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-  background: rgba(255, 255, 255, 0.015);
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
 }
 
 .composer-tab {
@@ -5254,39 +5249,113 @@ async function handleRegenerate(message: Message) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px;
-  border: 1px solid transparent;
-  border-bottom: 0;
-  border-radius: 11px 11px 0 0;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 0;
   background: transparent;
   color: rgba(255, 255, 255, 0.5);
   font-size: 12px;
   font-weight: 600;
   line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
   transition: background 0.16s ease, color 0.16s ease;
 }
 
 .composer-tab:hover {
-  color: rgba(255, 255, 255, 0.84);
+  color: rgba(255, 255, 255, 0.86);
   background: rgba(255, 255, 255, 0.04);
 }
 
 .composer-tab.is-active {
   color: #fff;
-  background: rgba(255, 255, 255, 0.075);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(56, 189, 248, 0.08);
 }
 
 .composer-tab.is-active::after {
   content: '';
   position: absolute;
-  right: 8px;
-  bottom: -1px;
-  left: 8px;
+  right: 12px;
+  bottom: 0;
+  left: 12px;
   height: 2px;
-  border-radius: 2px;
+  border-radius: 2px 2px 0 0;
   background: linear-gradient(90deg, #7dd3fc, #38bdf8);
+}
+
+.composer-bar-model {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-self: center;
+  align-items: center;
+  gap: 7px;
+  max-width: 46%;
+  padding: 5px 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.composer-bar-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.14);
+}
+
+.composer-bar-extra {
+  padding-left: 7px;
+  margin-left: 1px;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.composer-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 12px;
+}
+
+.composer-section-title {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.composer-section-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.composer-section-chip {
+  padding: 2px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.composer-section-chip.attention {
+  border-color: rgba(251, 191, 36, 0.32);
+  background: rgba(251, 191, 36, 0.12);
+  color: #fcd34d;
 }
 
 .composer-tab-badge {
@@ -5389,26 +5458,22 @@ async function handleRegenerate(message: Message) {
 }
 
 @media (max-width: 900px) {
-  .composer-tabs {
-    gap: 6px;
-    padding: 0;
-    border: 0;
-    background: transparent;
+  .composer-bar {
+    min-height: 44px;
+    padding-right: 10px;
   }
 
   .composer-tab {
-    padding: 7px 12px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.05);
+    padding: 0 12px;
+    font-size: 11.5px;
   }
 
-  .composer-tab.is-active {
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  .composer-tab.is-active::after {
+  .composer-bar-model {
     display: none;
+  }
+
+  .composer-section-head {
+    margin-bottom: 10px;
   }
 }
 
@@ -5424,15 +5489,14 @@ async function handleRegenerate(message: Message) {
     overflow: hidden;
   }
 
-  /* 左栏：贴底对齐，高度随内容增长（= 由下往上展开） */
+  /* 左栏：与右栏等高，输入框贴底，参数区吃掉剩余空间 */
   .composer-dock {
     order: -1;
     display: flex;
     flex-direction: column;
-    align-self: end;
-    height: auto;
+    align-self: stretch;
+    height: 100%;
     min-height: 0;
-    max-height: 100%;
     padding: 0;
     overflow: hidden;
     border: 1px solid rgba(255, 255, 255, 0.09);
@@ -5443,18 +5507,18 @@ async function handleRegenerate(message: Message) {
       inset 0 1px 0 rgba(255, 255, 255, 0.06);
   }
 
-  .composer-tabs {
+  .composer-bar {
     order: 0;
-    flex: 0 0 auto;
+    border-radius: 25px 25px 0 0;
   }
 
   .composer-console {
     display: flex;
     order: 1;
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     flex-direction: column;
+    justify-content: center;
     min-height: 0;
-    max-height: 100%;
     overflow: hidden;
     border: 0;
     border-radius: 0;
@@ -5462,40 +5526,20 @@ async function handleRegenerate(message: Message) {
     box-shadow: none;
   }
 
-  /* 顶部：参数摘要 + 折叠开关 */
-  .composer-summary {
-    display: flex;
-    order: 0;
-    flex: 0 0 auto;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 8px;
-    min-height: 52px;
-    padding: 10px 16px;
-    border: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 0;
-    background: transparent;
-  }
-
-  .composer-summary .summary-kicker {
-    letter-spacing: 0.16em;
-  }
-
-  .composer-summary .summary-toggle {
-    margin-left: auto;
-  }
-
-  /* 参数区：随内容增高并向上展开，过高时内部滚动 */
+  /* 参数区：内容自然高度，过高时内部滚动 */
   .composer-control-panel {
+    display: flex;
     order: 1;
     flex: 0 1 auto;
+    flex-direction: column;
     min-height: 0;
-    max-height: min(48vh, 100%);
-    padding: 14px 16px 16px;
+    padding: 16px;
     overflow-x: hidden;
     overflow-y: auto;
+  }
+
+  .composer-section-head {
+    flex: 0 0 auto;
   }
 
   .composer-meta-row,
@@ -5645,16 +5689,45 @@ async function handleRegenerate(message: Message) {
     flex: 0 0 auto;
   }
 
-  /* 发送框永远是左栏最后一块（参数从它上方展开） */
-  .input-shell {
-    order: 4;
+  /* Agent 模式：说明面板在剩余空间里垂直居中 */
+  .composer-dock.mode-agent .agent-panel {
     flex: 0 0 auto;
+    margin: auto 14px;
+  }
+
+  .composer-dock.mode-agent .agent-panel-note {
+    margin: 0;
+  }
+
+  /* Agent 模式：输入框保持常规高度，空间留给说明面板 */
+  .composer-dock.mode-agent .input-shell {
+    flex: 0 0 auto;
+    min-height: 0;
+    height: auto;
+  }
+
+  /* 发送框：左栏主输入区，高度有限度地吃掉剩余空间 */
+  .input-shell {
+    display: flex;
+    order: 4;
+    flex: 0 1 340px;
+    flex-direction: column;
+    min-height: 190px;
     margin: 10px 14px 14px;
     padding: 12px 14px;
     border: 1px solid rgba(255, 255, 255, 0.13);
     border-radius: 20px;
     background: rgba(255, 255, 255, 0.07);
     box-shadow: none;
+  }
+
+  .input-shell textarea {
+    flex: 1 1 auto;
+    min-height: 96px;
+  }
+
+  .composer-actions {
+    flex: 0 0 auto;
   }
 
   .input-shell:focus-within {
