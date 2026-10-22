@@ -25,6 +25,12 @@ const routes = [
     meta: { requiresNoAuth: true },
   },
   {
+    path: '/voice',
+    name: 'Voice',
+    component: () => import('@/views/VoiceCreate.vue'),
+    meta: { requiresNoAuth: true },
+  },
+  {
     path: '/canvas',
     name: 'InfiniteCanvas',
     component: () => import('@/views/InfiniteCanvas.vue'),

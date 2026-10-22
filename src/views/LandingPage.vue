@@ -1,32 +1,85 @@
 <template>
   <div class="home-page">
+    <div class="aurora aurora-a" aria-hidden="true" />
+    <div class="aurora aurora-b" aria-hidden="true" />
+    <div class="aurora aurora-c" aria-hidden="true" />
+    <div class="grain" aria-hidden="true" />
+
     <header class="home-header">
-      <button class="brand-logo" type="button" aria-label="ArtRealm 首页">
+      <button class="brand-logo" type="button" aria-label="ArtRealm 首页" @click="router.push('/')">
         <img class="brand-mark" :src="assetUrl('/logo1.webp')" alt="" />
         <span class="brand-name">ArtRealm</span>
       </button>
 
-      <div class="nav-spacer" aria-hidden="true" />
+      <nav class="home-nav" aria-label="主导航">
+        <a class="nav-link" href="#zones" @click.prevent="scrollToZones">创作分区</a>
+        <a class="nav-link" href="#inspiration" @click.prevent="scrollToInspiration">灵感模板</a>
+      </nav>
 
-      <button class="login-btn" type="button" @click="router.push('/setup')">Login</button>
+      <button class="login-btn" type="button" @click="router.push('/setup')">
+        {{ hasSession ? '创作工坊' : 'Login' }}
+      </button>
     </header>
 
     <main class="home-main">
-      <section class="hero-copy" aria-labelledby="home-title">
-        <p class="hero-kicker">AI Creative Engine</p>
-        <h1 id="home-title">一句话生成高质感视觉资产</h1>
-        <p class="hero-subtitle">输入创意，上传参考图，快速进入简易模式完成图片生成与灵感迭代。</p>
+      <section class="hero" aria-labelledby="home-title">
+        <p class="hero-kicker">AI Creative Studio</p>
+        <h1 id="home-title">
+          三个工作台，<br />
+          <span class="hero-gradient">一条完整的创作动线</span>
+        </h1>
+        <p class="hero-subtitle">
+          从一句灵感到成片，从画面到声音。选择你的创作分区，其余交给模型与画布。
+        </p>
+
+        <div class="typewriter-card" aria-label="创作灵感">
+          <span class="typewriter-label">Creative Prompt</span>
+          <p class="typewriter-line">{{ typewriterText }}<span class="typewriter-caret" aria-hidden="true" /></p>
+        </div>
       </section>
 
-      <div class="typewriter-card" aria-label="创作灵感">
-        <span class="typewriter-label">Creative Prompt</span>
-        <p class="typewriter-line">{{ typewriterText }}<span class="typewriter-caret" aria-hidden="true" /></p>
-      </div>
+      <section id="zones" class="zone-grid" aria-label="创作分区">
+        <article
+          v-for="zone in zones"
+          :key="zone.key"
+          class="zone-card"
+          :class="[`zone-${zone.key}`, { 'is-soon': zone.soon }]"
+          role="button"
+          tabindex="0"
+          :aria-label="zone.cta"
+          @click="enterZone(zone)"
+          @keydown.enter.prevent="enterZone(zone)"
+          @keydown.space.prevent="enterZone(zone)"
+        >
+          <span class="zone-index" aria-hidden="true">{{ zone.index }}</span>
+          <span class="zone-glow" aria-hidden="true" />
+
+          <span class="zone-head">
+            <span class="zone-icon" aria-hidden="true">{{ zone.icon }}</span>
+            <span v-if="zone.soon" class="zone-badge">即将上线</span>
+          </span>
+
+          <h2 class="zone-title">{{ zone.title }}</h2>
+          <p class="zone-desc">{{ zone.desc }}</p>
+
+          <div class="zone-tags">
+            <span v-for="tag in zone.tags" :key="tag" class="zone-tag">{{ tag }}</span>
+          </div>
+
+          <span class="zone-cta">
+            {{ zone.cta }}
+            <span class="zone-arrow" aria-hidden="true">→</span>
+          </span>
+        </article>
+      </section>
     </main>
 
-    <section class="template-section skill-template-section" aria-labelledby="skill-template-title">
+    <section id="inspiration" class="template-section skill-template-section" aria-labelledby="skill-template-title">
       <div class="template-head">
-        <h2 id="skill-template-title">Skill模板库</h2>
+        <div>
+          <p class="section-kicker">Reusable Workflow</p>
+          <h2 id="skill-template-title">Skill 模板库</h2>
+        </div>
       </div>
 
       <div class="template-grid">
@@ -59,7 +112,10 @@
 
     <section class="template-section prompt-template-section" aria-labelledby="template-title">
       <div class="template-head">
-        <h2 id="template-title">提示词模板库</h2>
+        <div>
+          <p class="section-kicker">Prompt Inspiration</p>
+          <h2 id="template-title">提示词模板库</h2>
+        </div>
       </div>
 
       <div class="template-grid">
@@ -90,6 +146,53 @@ import { assetUrl } from '@/utils/assets'
 const LANDING_PENDING_PROMPT_KEY = 'artrealm_landing_pending_prompt'
 
 const router = useRouter()
+const hasSession = ref(false)
+
+interface CreativeZone {
+  key: 'skill' | 'media' | 'voice'
+  index: string
+  icon: string
+  title: string
+  desc: string
+  tags: string[]
+  cta: string
+  target: 'skill' | 'studio' | 'voice'
+  soon?: boolean
+}
+
+const zones: CreativeZone[] = [
+  {
+    key: 'skill',
+    index: '01',
+    icon: '✦',
+    title: 'Skill 创作',
+    desc: '把一句话需求拆成可复用的创作规范，沉淀为标准 Skill，随时应用与修改。',
+    tags: ['模板库', '标准化 Markdown', '本地应用'],
+    cta: '进入 Skill 工作台',
+    target: 'skill',
+  },
+  {
+    key: 'media',
+    index: '02',
+    icon: '◈',
+    title: '图片视频生成',
+    desc: '文生图、图生视频、首尾帧与多模态参考，同一个工作台完成全部画面创作。',
+    tags: ['Seedream', 'Seedance', 'MiniMax H3', 'Kling'],
+    cta: '进入创作工坊',
+    target: 'studio',
+  },
+  {
+    key: 'voice',
+    index: '03',
+    icon: '♪',
+    title: '配音创作',
+    desc: '文本转语音与音色演绎，为画面配上情绪、语气与节奏。工作台正在搭建中。',
+    tags: ['语音合成', '音色库', '多角色对白'],
+    cta: '查看配音工作台',
+    target: 'voice',
+    soon: true,
+  },
+]
 
 const skillTemplates = [
   {
@@ -212,6 +315,28 @@ function runTypewriter() {
   typewriterTimer = window.setTimeout(runTypewriter, 26)
 }
 
+function scrollToZones() {
+  document.getElementById('zones')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function scrollToInspiration() {
+  document.getElementById('inspiration')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function enterZone(zone: CreativeZone) {
+  if (zone.target === 'voice') {
+    router.push('/voice')
+    return
+  }
+
+  if (!hasActiveApiSession()) {
+    router.push({ path: '/setup', query: { redirect: zone.target } })
+    return
+  }
+
+  router.push(zone.target === 'skill' ? '/skill' : '/studio')
+}
+
 function handleTemplateClick(item: { prompt: string }) {
   sessionStorage.setItem(
     LANDING_PENDING_PROMPT_KEY,
@@ -230,11 +355,15 @@ function handleTemplateClick(item: { prompt: string }) {
     return
   }
 
-  router.push({ path: '/setup', query: { redirect: 'landing' } })
+  router.push({ path: '/setup', query: { redirect: 'studio' } })
 }
 
 function handleSkillTemplateClick() {
-  router.push({ path: '/setup', query: { redirect: 'landing' } })
+  if (hasActiveApiSession()) {
+    router.push('/skill')
+    return
+  }
+  router.push({ path: '/setup', query: { redirect: 'skill' } })
 }
 
 function handleSkillDownloadClick(item: { fileUrl: string; fileName: string }) {
@@ -247,6 +376,7 @@ function handleSkillDownloadClick(item: { fileUrl: string; fileName: string }) {
 }
 
 onMounted(() => {
+  hasSession.value = hasActiveApiSession()
   runTypewriter()
 })
 
@@ -265,20 +395,65 @@ onBeforeUnmount(() => {
   overflow-x: hidden;
   color: #fff;
   background:
-    radial-gradient(circle at 50% 50%, rgba(8, 14, 30, 0.02), rgba(2, 4, 12, 0.34) 64%, rgba(0, 0, 0, 0.66) 100%),
-    url('https://artrealm-image-1314455608.cos.ap-beijing.myqcloud.com/site-assets/home-collage-bg.webp') center top / cover no-repeat;
+    radial-gradient(circle at 50% -10%, rgba(70, 60, 140, 0.30), transparent 55%),
+    linear-gradient(180deg, #05060b 0%, #06070d 42%, #04050a 100%);
   isolation: isolate;
 }
 
-.home-page::before {
-  content: '';
+.aurora {
+  position: absolute;
+  z-index: 0;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.55;
+  pointer-events: none;
+  animation: aurora-drift 18s ease-in-out infinite alternate;
+}
+
+.aurora-a {
+  top: -220px;
+  left: 8%;
+  width: 620px;
+  height: 520px;
+  background: radial-gradient(circle, rgba(139, 122, 255, 0.55), transparent 68%);
+}
+
+.aurora-b {
+  top: -140px;
+  right: 4%;
+  width: 560px;
+  height: 480px;
+  background: radial-gradient(circle, rgba(52, 211, 235, 0.38), transparent 66%);
+  animation-delay: -6s;
+}
+
+.aurora-c {
+  top: 420px;
+  left: 38%;
+  width: 680px;
+  height: 420px;
+  background: radial-gradient(circle, rgba(255, 148, 120, 0.20), transparent 70%);
+  animation-delay: -11s;
+}
+
+@keyframes aurora-drift {
+  from {
+    transform: translate3d(-24px, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(28px, 26px, 0) scale(1.08);
+  }
+}
+
+.grain {
   position: fixed;
   inset: 0;
-  z-index: -1;
+  z-index: 0;
   pointer-events: none;
-  background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.44) 0%, rgba(0, 0, 0, 0.10) 42%, rgba(0, 0, 0, 0.72) 100%),
-    radial-gradient(circle at 88% 23%, rgba(52, 229, 255, 0.16), transparent 0 22%);
+  opacity: 0.16;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.22) 0.5px, transparent 0.5px);
+  background-size: 3px 3px;
+  mix-blend-mode: overlay;
 }
 
 .home-header {
@@ -286,14 +461,13 @@ onBeforeUnmount(() => {
   top: 0;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 10;
+  z-index: 20;
   width: min(100% - 48px, 1280px);
   height: 86px;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 20px;
-  padding: 0;
 }
 
 .brand-logo,
@@ -311,7 +485,7 @@ onBeforeUnmount(() => {
   padding: 0;
   color: #fff;
   background: transparent;
-  text-shadow: 0 8px 28px rgba(0, 0, 0, 0.38);
+  cursor: pointer;
 }
 
 .brand-mark {
@@ -332,9 +506,30 @@ onBeforeUnmount(() => {
   letter-spacing: -0.06em;
 }
 
-.nav-spacer {
-  width: 1px;
-  height: 1px;
+.home-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(11, 13, 22, 0.55);
+  backdrop-filter: blur(18px);
+}
+
+.nav-link {
+  padding: 8px 16px;
+  border-radius: 999px;
+  color: rgba(226, 232, 246, 0.66);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: color var(--transition-base), background var(--transition-base);
+}
+
+.nav-link:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .login-btn {
@@ -348,8 +543,10 @@ onBeforeUnmount(() => {
   color: rgba(226, 234, 255, 0.96);
   font-size: 14px;
   font-weight: 700;
+  cursor: pointer;
   box-shadow: 0 16px 42px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(18px) saturate(140%);
+  transition: border-color var(--transition-base), background var(--transition-base);
 }
 
 .login-btn:hover {
@@ -360,69 +557,72 @@ onBeforeUnmount(() => {
 .home-main {
   position: relative;
   z-index: 2;
-  width: min(100% - 48px, 1120px);
-  min-height: auto;
+  width: min(100% - 48px, 1180px);
   margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 120px 0 28px;
+  padding: 150px 0 20px;
 }
 
-.hero-copy {
-  width: min(100%, 760px);
-  margin-bottom: 28px;
+.hero {
   text-align: center;
-  text-shadow: 0 12px 36px rgba(0, 0, 0, 0.42);
+  margin-bottom: 56px;
 }
 
 .hero-kicker {
-  margin-bottom: 12px;
-  background: linear-gradient(135deg, #f7e3c8 0%, #efb79a 52%, #e99aab 100%);
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, #cfc4ff 0%, #8ee6ff 55%, #ffc9a8 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.34em;
   text-transform: uppercase;
 }
 
-.hero-copy h1 {
-  color: rgba(255, 255, 255, 0.96);
+.hero h1 {
+  color: rgba(255, 255, 255, 0.97);
   font-family: var(--font-family-display);
-  font-size: clamp(34px, 5vw, 64px);
+  font-size: clamp(34px, 5.6vw, 68px);
   font-weight: 800;
-  line-height: 1.02;
-  letter-spacing: -0.07em;
+  line-height: 1.05;
+  letter-spacing: -0.055em;
+  text-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+}
+
+.hero-gradient {
+  background: linear-gradient(100deg, #ffffff 0%, #d9d2ff 38%, #8fe7ff 72%, #ffd6b8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .hero-subtitle {
   width: min(100%, 560px);
-  margin: 16px auto 0;
-  color: rgba(225, 240, 255, 0.72);
+  margin: 20px auto 0;
+  color: rgba(214, 224, 245, 0.62);
   font-size: 15px;
-  line-height: 1.7;
+  line-height: 1.75;
 }
 
 .typewriter-card {
   position: relative;
-  width: min(100%, 820px);
-  min-height: 96px;
+  width: min(100%, 760px);
+  min-height: 92px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 10px;
+  margin: 34px auto 0;
   padding: 20px 26px;
-  border: 1px solid rgba(255, 226, 204, 0.18);
+  border: 1px solid rgba(190, 205, 255, 0.16);
   border-radius: 24px;
   background:
-    linear-gradient(180deg, rgba(34, 25, 28, 0.88), rgba(12, 8, 10, 0.84)),
-    radial-gradient(circle at 78% 0%, rgba(255, 181, 138, 0.16), transparent 0 38%);
+    linear-gradient(180deg, rgba(19, 21, 35, 0.86), rgba(8, 9, 16, 0.82)),
+    radial-gradient(circle at 82% 0%, rgba(139, 122, 255, 0.20), transparent 0 42%);
   box-shadow:
     0 30px 90px rgba(0, 0, 0, 0.52),
-    inset 0 1px 0 rgba(255, 235, 220, 0.18);
+    inset 0 1px 0 rgba(255, 255, 255, 0.10);
   backdrop-filter: blur(22px) saturate(120%);
 }
 
@@ -433,21 +633,21 @@ onBeforeUnmount(() => {
   border-radius: inherit;
   pointer-events: none;
   background:
-    linear-gradient(135deg, rgba(255, 226, 200, 0.14), transparent 38%),
-    linear-gradient(315deg, rgba(255, 190, 170, 0.08), transparent 48%);
+    linear-gradient(135deg, rgba(160, 170, 255, 0.12), transparent 40%),
+    linear-gradient(315deg, rgba(120, 220, 255, 0.08), transparent 46%);
   mix-blend-mode: screen;
 }
 
 .typewriter-label {
-  background: linear-gradient(135deg, #f7e3c8 0%, #efb79a 48%, #e99aab 100%);
+  background: linear-gradient(135deg, #cfc4ff 0%, #8ee6ff 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   font-family: "Georgia", "Times New Roman", serif;
   font-style: italic;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
 }
 
@@ -456,12 +656,11 @@ onBeforeUnmount(() => {
   z-index: 1;
   min-height: 1.6em;
   margin: 0;
-  color: rgba(255, 245, 236, 0.92);
+  color: rgba(240, 244, 255, 0.9);
   font-family: var(--font-family-display);
   font-size: clamp(14px, 1.1vw, 17px);
   font-weight: 500;
   line-height: 1.6;
-  letter-spacing: 0.01em;
   text-align: center;
   white-space: pre-wrap;
 }
@@ -472,7 +671,7 @@ onBeforeUnmount(() => {
   height: 1.05em;
   margin-left: 3px;
   vertical-align: -0.14em;
-  background: linear-gradient(180deg, #ffe6c7, #efb79a);
+  background: linear-gradient(180deg, #cfc4ff, #8ee6ff);
   animation: caret-blink 1s steps(1, end) infinite;
 }
 
@@ -486,16 +685,194 @@ onBeforeUnmount(() => {
   }
 }
 
+/* ---------- 三大分区 ---------- */
+.zone-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  scroll-margin-top: 110px;
+}
+
+.zone-card {
+  --zone-accent: #b9a8ff;
+  --zone-accent-strong: #e6ddff;
+  --zone-glow: rgba(150, 120, 255, 0.34);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 336px;
+  padding: 26px 26px 24px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 28px;
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.075) 0%, rgba(255, 255, 255, 0.022) 46%, rgba(255, 255, 255, 0.05) 100%);
+  box-shadow:
+    0 26px 70px rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(20px) saturate(130%);
+  cursor: pointer;
+  transition:
+    transform var(--transition-slow),
+    border-color var(--transition-slow),
+    box-shadow var(--transition-slow);
+}
+
+.zone-media {
+  --zone-accent: #7fe0ff;
+  --zone-accent-strong: #d6f7ff;
+  --zone-glow: rgba(56, 189, 248, 0.34);
+}
+
+.zone-voice {
+  --zone-accent: #ffcf8a;
+  --zone-accent-strong: #ffe9c9;
+  --zone-glow: rgba(251, 146, 60, 0.30);
+}
+
+.zone-card:hover,
+.zone-card:focus-visible {
+  transform: translateY(-6px);
+  border-color: color-mix(in srgb, var(--zone-accent) 42%, transparent);
+  box-shadow:
+    0 40px 100px rgba(0, 0, 0, 0.46),
+    0 0 0 1px color-mix(in srgb, var(--zone-accent) 22%, transparent),
+    0 0 70px -12px var(--zone-glow);
+  outline: none;
+}
+
+.zone-glow {
+  position: absolute;
+  top: -60px;
+  right: -40px;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--zone-glow), transparent 68%);
+  filter: blur(28px);
+  opacity: 0.9;
+  pointer-events: none;
+  transition: opacity var(--transition-slow), transform var(--transition-slow);
+}
+
+.zone-card:hover .zone-glow {
+  opacity: 1;
+  transform: scale(1.12);
+}
+
+.zone-index {
+  position: absolute;
+  right: 20px;
+  bottom: 8px;
+  color: rgba(255, 255, 255, 0.05);
+  font-family: var(--font-family-display);
+  font-size: 96px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.08em;
+  pointer-events: none;
+}
+
+.zone-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.zone-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid color-mix(in srgb, var(--zone-accent) 34%, transparent);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--zone-accent) 12%, transparent);
+  color: var(--zone-accent-strong);
+  font-size: 20px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.zone-badge {
+  padding: 5px 11px;
+  border: 1px solid color-mix(in srgb, var(--zone-accent) 40%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--zone-accent) 12%, transparent);
+  color: var(--zone-accent-strong);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.zone-title {
+  margin-top: 4px;
+  color: #fff;
+  font-family: var(--font-family-display);
+  font-size: 25px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.zone-desc {
+  color: rgba(214, 224, 245, 0.60);
+  font-size: 13.5px;
+  line-height: 1.72;
+}
+
+.zone-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: auto;
+}
+
+.zone-tag {
+  padding: 5px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(220, 230, 250, 0.62);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.zone-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--zone-accent-strong);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.zone-arrow {
+  display: inline-block;
+  transition: transform var(--transition-base);
+}
+
+.zone-card:hover .zone-arrow {
+  transform: translateX(5px);
+}
+
+.zone-card.is-soon .zone-title {
+  color: rgba(255, 255, 255, 0.86);
+}
+
+/* ---------- 模板区 ---------- */
 .template-section {
   position: relative;
   z-index: 2;
-  width: min(100% - 40px, 1520px);
-  margin: -12px auto 64px;
-  padding: 20px 0 0;
+  width: min(100% - 48px, 1180px);
+  margin: 0 auto 64px;
+  padding-top: 20px;
 }
 
 .skill-template-section {
-  margin-bottom: 44px;
+  margin-top: 52px;
+  scroll-margin-top: 110px;
 }
 
 .prompt-template-section {
@@ -504,10 +881,19 @@ onBeforeUnmount(() => {
 
 .template-head {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 18px;
+}
+
+.section-kicker {
+  margin-bottom: 6px;
+  color: rgba(190, 200, 230, 0.42);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
 }
 
 .template-head h2 {
@@ -552,9 +938,10 @@ onBeforeUnmount(() => {
   aspect-ratio: 16 / 9;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 12px;
+  border-radius: 14px;
   background: #0a0a0d;
   box-shadow: 0 18px 54px rgba(0, 0, 0, 0.28);
+  transition: transform var(--transition-base), border-color var(--transition-base);
 }
 
 .template-visual::before,
@@ -671,12 +1058,30 @@ onBeforeUnmount(() => {
   }
 }
 
+@media (max-width: 960px) {
+  .home-nav {
+    display: none;
+  }
+
+  .zone-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .zone-card {
+    min-height: 284px;
+  }
+
+  .template-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 900px) {
   .home-main {
     width: min(100% - 28px, 1120px);
   }
 
-  .hero-copy h1 {
+  .hero h1 {
     font-size: clamp(30px, 8vw, 48px);
   }
 
@@ -688,16 +1093,13 @@ onBeforeUnmount(() => {
   .typewriter-line {
     font-size: 14px;
   }
-
-  .template-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 640px) {
   .home-header {
     height: 74px;
     width: min(100% - 32px, 1280px);
+    grid-template-columns: 1fr auto;
   }
 
   .brand-mark {
@@ -717,12 +1119,12 @@ onBeforeUnmount(() => {
   }
 
   .home-main {
-    padding-top: 96px;
-    padding-bottom: 42px;
+    padding-top: 112px;
   }
 
-  .hero-copy {
+  .hero {
     text-align: left;
+    margin-bottom: 36px;
   }
 
   .hero-subtitle {
@@ -738,8 +1140,19 @@ onBeforeUnmount(() => {
     font-size: 15px;
   }
 
+  .zone-card {
+    min-height: 262px;
+    padding: 22px;
+    border-radius: 24px;
+  }
+
+  .zone-index {
+    font-size: 76px;
+  }
+
   .template-section {
-    width: min(100% - 24px, 1520px);
+    width: min(100% - 24px, 1180px);
+    margin-bottom: 44px;
   }
 
   .template-head h2 {

@@ -63,13 +63,14 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import ApiKeyInput from '@/components/ApiKeyInput.vue'
 import { useApiStore } from '@/stores/apiStore'
 import { AIPING_PUBLIC_API_BASE_URL, isOpenAiBaseUrlFormat } from '@/api/config'
 import { assetUrl } from '@/utils/assets'
 
 const router = useRouter()
+const route = useRoute()
 const apiStore = useApiStore()
 const apiKey = ref('')
 const apiBaseUrl = ref(AIPING_PUBLIC_API_BASE_URL)
@@ -116,7 +117,9 @@ async function handleSubmit() {
         },
       })
     } else {
-      router.push('/studio')
+      // 首页分区入口会带上目标分区，登录后直接回到对应工作台。
+      const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
+      router.push(redirect === 'skill' ? '/skill' : '/studio')
     }
   } else {
     error.value = apiStore.connectionError || '连接失败，请检查 API Key 是否正确。'
