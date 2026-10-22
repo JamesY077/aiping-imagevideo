@@ -32,16 +32,15 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    path: '/canvas',
-    name: 'InfiniteCanvas',
-    component: () => import('@/views/InfiniteCanvas.vue'),
-    meta: { requiresAuth: true },
-  },
-  {
     path: '/skill',
     name: 'SkillCreate',
     component: () => import('@/views/SkillCreate.vue'),
     meta: { requiresAuth: true },
+  },
+  // 无限画布已下线，旧书签统一回到图片视频生成页。
+  {
+    path: '/canvas',
+    redirect: '/studio',
   },
   {
     path: '/settings',

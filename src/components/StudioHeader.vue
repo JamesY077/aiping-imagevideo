@@ -13,10 +13,6 @@
 
     <div class="studio-header-actions">
       <slot name="actions" />
-      <button class="studio-action" type="button" @click="router.push('/canvas')">
-        无限画布
-        <span class="studio-action-beta">BETA</span>
-      </button>
       <button class="studio-action" type="button" @click="router.push('/settings')">设置</button>
     </div>
   </header>
@@ -141,16 +137,6 @@ const router = useRouter()
   background: rgba(255, 255, 255, 0.09);
   border-color: rgba(255, 255, 255, 0.18);
   color: #fff;
-}
-
-.studio-action-beta {
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--studio-accent) 22%, transparent);
-  color: color-mix(in srgb, var(--studio-accent) 85%, #ffffff 15%);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
 }
 
 @media (max-width: 1080px) {

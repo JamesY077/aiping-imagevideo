@@ -75,7 +75,7 @@
           </div>
         </section>
 
-        <section class="composer-dock" :class="{ 'ratio-open': showAspectRatioMenu }">
+        <section class="composer-dock" :class="{ 'ratio-open': showAspectRatioMenu, 'params-collapsed': !isComposerControlsOpen }">
           <div class="composer-console" :class="{ open: isComposerControlsOpen, 'ratio-open': showAspectRatioMenu }">
             <button
               class="composer-summary"
@@ -824,10 +824,10 @@ const motionControlVideoInput = ref<HTMLInputElement | null>(null)
 const isPolishing = ref(false)
 const isComposerExpanded = ref(false)
 const isComposerControlsOpen = ref(true)
-const COMPOSER_TEXTAREA_DEFAULT = 196
+const COMPOSER_TEXTAREA_DEFAULT = 104
 const COMPOSER_TEXTAREA_MOBILE = 88
 const COMPOSER_TEXTAREA_MOBILE_EXPANDED = 160
-const COMPOSER_TEXTAREA_EXPANDED = 320
+const COMPOSER_TEXTAREA_EXPANDED = 220
 const composerTextareaHeight = ref(COMPOSER_TEXTAREA_DEFAULT)
 const isMobileViewport = () => window.matchMedia('(max-width: 900px)').matches
 // 移动端页面高度跟随可视视口（地址栏收缩、软键盘弹出时保持输入区可见）
@@ -1272,8 +1272,6 @@ function buildSessionWelcomeMessage(): Omit<Message, 'id' | 'timestamp'> {
       '🎬 视频生成：覆盖文生视频、图生视频、首尾帧生视频、主体参考视频与动作控制等多种玩法。',
       '📐 参数可调：可自由选择画面比例、单轮数量与视频时长，快速匹配不同创作场景。',
       '✨ AI 润色：一键把简短描述扩写成更专业的提示词（需先在「设置」中配置润色模型）。',
-      '🧩 无限画布（BETA）：想要多画面并行、串联复杂创作流程？点击左侧「无限画布」体验节点式创作。',
-
       '',
       '💡 上手很简单：选择创作类型与模型 → 写下你的创意描述 → 点击发送即可开始生成。',
     ].join('\n'),
@@ -5193,5 +5191,186 @@ async function handleRegenerate(message: Message) {
 .send-btn.ready {
   background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%);
   color: #04121c;
+}
+
+/* =========================================================================
+ * v3 布局（桌面端）：左栏＝参数台 + 发送框，右栏＝对话
+ * ========================================================================= */
+
+@media (min-width: 901px) {
+  .workspace-main {
+    grid-template-columns: minmax(360px, 0.82fr) minmax(0, 1.18fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 14px;
+    overflow: hidden;
+  }
+
+  /* 左栏：参数 + 发送 */
+  .composer-dock {
+    order: -1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    max-height: none;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 26px;
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow:
+      0 26px 70px rgba(0, 0, 0, 0.42),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .composer-console {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* 收起参数时左栏收缩为一条紧凑控制台，贴底对齐 */
+  .composer-dock.params-collapsed {
+    align-self: end;
+    height: auto;
+  }
+
+  /* 顶部：参数摘要 + 折叠开关 */
+  .composer-summary {
+    display: flex;
+    order: 0;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    min-height: 52px;
+    padding: 10px 16px;
+    border: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .composer-summary .summary-kicker {
+    letter-spacing: 0.16em;
+  }
+
+  .composer-summary .summary-toggle {
+    margin-left: auto;
+  }
+
+  /* 参数区：占满剩余高度，内部滚动 */
+  .composer-control-panel {
+    order: 1;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    padding: 14px 16px;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .composer-meta-row,
+  .dock-pills {
+    gap: 10px;
+  }
+
+  /* 参数胶囊排成两列网格，模型独占一行，宽度统一 */
+  .dock-pills {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .meta-pill {
+    flex: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 7px;
+    width: auto;
+    min-width: 0;
+    padding: 10px 12px;
+    border-radius: 14px;
+  }
+
+  .meta-pill-model,
+  .meta-pill-mode {
+    grid-column: 1 / -1;
+  }
+
+  .meta-pill .meta-pill-label {
+    flex: 0 0 auto;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    white-space: nowrap;
+  }
+
+  .meta-pill .model-slot,
+  .meta-pill .duration-selector,
+  .meta-pill .ratio-selector,
+  .meta-pill .media-switch,
+  .meta-pill .video-mode-switch {
+    width: 100%;
+  }
+
+  .meta-pill .switch-btn {
+    flex: 1 1 auto;
+  }
+
+  .camera-guide-row {
+    order: 2;
+    flex: 0 0 auto;
+    padding: 0 16px 6px;
+  }
+
+  .reference-strip {
+    order: 3;
+    flex: 0 0 auto;
+    padding: 0 16px 6px;
+  }
+
+  .referenced-mentions {
+    order: 4;
+    flex: 0 0 auto;
+    padding: 8px 16px 0;
+  }
+
+  /* 发送框固定在左栏底部 */
+  .input-shell {
+    order: 5;
+    flex: 0 0 auto;
+    margin: 10px 14px 14px;
+    padding: 12px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.045);
+    box-shadow: none;
+  }
+
+  .input-shell:focus-within {
+    border-color: rgba(56, 189, 248, 0.45);
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+  }
+
+  .composer-actions {
+    padding: 10px 0 0;
+  }
+
+  /* 右栏：对话 */
+  .chat-stage {
+    order: 0;
+    padding: 0;
+    border-radius: 26px;
+  }
+
+  .chat-area {
+    width: min(100%, 940px);
+    margin: 0 auto;
+    padding: 26px 30px 30px;
+  }
 }
 </style>
