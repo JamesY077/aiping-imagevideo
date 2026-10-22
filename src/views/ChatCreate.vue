@@ -667,6 +667,7 @@
                 </button>
               </div>
             </div>
+            <p class="composer-panel-foot">参数会随模型自动收窄；内容较多时可上下滚动。</p>
           </div>
           </div>
 
@@ -5486,7 +5487,7 @@ async function handleRegenerate(message: Message) {
     order: 1;
     flex: 1 1 auto;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
     min-height: 0;
     overflow: hidden;
     border: 0;
@@ -5495,20 +5496,43 @@ async function handleRegenerate(message: Message) {
     box-shadow: none;
   }
 
-  /* 参数区：内容自然高度，过高时内部滚动 */
+  /* 参数区：固定占据 bar 与输入框之间，内容过多时内部滚动 */
   .composer-control-panel {
     display: flex;
     order: 1;
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     flex-direction: column;
     min-height: 0;
     padding: 16px;
     overflow-x: hidden;
     overflow-y: auto;
+    scrollbar-gutter: stable;
   }
 
   .composer-section-head {
     flex: 0 0 auto;
+  }
+
+  /* 参数区内部所有分区统一竖排、统一 12px 间距与整栏宽度 */
+  .composer-meta-row {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: stretch;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .composer-meta-row > * {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .skill-control-row {
+    padding-top: 0;
   }
 
   .composer-meta-row,
@@ -5527,10 +5551,11 @@ async function handleRegenerate(message: Message) {
     flex: none;
     flex-direction: column;
     align-items: stretch;
-    gap: 8px;
+    gap: 7px;
     width: auto;
     min-width: 0;
-    padding: 11px 12px 12px;
+    min-height: 78px;
+    padding: 11px 12px;
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 16px;
     background: rgba(255, 255, 255, 0.085);
@@ -5558,11 +5583,14 @@ async function handleRegenerate(message: Message) {
     width: 100%;
   }
 
-  /* 控件底色压深一档，与卡片拉开层次 */
+  /* 控件底色压深一档，与卡片拉开层次；高度统一 36px */
   .meta-pill .model-slot,
   .meta-pill .duration-selector,
   .meta-pill .ratio-selector {
-    padding: 5px 10px;
+    display: flex;
+    align-items: center;
+    height: 36px;
+    padding: 0 10px;
     border: 1px solid rgba(255, 255, 255, 0.09);
     border-radius: 12px;
     background: rgba(0, 0, 0, 0.3);
@@ -5599,8 +5627,10 @@ async function handleRegenerate(message: Message) {
   /* 分段切换：深底 + 高对比选中态 */
   .meta-pill .media-switch,
   .meta-pill .video-mode-switch {
+    align-items: center;
+    height: 36px;
     gap: 3px;
-    padding: 3px;
+    padding: 2px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 12px;
     background: rgba(0, 0, 0, 0.3);
@@ -5635,16 +5665,11 @@ async function handleRegenerate(message: Message) {
     cursor: not-allowed;
   }
 
-  .camera-guide-row {
-    order: 2;
-    flex: 0 0 auto;
-    padding: 0 16px 6px;
-  }
-
+  .camera-guide-row,
   .reference-strip {
-    order: 3;
     flex: 0 0 auto;
-    padding: 0 16px 6px;
+    width: 100%;
+    padding: 0;
   }
 
   .referenced-mentions {
@@ -5675,13 +5700,14 @@ async function handleRegenerate(message: Message) {
     height: auto;
   }
 
-  /* 发送框：左栏主输入区；参数多时它先让位，保证参数不被裁切 */
+  /* 发送框：固定高度，位置不随参数多少变化 */
   .input-shell {
     display: flex;
     order: 4;
-    flex: 0 50 340px;
+    flex: 0 0 auto;
     flex-direction: column;
-    min-height: 190px;
+    height: clamp(190px, 21vh, 280px);
+    min-height: 0;
     margin: 10px 14px 14px;
     padding: 12px 14px;
     border: 1px solid rgba(255, 255, 255, 0.13);
@@ -5917,7 +5943,7 @@ async function handleRegenerate(message: Message) {
 }
 
 .ratio-lock-note {
-  margin: 8px 0 0;
+  margin: 0;
   padding: 8px 10px;
   border: 1px solid rgba(251, 191, 36, 0.22);
   border-radius: 10px;
@@ -5925,6 +5951,16 @@ async function handleRegenerate(message: Message) {
   color: rgba(253, 224, 71, 0.85);
   font-size: 10.5px;
   line-height: 1.5;
+}
+
+/* 参数区底部说明，把剩余空间收束住 */
+.composer-panel-foot {
+  flex: 0 0 auto;
+  margin: auto 0 0;
+  padding-top: 14px;
+  color: rgba(255, 255, 255, 0.26);
+  font-size: 10.5px;
+  line-height: 1.6;
 }
 
 /* 多模态参考：三组素材位统一成虚线槽 */
