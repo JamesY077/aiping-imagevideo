@@ -75,7 +75,31 @@
           </div>
         </section>
 
-        <section class="composer-dock" :class="{ 'ratio-open': showAspectRatioMenu, 'params-collapsed': !isComposerControlsOpen }">
+        <section class="composer-dock" :class="{ 'ratio-open': showAspectRatioMenu, 'params-collapsed': !isComposerControlsOpen, 'mode-agent': composerMode === 'agent' }">
+          <div class="composer-tabs" role="tablist" aria-label="创作模式">
+            <button
+              class="composer-tab"
+              :class="{ 'is-active': composerMode === 'media' }"
+              type="button"
+              role="tab"
+              :aria-selected="composerMode === 'media'"
+              @click="composerMode = 'media'"
+            >
+              图片视频模式
+            </button>
+            <button
+              class="composer-tab"
+              :class="{ 'is-active': composerMode === 'agent' }"
+              type="button"
+              role="tab"
+              :aria-selected="composerMode === 'agent'"
+              @click="composerMode = 'agent'"
+            >
+              Agent 模式
+              <span class="composer-tab-badge">Beta</span>
+            </button>
+          </div>
+
           <div class="composer-console" :class="{ open: isComposerControlsOpen, 'ratio-open': showAspectRatioMenu }">
             <button
               class="composer-summary"
@@ -658,6 +682,23 @@
             </span>
           </div>
 
+          <div v-if="composerMode === 'agent'" class="agent-panel">
+            <div class="agent-panel-head">
+              <span class="agent-panel-kicker">Agent Console</span>
+              <span class="agent-panel-badge">Beta</span>
+            </div>
+            <p class="agent-panel-title">一句话描述目标</p>
+            <p class="agent-panel-copy">
+              Agent 会按你的描述拆解步骤、挑选合适的模型，并把生成结果按顺序放回右侧对话。
+            </p>
+            <ul class="agent-panel-list">
+              <li>自动拆解任务并规划生成顺序</li>
+              <li>沿用当前模型与参数作为起点</li>
+              <li>结果直接回到对话，可继续追加要求</li>
+            </ul>
+            <p class="agent-panel-note">多步规划链路正在接入，当前先按单轮生成执行。</p>
+          </div>
+
           <div :class="['input-shell', { expanded: isComposerExpanded }]">
             <div
               v-if="showMentionMenu && mentionableAssets.length"
@@ -824,6 +865,8 @@ const motionControlVideoInput = ref<HTMLInputElement | null>(null)
 const isPolishing = ref(false)
 const isComposerExpanded = ref(false)
 const isComposerControlsOpen = ref(true)
+/** 左栏分签：图片视频模式 / Agent 模式 */
+const composerMode = ref<'media' | 'agent'>('media')
 const COMPOSER_TEXTAREA_DEFAULT = 104
 const COMPOSER_TEXTAREA_MOBILE = 88
 const COMPOSER_TEXTAREA_MOBILE_EXPANDED = 160
@@ -5194,7 +5237,183 @@ async function handleRegenerate(message: Message) {
 }
 
 /* =========================================================================
- * v3 布局（桌面端）：左栏＝参数台 + 发送框，右栏＝对话
+ * v4 分签 + Agent 面板（所有宽度通用）
+ * ========================================================================= */
+
+.composer-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 10px 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.composer-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 11px 11px 0 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.composer-tab:hover {
+  color: rgba(255, 255, 255, 0.84);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.composer-tab.is-active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.075);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.composer-tab.is-active::after {
+  content: '';
+  position: absolute;
+  right: 8px;
+  bottom: -1px;
+  left: 8px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #7dd3fc, #38bdf8);
+}
+
+.composer-tab-badge {
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: rgba(56, 189, 248, 0.16);
+  color: #7dd3fc;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.agent-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 14px 0;
+  padding: 16px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(56, 189, 248, 0.1), rgba(255, 255, 255, 0.02));
+}
+
+.agent-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-panel-kicker {
+  color: rgba(125, 211, 252, 0.85);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.agent-panel-badge {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(56, 189, 248, 0.16);
+  color: #7dd3fc;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.agent-panel-title {
+  margin: 0;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.agent-panel-copy {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.agent-panel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-panel-list li {
+  position: relative;
+  padding-left: 16px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.agent-panel-list li::before {
+  content: '';
+  position: absolute;
+  top: 7px;
+  left: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #38bdf8;
+}
+
+.agent-panel-note {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+/* Agent 模式下隐藏图片视频模式的参数区 */
+.composer-dock.mode-agent .composer-console,
+.composer-dock.mode-agent .referenced-mentions {
+  display: none !important;
+}
+
+@media (max-width: 900px) {
+  .composer-tabs {
+    gap: 6px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .composer-tab {
+    padding: 7px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .composer-tab.is-active {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .composer-tab.is-active::after {
+    display: none;
+  }
+}
+
+/* =========================================================================
+ * v4 布局（桌面端）：左栏是一个完整输入框，参数自下而上展开
  * ========================================================================= */
 
 @media (min-width: 901px) {
@@ -5205,13 +5424,15 @@ async function handleRegenerate(message: Message) {
     overflow: hidden;
   }
 
-  /* 左栏：参数 + 发送 */
+  /* 左栏：贴底对齐，高度随内容增长（= 由下往上展开） */
   .composer-dock {
     order: -1;
     display: flex;
     flex-direction: column;
+    align-self: end;
+    height: auto;
     min-height: 0;
-    max-height: none;
+    max-height: 100%;
     padding: 0;
     overflow: hidden;
     border: 1px solid rgba(255, 255, 255, 0.09);
@@ -5222,18 +5443,23 @@ async function handleRegenerate(message: Message) {
       inset 0 1px 0 rgba(255, 255, 255, 0.06);
   }
 
-  .composer-console {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
+  .composer-tabs {
+    order: 0;
+    flex: 0 0 auto;
   }
 
-  /* 收起参数时左栏收缩为一条紧凑控制台，贴底对齐 */
-  .composer-dock.params-collapsed {
-    align-self: end;
-    height: auto;
+  .composer-console {
+    display: flex;
+    order: 1;
+    flex: 0 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    max-height: 100%;
+    overflow: hidden;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   /* 顶部：参数摘要 + 折叠开关 */
@@ -5261,13 +5487,13 @@ async function handleRegenerate(message: Message) {
     margin-left: auto;
   }
 
-  /* 参数区：占满剩余高度，内部滚动 */
+  /* 参数区：随内容增高并向上展开，过高时内部滚动 */
   .composer-control-panel {
     order: 1;
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-height: 0;
-    max-height: none;
-    padding: 14px 16px;
+    max-height: min(48vh, 100%);
+    padding: 14px 16px 16px;
     overflow-x: hidden;
     overflow-y: auto;
   }
@@ -5288,11 +5514,13 @@ async function handleRegenerate(message: Message) {
     flex: none;
     flex-direction: column;
     align-items: stretch;
-    gap: 7px;
+    gap: 8px;
     width: auto;
     min-width: 0;
-    padding: 10px 12px;
-    border-radius: 14px;
+    padding: 11px 12px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.085);
   }
 
   .meta-pill-model,
@@ -5302,9 +5530,10 @@ async function handleRegenerate(message: Message) {
 
   .meta-pill .meta-pill-label {
     flex: 0 0 auto;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.12em;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
     white-space: nowrap;
   }
 
@@ -5316,8 +5545,81 @@ async function handleRegenerate(message: Message) {
     width: 100%;
   }
 
+  /* 控件底色压深一档，与卡片拉开层次 */
+  .meta-pill .model-slot,
+  .meta-pill .duration-selector,
+  .meta-pill .ratio-selector {
+    padding: 5px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.3);
+  }
+
+  .meta-pill .model-slot select,
+  .meta-pill .duration-select {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  .meta-pill .duration-select option {
+    background: #1b1e26;
+    color: #fff;
+  }
+
+  .meta-pill .duration-caret {
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 11px;
+  }
+
+  .meta-pill .ratio-current-btn {
+    border: 0;
+    background: transparent;
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  /* 分段切换：深底 + 高对比选中态 */
+  .meta-pill .media-switch,
+  .meta-pill .video-mode-switch {
+    gap: 3px;
+    padding: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.3);
+  }
+
   .meta-pill .switch-btn {
     flex: 1 1 auto;
+    min-width: 0;
+    height: 30px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .meta-pill .switch-btn:not(.active):hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+  }
+
+  .meta-pill .switch-btn.active {
+    background: linear-gradient(135deg, #f7f7f2 0%, #d9dce3 100%);
+    color: #08080a;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+
+  .meta-pill .switch-btn:disabled {
+    opacity: 0.36;
+    cursor: not-allowed;
   }
 
   .camera-guide-row {
@@ -5333,20 +5635,25 @@ async function handleRegenerate(message: Message) {
   }
 
   .referenced-mentions {
-    order: 4;
+    order: 2;
     flex: 0 0 auto;
     padding: 8px 16px 0;
   }
 
-  /* 发送框固定在左栏底部 */
+  .agent-panel {
+    order: 3;
+    flex: 0 0 auto;
+  }
+
+  /* 发送框永远是左栏最后一块（参数从它上方展开） */
   .input-shell {
-    order: 5;
+    order: 4;
     flex: 0 0 auto;
     margin: 10px 14px 14px;
     padding: 12px 14px;
-    border: 1px solid rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.13);
     border-radius: 20px;
-    background: rgba(255, 255, 255, 0.045);
+    background: rgba(255, 255, 255, 0.07);
     box-shadow: none;
   }
 
