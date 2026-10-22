@@ -43,11 +43,19 @@
           </div>
         </div>
         <div
-          v-if="message.generateStatus === 'completed' && resultItems.length"
+          v-if="resultItems.length"
           class="result-list"
           :class="{ 'has-multiple': resultItems.length > 1, 'stack-rows': isVideoBatch }"
         >
-          <div v-if="resultItems.length > 1" class="batch-note">本轮共生成 {{ resultItems.length }} 个结果</div>
+          <div
+            v-if="resultItems.length > 1 || (message.batchSize && message.batchSize > 1)"
+            class="batch-note"
+          >
+            <template v-if="isActiveGeneration">
+              已完成 {{ resultItems.length }}/{{ message.batchSize || resultItems.length }} 个，其余生成中…
+            </template>
+            <template v-else>本轮共生成 {{ resultItems.length }} 个结果</template>
+          </div>
           <template v-for="(result, index) in resultItems" :key="`${result.url}-${index}`">
             <ImageResult
               v-if="result.type === 'image'"
@@ -61,7 +69,7 @@
             />
           </template>
         </div>
-        <div v-if="message.generateStatus === 'completed' && message.partialError" class="partial-warning">
+        <div v-if="message.partialError && message.generateStatus !== 'failed'" class="partial-warning">
           {{ message.partialError }}
         </div>
         <div v-if="message.generateStatus === 'failed'" class="error">
@@ -140,8 +148,12 @@ const isActiveGeneration = computed(() => props.message.generateStatus === 'pend
 const currentTip = computed(() => tips.value[tipIndex.value % tips.value.length])
 const loadingText = computed(() => {
   const kind = props.message.generateType === 'video' ? '视频' : '图片'
-  const batchLabel = props.message.batchSize && props.message.batchSize > 1 ? `（共 ${props.message.batchSize} 个）` : ''
-  return props.message.generateStatus === 'pending' ? `${kind}批量任务准备中${batchLabel}` : `${kind}批量生成进行中${batchLabel}`
+  const isBatch = !!props.message.batchSize && props.message.batchSize > 1
+  const batchLabel = isBatch ? `（共 ${props.message.batchSize} 个）` : ''
+  if (props.message.generateStatus === 'pending') {
+    return isBatch ? `${kind}批量任务准备中${batchLabel}` : `${kind}任务准备中`
+  }
+  return isBatch ? `${kind}批量生成进行中${batchLabel}` : `${kind}生成进行中`
 })
 const progressLabel = computed(() => {
   if (displayProgress.value >= 88) return '收尾渲染中'

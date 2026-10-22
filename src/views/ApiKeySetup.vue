@@ -63,13 +63,14 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import ApiKeyInput from '@/components/ApiKeyInput.vue'
 import { useApiStore } from '@/stores/apiStore'
 import { AIPING_PUBLIC_API_BASE_URL, isOpenAiBaseUrlFormat } from '@/api/config'
 import { assetUrl } from '@/utils/assets'
 
 const router = useRouter()
+const route = useRoute()
 const apiStore = useApiStore()
 const apiKey = ref('')
 const apiBaseUrl = ref(AIPING_PUBLIC_API_BASE_URL)
@@ -77,6 +78,19 @@ const isLoading = ref(false)
 const error = ref('')
 
 const LANDING_PENDING_PROMPT_KEY = 'artrealm_landing_pending_prompt'
+
+/**
+ * 登录成功后要回到哪个创作页。
+ * 支持两种写法：完整路径（/voice）与首页分区简写（skill / studio / voice）。
+ */
+function resolveRedirectTarget(): string {
+  const raw = typeof route.query.redirect === 'string' ? route.query.redirect.trim() : ''
+  if (!raw) return '/studio'
+  if (raw.startsWith('/')) return raw
+  if (raw === 'skill') return '/skill'
+  if (raw === 'voice') return '/voice'
+  return '/studio'
+}
 
 function consumeLandingPendingPrompt(): { prompt: string; hasReference: boolean } | null {
   const raw = sessionStorage.getItem(LANDING_PENDING_PROMPT_KEY)
@@ -116,7 +130,8 @@ async function handleSubmit() {
         },
       })
     } else {
-      router.push('/studio')
+      // 首页分区入口会带上目标分区，登录后直接回到对应工作台。
+      router.push(resolveRedirectTarget())
     }
   } else {
     error.value = apiStore.connectionError || '连接失败，请检查 API Key 是否正确。'

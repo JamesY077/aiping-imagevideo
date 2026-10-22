@@ -81,7 +81,8 @@ function getApiErrorMessage(error: any, fallback = '请求失败，请稍后重�
   const data = error?.response?.data
   const detail = data?.detail
   const detailMessage = typeof detail === 'string' ? detail : detail?.message || detail?.error
-  const rawMessage = detailMessage || data?.message || data?.error || error?.message
+  // AIPing 的错误体是 { code, msg, data }，msg 里才是上游真实原因（如“RPM 超限”“并发已满”）。
+  const rawMessage = detailMessage || data?.message || data?.error || data?.msg || error?.message
   const message = typeof rawMessage === 'string' ? rawMessage : ''
 
   if (!message) return fallback
@@ -113,6 +114,12 @@ function getApiErrorMessage(error: any, fallback = '请求失败，请稍后重�
   }
 
   if (error?.response?.status === 429) {
+    if (message.includes('并发已满') || message.toLowerCase().includes('concurrency')) {
+      return '当前模型并发已满：同一账号同时生成的任务已达上限，请等待正在生成的任务完成后再试。'
+    }
+    if (message.toLowerCase().includes('rpm')) {
+      return '接口调用频率超出限制（RPM），本轮已自动重试仍失败，请稍后重试。'
+    }
     return '请求过于频繁或额度不足，请稍后重试，或检查账户配额。'
   }
 
@@ -346,6 +353,50 @@ export async function generateImage(params: ImageGenerateRequest): Promise<Image
 
 type SeedanceAssetType = 'Image' | 'Video' | 'Audio'
 
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
+function getUpstreamErrorMessage(error: any): string {
+  const data = error?.response?.data
+  return String(data?.msg || data?.message || data?.detail || data?.error || error?.message || '')
+}
+
+/**
+ * 创建任务时的限流重试。
+ * 只重试 429：此时上游尚未建单，重试不会产生重复任务（5xx 可能已建单，不能盲目重试）。
+ * - 429「RPM 超限」：请求突发导致，短退避即可恢复。
+ * - 429「当前多模态并发已满」：账号同时运行的任务数已达上限（实测上限 5），
+ *   需要等已有任务结束释放名额，因此退避时间更长。
+ */
+async function postVideoCreateWithRetry(endpoint: string, body: Record<string, unknown>): Promise<any> {
+  const maxRetries = 10
+  let lastError: any
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await client.post(endpoint, body)
+    } catch (error: any) {
+      lastError = error
+      const status = error?.response?.status
+      if (status !== 429 || attempt === maxRetries) throw error
+
+      const message = getUpstreamErrorMessage(error)
+      const concurrencyFull = message.includes('并发已满') || message.toLowerCase().includes('concurrency')
+      const wait = concurrencyFull
+        ? Math.min(30000, 3000 * 2 ** Math.min(attempt, 3)) + Math.floor(Math.random() * 500)
+        : Math.min(8000, 1000 * 2 ** Math.min(attempt, 3)) + Math.floor(Math.random() * 300)
+
+      debugLog(
+        `create retry after 429 endpoint=${endpoint} attempt=${attempt + 1} wait=${wait}ms msg=${message}`
+      )
+      await sleep(wait)
+    }
+  }
+
+  throw lastError
+}
+
 /** 判断当前配置的服务地址是否为 AI Ping 官方地址。 */
 function isAipingApiConfigured(): boolean {
   const baseUrl = getApiBaseUrl()
@@ -517,7 +568,7 @@ async function generateMinimaxH3Video(params: VideoGenerateRequest, canonicalMod
 
   debugLog('generateVideo provider=minimax-h3 body:', sanitizeDebugBody(body))
   try {
-    const response = await client.post(MINIMAX_H3_TASKS_ENDPOINT, body)
+    const response = await postVideoCreateWithRetry(MINIMAX_H3_TASKS_ENDPOINT, body)
     return normalizeMinimaxH3Response(response.data)
   } catch (error: any) {
     debugLog('generateMinimaxH3Video error:', {
@@ -559,7 +610,7 @@ export async function generateVideo(params: VideoGenerateRequest): Promise<Video
 
   debugLog(`generateVideo provider=${provider.provider} trying full body:`, sanitizeDebugBody(fullBody))
   try {
-    const response = await client.post(videoEndpoint, fullBody)
+    const response = await postVideoCreateWithRetry(videoEndpoint, fullBody)
     return normalizeResponse(response.data, videoEndpoint)
   } catch (error: any) {
     debugLog('generateVideo error:', {
@@ -621,7 +672,7 @@ export async function generateVideo(params: VideoGenerateRequest): Promise<Video
         debugLog('generateVideo fallback body:', sanitizeDebugBody(body))
         try {
           const fallbackEndpoint = provider.getEndpoint(body)
-          const response = await client.post(fallbackEndpoint, body)
+          const response = await postVideoCreateWithRetry(fallbackEndpoint, body)
           return normalizeResponse(response.data, fallbackEndpoint)
         } catch (fallbackError: any) {
           lastError = fallbackError
@@ -744,7 +795,9 @@ export async function getVideoStatusWithProvider(
         status: error.response?.status,
         data: error.response?.data,
       })
-      throw new AppError(getApiErrorMessage(error, `Seedance 视频状态查询失败 (task: ${taskId})`))
+      throw new AppError(getApiErrorMessage(error, `Seedance 视频状态查询失败 (task: ${taskId})`), {
+        code: error?.response?.status ? `http_${error.response.status}` : 'network',
+      })
     }
   }
 
@@ -789,7 +842,10 @@ export async function getVideoStatusWithProvider(
     }
   }
 
-  throw new AppError(getApiErrorMessage(lastError, `视频状态查询失败 (task: ${taskId})`))
+  throw new AppError(getApiErrorMessage(lastError, `视频状态查询失败 (task: ${taskId})`), {
+    // 保留上游状态码，供轮询层判断是否可重试（429 限流 / 5xx）。
+    code: lastError?.response?.status ? `http_${lastError.response.status}` : 'network',
+  })
 }
 
 export async function testConnection(testKey?: string, testBaseUrl?: string): Promise<boolean> {

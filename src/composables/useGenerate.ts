@@ -495,6 +495,8 @@ export function useGenerate() {
             imageResults.push(...batchResults)
             if (imageResults.length) {
               chatStore.updateMessage(assistantId, {
+                generateResult: imageResults[0],
+                generateResults: [...imageResults],
                 progress: Math.min(99, Math.round((imageResults.length / requestedBatchSize) * 100)),
               })
             }
@@ -518,7 +520,10 @@ export function useGenerate() {
             const result = await generateImage({ ...imageParams })
             const imageResult = buildImageResult(result, model, aspectRatio, capability)
             imageResults.push(imageResult)
+            // 出一张显示一张，不必等整批完成。
             chatStore.updateMessage(assistantId, {
+              generateResult: imageResults[0],
+              generateResults: [...imageResults],
               progress: Math.min(99, Math.round((imageResults.length / requestedBatchSize) * 100)),
             })
             return imageResult
@@ -614,8 +619,13 @@ export function useGenerate() {
 
       const videoTaskProgress = videoTasks.map(() => 0)
       const videoTaskCompleted = videoTasks.map(() => false)
-      const videoResults: GenerateResult[] = []
+      // 按任务下标占位，保证结果顺序稳定（完成顺序可能乱序）。
+      const orderedVideoResults: (GenerateResult | undefined)[] = new Array(videoTasks.length)
       const videoPollErrors: string[] = []
+
+      const currentVideoResults = () => (
+        orderedVideoResults.filter((item): item is GenerateResult => !!item)
+      )
 
       const updateVideoBatchProgress = () => {
         const overall = videoTasks.reduce((sum, _task, index) => (
@@ -626,31 +636,49 @@ export function useGenerate() {
         })
       }
 
+      // 生成成功一个就立刻返回一个：每完成/失败一个任务就刷新一次消息，界面无需等整批结束。
+      const publishVideoResults = () => {
+        const completed = currentVideoResults()
+        chatStore.updateMessage(assistantId, {
+          generateResult: completed[0],
+          generateResults: completed,
+          partialError: describeBatchFailure(
+            completed.length,
+            requestedBatchSize,
+            [...videoCreateErrors, ...videoPollErrors],
+          ),
+        })
+      }
+
       const videoPollTasks = videoTasks.map(async (task, index) => {
-        const finalStatus = await pollVideoStatus(
-          task.id,
-          (progress) => {
-            videoTaskProgress[index] = progress
-            updateVideoBatchProgress()
-          },
-          3000,
-          100,
-          task.provider,
-          task.providerCreateEndpoint,
-        )
-        videoTaskCompleted[index] = true
-        updateVideoBatchProgress()
-        const videoResult = buildVideoResult(finalStatus, model, aspectRatio)
-        videoResults.push(videoResult)
-        return videoResult
+        try {
+          const finalStatus = await pollVideoStatus(
+            task.id,
+            (progress) => {
+              videoTaskProgress[index] = progress
+              updateVideoBatchProgress()
+            },
+            3000,
+            100,
+            task.provider,
+            task.providerCreateEndpoint,
+          )
+          const videoResult = buildVideoResult(finalStatus, model, aspectRatio)
+          orderedVideoResults[index] = videoResult
+          return videoResult
+        } catch (error) {
+          videoPollErrors.push(normalizeErrorMessage(error, '部分视频生成失败'))
+          throw error
+        } finally {
+          videoTaskCompleted[index] = true
+          updateVideoBatchProgress()
+          publishVideoResults()
+        }
       })
 
-      const videoSettled = await Promise.allSettled(videoPollTasks)
-      for (const item of videoSettled) {
-        if (item.status === 'rejected') {
-          videoPollErrors.push(normalizeErrorMessage(item.reason, '部分视频生成失败'))
-        }
-      }
+      await Promise.allSettled(videoPollTasks)
+
+      const videoResults = currentVideoResults()
       const allVideoErrors = [...videoCreateErrors, ...videoPollErrors]
       if (!videoResults.length) {
         throw new Error(allVideoErrors[0] || '批量视频生成失败，请稍后重试。')

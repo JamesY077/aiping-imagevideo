@@ -1,37 +1,46 @@
 <template>
   <div class="chat-page" :style="{ height: appHeight, '--app-height': appHeight }">
+    <StudioIsland />
     <div class="workspace-shell single-session-layout">
-      <header class="top-nav">
-        <div class="brand-lockup">
-          <strong class="brand-title">
-            <img class="brand-title-logo" :src="assetUrl('/logo1.webp')" alt="" />
-            ArtRealm
-          </strong>
-        </div>
-
-        <div class="top-nav-actions">
-          <button class="skill-create-btn" type="button" @click="router.push('/skill')">
-            <span class="skill-create-icon" aria-hidden="true">✦</span>
-            创作 Skill
-          </button>
-          <button class="canvas-entry-btn" type="button" @click="router.push('/canvas')">
-            <span class="canvas-entry-text">无限画布</span>
-            <span class="canvas-entry-new" aria-label="测试版功能">BETA</span>
-          </button>
-          <button class="sidebar-secondary-btn" type="button" @click="router.push('/settings')">
-            设置
-          </button>
-        </div>
-      </header>
+      <StudioHeader
+        kicker="Image & Video Studio"
+        title="图片视频生成"
+        subtitle="输入主体、风格、光线与构图，批量生成后逐条返回结果"
+        accent="#38bdf8"
+      />
 
 
       <main class="workspace-main">
         <section class="chat-stage">
           <div class="chat-area" ref="chatAreaRef">
             <div v-if="activeMessages.length === 0" class="empty-state">
-              <p class="empty-kicker">Simple Create · Agentic Visual Canvas</p>
-              <h1>把一句想法变成一张可交付视觉。</h1>
-              <p class="empty-copy">输入主体、风格、光线、构图和用途；系统会在这个简洁工作台里完成生成、查看、下载与再次迭代。</p>
+              <span class="empty-badge" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3.4 13.8 8.6 19 10.4 13.8 12.2 12 17.4 10.2 12.2 5 10.4 10.2 8.6z" />
+                  <path d="M18.4 15.6v3.2M16.8 17.2h3.2" />
+                </svg>
+              </span>
+              <p class="empty-kicker">Image &amp; Video Studio</p>
+              <h1>把一句想法，变成可交付的画面。</h1>
+              <p class="empty-copy">描述主体、风格、光线、构图和用途；生成、查看、下载与迭代都在这一块工作台里完成。</p>
+
+              <div class="quick-starts">
+                <button
+                  v-for="item in quickStarts"
+                  :key="item.title"
+                  class="quick-start"
+                  type="button"
+                  @click="applyQuickPrompt(item.prompt)"
+                >
+                  <span class="quick-start-head">
+                    <span class="quick-start-title">{{ item.title }}</span>
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </span>
+                  <span class="quick-start-desc">{{ item.desc }}</span>
+                </button>
+              </div>
             </div>
 
 
@@ -42,32 +51,78 @@
               @regenerate="handleRegenerate"
               @copy-prompt="handleCopyPrompt"
             />
+
+            <div v-if="!hasUserMessages" class="quick-start-block">
+              <p class="quick-start-label">试试这些起点</p>
+              <div class="quick-starts">
+                <button
+                  v-for="item in quickStarts"
+                  :key="item.title"
+                  class="quick-start"
+                  type="button"
+                  @click="applyQuickPrompt(item.prompt)"
+                >
+                  <span class="quick-start-head">
+                    <span class="quick-start-title">{{ item.title }}</span>
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </span>
+                  <span class="quick-start-desc">{{ item.desc }}</span>
+                </button>
+              </div>
+            </div>
           </div>
         </section>
 
-        <section class="composer-dock" :class="{ 'ratio-open': showAspectRatioMenu }">
-          <div class="composer-console" :class="{ open: isComposerControlsOpen, 'ratio-open': showAspectRatioMenu }">
-            <button
-              class="composer-summary"
-              type="button"
-              :aria-expanded="isComposerControlsOpen"
-              aria-controls="composer-control-panel"
-              @click="toggleComposerControls"
-            >
-              <span class="summary-kicker">Creative Console</span>
-              <span class="summary-chip summary-chip-strong">{{ mediaTypeLabel }}</span>
-              <span class="summary-chip">{{ selectedModelLabel }}</span>
-              <span class="summary-chip">{{ activeGenerateModeLabel }}</span>
-              <span class="summary-chip">{{ selectedAspectRatioOption.label }}</span>
-              <span v-if="settingsStore.mediaType === 'video'" class="summary-chip">{{ selectedVideoDurationLabel }}</span>
-              <span v-if="settingsStore.batchSize > 1" class="summary-chip">批量 ×{{ settingsStore.batchSize }}</span>
-              <span v-if="materialSummaryLabel" class="summary-chip" :class="{ attention: needsMaterialAttention }">{{ materialSummaryLabel }}</span>
-              <span v-if="skillStore.activeSkill" class="summary-chip summary-chip-skill">Skill：{{ skillStore.activeSkill.name }}</span>
-              <span class="summary-spacer" />
-              <span class="summary-toggle">{{ isComposerControlsOpen ? '收起参数' : '展开参数与素材' }}</span>
-            </button>
+        <section class="composer-dock" :class="{ 'mode-agent': composerMode === 'agent' }">
+          <div class="composer-bar">
+            <div class="composer-tabs" role="tablist" aria-label="创作模式">
+              <button
+                class="composer-tab"
+                :class="{ 'is-active': composerMode === 'media' }"
+                type="button"
+                role="tab"
+                :aria-selected="composerMode === 'media'"
+                @click="composerMode = 'media'"
+              >
+                图片视频模式
+              </button>
+              <button
+                class="composer-tab"
+                :class="{ 'is-active': composerMode === 'agent' }"
+                type="button"
+                role="tab"
+                :aria-selected="composerMode === 'agent'"
+                @click="composerMode = 'agent'"
+              >
+                Agent 模式
+                <span class="composer-tab-badge">Beta</span>
+              </button>
+            </div>
+            <span class="composer-bar-model" :title="`${selectedModelLabel} ${selectedVideoDurationLabel}`">
+              <span class="composer-bar-dot" aria-hidden="true" />
+              {{ selectedModelLabel }}
+              <span v-if="settingsStore.mediaType === 'video'" class="composer-bar-extra">{{ selectedVideoDurationLabel }}</span>
+            </span>
+          </div>
 
-            <div v-show="isComposerControlsOpen" id="composer-control-panel" class="composer-control-panel" :class="{ 'ratio-open': showAspectRatioMenu }">
+          <div class="composer-console">
+            <div id="composer-control-panel" class="composer-control-panel">
+              <div class="composer-section-head">
+                <span class="composer-section-title">参数设置</span>
+                <span class="composer-section-meta">
+                  <span class="composer-section-chip">{{ mediaTypeLabel }}</span>
+                  <span class="composer-section-chip">{{ activeGenerateModeLabel }}</span>
+                  <span
+                    v-if="materialSummaryLabel"
+                    class="composer-section-chip"
+                    :class="{ attention: needsMaterialAttention }"
+                  >
+                    {{ materialSummaryLabel }}
+                  </span>
+                </span>
+              </div>
               <div class="composer-meta-row composer-meta-row-top">
                 <div class="dock-pills dock-pills-primary">
               <div class="meta-pill meta-pill-type">
@@ -126,39 +181,28 @@
 
               <div class="meta-pill meta-pill-ratio" :class="{ 'ratio-locked': isFrameRatioLocked }">
                 <span class="meta-pill-label">比例</span>
-                <div class="ratio-selector" :class="{ open: showAspectRatioMenu }">
-                  <button
-                    class="ratio-current-btn"
-                    type="button"
-                    :disabled="isFrameRatioLocked"
-                    :aria-expanded="showAspectRatioMenu"
-                    aria-label="选择比例"
-                    @click="showAspectRatioMenu = !showAspectRatioMenu"
-                  >
-                    <span class="ratio-chip">
-                      <span
-                        class="ratio-current-box"
-                        :style="{ width: `${selectedAspectRatioOption.boxWidth}px`, height: `${selectedAspectRatioOption.boxHeight}px` }"
-                      />
-                      {{ selectedAspectRatioOption.label }}
-                    </span>
-                    <span class="ratio-caret">▾</span>
-                  </button>
-
-                  <div v-if="showAspectRatioMenu" class="ratio-dropdown">
-                    <button
-                      v-for="option in aspectRatioOptions"
-                      :key="option.value"
-                      type="button"
-                      class="ratio-dropdown-item"
-                      :class="{ active: settingsStore.aspectRatio === option.value }"
-                      @click="handleAspectRatioMenuSelect(option.value)"
+                <div class="duration-selector">
+                  <div class="duration-select-wrap">
+                    <select
+                      v-if="isFrameRatioLocked"
+                      class="duration-select"
+                      disabled
+                      aria-label="比例由上传图片决定"
                     >
-                      <span class="ratio-option-preview">
-                        <span class="ratio-option-box" :style="{ width: `${option.boxWidth}px`, height: `${option.boxHeight}px` }" />
-                      </span>
-                      <span>{{ option.label }}</span>
-                    </button>
+                      <option>跟随图片</option>
+                    </select>
+                    <select
+                      v-else
+                      class="duration-select"
+                      :value="settingsStore.aspectRatio"
+                      aria-label="选择比例"
+                      @change="onAspectRatioSelect"
+                    >
+                      <option v-for="option in aspectRatioOptions" :key="option.value" :value="option.value">
+                        {{ option.label }}
+                      </option>
+                    </select>
+                    <span class="duration-caret" aria-hidden="true">▾</span>
                   </div>
                 </div>
               </div>
@@ -612,6 +656,7 @@
                 </button>
               </div>
             </div>
+            <p class="composer-panel-foot">参数会随模型自动收窄；内容较多时可上下滚动。</p>
           </div>
           </div>
 
@@ -628,7 +673,24 @@
             </span>
           </div>
 
-          <div :class="['input-shell', { expanded: isComposerExpanded }]">
+          <div v-if="composerMode === 'agent'" class="agent-panel">
+            <div class="agent-panel-head">
+              <span class="agent-panel-kicker">Agent Console</span>
+              <span class="agent-panel-badge">Beta</span>
+            </div>
+            <p class="agent-panel-title">一句话描述目标</p>
+            <p class="agent-panel-copy">
+              Agent 会按你的描述拆解步骤、挑选合适的模型，并把生成结果按顺序放回右侧对话。
+            </p>
+            <ul class="agent-panel-list">
+              <li>自动拆解任务并规划生成顺序</li>
+              <li>沿用当前模型与参数作为起点</li>
+              <li>结果直接回到对话，可继续追加要求</li>
+            </ul>
+            <p class="agent-panel-note">多步规划链路正在接入，当前先按单轮生成执行。</p>
+          </div>
+
+          <div class="input-shell">
             <div
               v-if="showMentionMenu && mentionableAssets.length"
               ref="mentionMenuRef"
@@ -663,18 +725,7 @@
 
 
             <div class="composer-actions">
-              <button
-                class="icon-btn"
-                :title="isComposerExpanded ? '收起输入框' : '展开输入框'"
-                :aria-label="isComposerExpanded ? '收起输入框' : '展开输入框'"
-                @click="toggleComposerExpanded"
-              >
-
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M8 16L16 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                  <path d="M9 8H16V15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
+              <span class="composer-hint">支持 @ 引用素材</span>
               <button
                 class="polish-btn"
                 :disabled="isPolishing || activeSessionGenerating || !hasPromptPolishModelConfigured"
@@ -714,17 +765,18 @@
 
 <script setup lang="ts">
 import { ref, nextTick, onMounted, computed, watch, onBeforeUnmount } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import ChatBubble from '@/components/ChatBubble.vue'
 import ModelSelector from '@/components/ModelSelector.vue'
 import CameraMovementGuide from '@/components/CameraMovementGuide.vue'
+import StudioHeader from '@/components/StudioHeader.vue'
+import StudioIsland from '@/components/StudioIsland.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT } from '@/stores/settingsStore'
 import { useGenerate } from '@/composables/useGenerate'
 import { useChatStore } from '@/stores/chatStore'
 import { useSkillStore } from '@/stores/skillStore'
 import { readSkillFile } from '@/features/skill/parse'
-import { assetUrl } from '@/utils/assets'
 
 import { polishPrompt } from '@/api/aiping'
 import {
@@ -753,7 +805,6 @@ import {
   validateUploadFileKind,
 } from '@/features/generate/fileFormats'
 
-const router = useRouter()
 const route = useRoute()
 const settingsStore = useSettingsStore()
 const chatStore = useChatStore()
@@ -792,12 +843,10 @@ const viduEndInput = ref<HTMLInputElement | null>(null)
 const motionControlImageInput = ref<HTMLInputElement | null>(null)
 const motionControlVideoInput = ref<HTMLInputElement | null>(null)
 const isPolishing = ref(false)
-const isComposerExpanded = ref(false)
-const isComposerControlsOpen = ref(true)
-const COMPOSER_TEXTAREA_DEFAULT = 196
+/** 左栏分签：图片视频模式 / Agent 模式 */
+const composerMode = ref<'media' | 'agent'>('media')
+const COMPOSER_TEXTAREA_DEFAULT = 104
 const COMPOSER_TEXTAREA_MOBILE = 88
-const COMPOSER_TEXTAREA_MOBILE_EXPANDED = 160
-const COMPOSER_TEXTAREA_EXPANDED = 320
 const composerTextareaHeight = ref(COMPOSER_TEXTAREA_DEFAULT)
 const isMobileViewport = () => window.matchMedia('(max-width: 900px)').matches
 // 移动端页面高度跟随可视视口（地址栏收缩、软键盘弹出时保持输入区可见）
@@ -809,7 +858,6 @@ function syncAppHeight() {
     appHeight.value = '100dvh'
   }
 }
-const showAspectRatioMenu = ref(false)
 const uploadedFile = ref<UploadedFile | null>(null)
 const viduStartFrame = ref<UploadedFile | null>(null)
 const viduEndFrame = ref<UploadedFile | null>(null)
@@ -821,6 +869,44 @@ const motionControlCharacterOrientation = ref<'image' | 'video'>('image')
 const referenceUrl = ref('')
 
 const inputText = ref('')
+
+// 空状态快捷示例：点击后直接填入提示词，不自动发送。
+const quickStarts = [
+  {
+    title: '产品主视觉',
+    desc: '磨砂玻璃香水瓶 · 柔光侧逆光 · 极简石台',
+    prompt:
+      '一只磨砂玻璃质感的香水瓶立在浅灰色石台上，柔和侧逆光，极简背景，高级产品主视觉，8K 细节。',
+  },
+  {
+    title: '电影感人像',
+    desc: '雨夜霓虹街头 · 浅景深 · 青橙色调',
+    prompt:
+      '电影感中景：雨夜霓虹街头，人物侧脸回望，浅景深，青橙色调，胶片颗粒，35mm 镜头。',
+  },
+  {
+    title: '场景概念',
+    desc: '未来城市空中花园 · 黄昏暖光',
+    prompt:
+      '未来城市空中花园概念场景，黄昏暖光穿过玻璃连廊，宏大远景，概念艺术风格，细腻光影。',
+  },
+  {
+    title: '视频运镜',
+    desc: '晨雾森林 · 缓慢推进镜头',
+    prompt:
+      '镜头缓慢向前推进，穿过晨雾中的森林，阳光穿透树叶形成丁达尔光束，电影级调色。',
+  },
+]
+
+function applyQuickPrompt(text: string) {
+  inputText.value = text
+  nextTick(() => {
+    const el = promptInputRef.value
+    if (!el) return
+    el.focus()
+    el.setSelectionRange(text.length, text.length)
+  })
+}
 type ImageMode = 'text2image' | 'image2image'
 type VideoMode = VideoGenerationMode
 
@@ -909,6 +995,7 @@ const hasPromptPolishModelConfigured = computed(() => !!settingsStore.promptPoli
 const polishDisabledReason = '请前往设置完成 AI 润色模型设置'
 
 const activeMessages = computed(() => chatStore.messages)
+const hasUserMessages = computed(() => chatStore.messages.some((m) => m.type === 'user'))
 const activeSessionGenerating = computed(() => chatStore.isGenerating)
 const modelCapability = computed(() => getModelCapability(settingsStore.selectedModel))
 const isViduVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'viduq3-fast')
@@ -1058,14 +1145,6 @@ const aspectRatioOptions = computed(() => {
 
 const videoDurationOptions = computed(() => getSupportedVideoDurations(settingsStore.selectedModel) ?? [{ value: 6, label: '6s' }])
 
-const selectedAspectRatioOption = computed(() => {
-  return (
-    aspectRatioOptions.value.find((option) => option.value === settingsStore.aspectRatio) ||
-    aspectRatioOptions.value[0] ||
-    ASPECT_RATIO_OPTIONS[0]
-  )
-})
-
 const mediaTypeLabel = computed(() => (settingsStore.mediaType === 'image' ? '图像' : '视频'))
 const selectedModelLabel = computed(() => settingsStore.selectedModel || '未选择模型')
 const selectedVideoDurationLabel = computed(() => {
@@ -1120,10 +1199,6 @@ const materialSummaryLabel = computed(() => {
     if (videoMode.value === 'subjectReference2video') return uploadedFile.value ? '主体参考已添加' : '主体图待上传'
   }
   return uploadedFile.value ? `素材：${uploadedFile.value.name}` : '素材可选'
-})
-
-watch(needsMaterialAttention, (needsAttention) => {
-  if (needsAttention) isComposerControlsOpen.value = true
 })
 
 const inputPlaceholder = computed(() => {
@@ -1203,8 +1278,6 @@ function buildSessionWelcomeMessage(): Omit<Message, 'id' | 'timestamp'> {
       '🎬 视频生成：覆盖文生视频、图生视频、首尾帧生视频、主体参考视频与动作控制等多种玩法。',
       '📐 参数可调：可自由选择画面比例、单轮数量与视频时长，快速匹配不同创作场景。',
       '✨ AI 润色：一键把简短描述扩写成更专业的提示词（需先在「设置」中配置润色模型）。',
-      '🧩 无限画布（BETA）：想要多画面并行、串联复杂创作流程？点击左侧「无限画布」体验节点式创作。',
-
       '',
       '💡 上手很简单：选择创作类型与模型 → 写下你的创意描述 → 点击发送即可开始生成。',
     ].join('\n'),
@@ -1266,15 +1339,10 @@ function selectAspectRatio(value: string) {
   settingsStore.saveToStorage()
 }
 
-function handleAspectRatioMenuSelect(value: string) {
+function onAspectRatioSelect(event: Event) {
   if (isFrameRatioLocked.value) return
-  selectAspectRatio(value)
-  showAspectRatioMenu.value = false
+  selectAspectRatio((event.target as HTMLSelectElement).value)
 }
-
-watch(isFrameRatioLocked, (locked) => {
-  if (locked) showAspectRatioMenu.value = false
-})
 
 function ensureSupportedAspectRatio() {
   if (isFrameRatioLocked.value) return
@@ -1866,33 +1934,6 @@ function insertCameraCommand(text: string) {
   })
 }
 
-async function toggleComposerExpanded() {
-  const nextExpanded = !isComposerExpanded.value
-  isComposerExpanded.value = nextExpanded
-  if (nextExpanded && isMobileViewport()) {
-    // 移动端展开输入框时收起参数面板，保证输入区完整可见
-    isComposerControlsOpen.value = false
-    composerTextareaHeight.value = COMPOSER_TEXTAREA_MOBILE_EXPANDED
-  } else {
-    composerTextareaHeight.value = nextExpanded
-      ? Math.max(composerTextareaHeight.value, COMPOSER_TEXTAREA_EXPANDED)
-      : isMobileViewport()
-        ? COMPOSER_TEXTAREA_MOBILE
-        : COMPOSER_TEXTAREA_DEFAULT
-  }
-  await nextTick()
-  promptInputRef.value?.focus()
-}
-
-function toggleComposerControls() {
-  isComposerControlsOpen.value = !isComposerControlsOpen.value
-  if (isComposerControlsOpen.value && isMobileViewport() && isComposerExpanded.value) {
-    // 移动端展开参数面板时收起输入框，防止底部输入区被挤出屏幕
-    isComposerExpanded.value = false
-    composerTextareaHeight.value = COMPOSER_TEXTAREA_MOBILE
-  }
-}
-
 function scrollChatToBottom() {
   chatAreaRef.value?.scrollTo({ top: chatAreaRef.value.scrollHeight, behavior: 'smooth' })
 }
@@ -1901,7 +1942,6 @@ onMounted(async () => {
   settingsStore.loadFromStorage()
   sessionStorage.removeItem('artrealm_landing_pending_prompt')
   if (isMobileViewport()) {
-    isComposerControlsOpen.value = false
     composerTextareaHeight.value = COMPOSER_TEXTAREA_MOBILE
   }
   syncAppHeight()
@@ -1975,7 +2015,6 @@ watch(
     }
     ensureSupportedAspectRatio()
     ensureSupportedVideoDuration()
-    showAspectRatioMenu.value = false
   }
 )
 
@@ -2247,36 +2286,6 @@ async function handleRegenerate(message: Message) {
   font-size: 12px;
   line-height: 1.65;
   color: rgba(71, 85, 105, 0.86);
-}
-
-/* 侧边栏「创作 Skill」独立按钮（位于无限画布按钮上方） */
-.skill-create-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 18px;
-  border: 1px solid var(--color-action-border);
-  border-radius: 16px;
-  cursor: pointer;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--color-action-text);
-  background: var(--color-action-bg);
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
-  transition: transform var(--transition-base), box-shadow var(--transition-base);
-}
-
-.skill-create-btn:hover {
-  transform: translateY(-1px);
-  background: var(--color-action-bg-hover);
-  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.24);
-}
-
-.skill-create-icon {
-  font-size: 14px;
-  line-height: 1;
 }
 
 /* 无限画布：黑色平面按钮 + NEW 标志 */
@@ -3896,7 +3905,6 @@ async function handleRegenerate(message: Message) {
 .mode-switch-btn.active,
 .ratio-current-btn,
 .send-btn.ready,
-.skill-create-btn,
 .canvas-entry-btn {
   background: #f7f7f2;
   color: #08080a;
@@ -4431,7 +4439,6 @@ async function handleRegenerate(message: Message) {
   gap: 6px;
 }
 
-.top-nav-actions .skill-create-btn,
 .top-nav-actions .canvas-entry-btn,
 .top-nav-actions .sidebar-secondary-btn {
   min-height: 34px;
@@ -4441,23 +4448,9 @@ async function handleRegenerate(message: Message) {
   font-weight: 700;
   letter-spacing: 0;
   gap: 6px;
-}
-
-.top-nav-actions .skill-create-btn {
-  background: var(--color-action-bg);
-  color: var(--color-action-text);
-  border-color: var(--color-action-border);
-}
-
-.top-nav-actions .canvas-entry-btn,
-.top-nav-actions .sidebar-secondary-btn {
   background: #1c1f26;
   color: #e6e8ef;
   border: 1px solid #2a2e37;
-}
-
-.top-nav-actions .skill-create-icon {
-  font-size: 12px;
 }
 
 .top-nav-actions .canvas-entry-new {
@@ -4777,7 +4770,6 @@ async function handleRegenerate(message: Message) {
     min-height: auto;
   }
 
-  .top-nav-actions .skill-create-btn,
   .top-nav-actions .canvas-entry-btn,
   .top-nav-actions .sidebar-secondary-btn {
     min-height: 32px;
@@ -4914,7 +4906,6 @@ async function handleRegenerate(message: Message) {
     display: none;
   }
 
-  .top-nav-actions .skill-create-btn,
   .top-nav-actions .canvas-entry-btn,
   .top-nav-actions .sidebar-secondary-btn {
     flex: 0 0 auto;
@@ -4965,4 +4956,1104 @@ async function handleRegenerate(message: Message) {
   }
 }
 
+/* 左侧悬浮岛胶囊预留通道 */
+.chat-page {
+  padding-left: 88px;
+}
+
+@media (max-width: 1100px) {
+  .chat-page {
+    padding-left: 76px;
+  }
+}
+
+@media (max-width: 900px) {
+  .chat-page {
+    padding-left: 68px;
+  }
+}
+
+@media (max-width: 640px) {
+  .chat-page {
+    padding-left: 62px;
+  }
+}
+
+/* =========================================================================
+ * Studio 统一视觉 v2：与 Skill / 配音分区共用同一套背景与面板语言
+ * ========================================================================= */
+
+.chat-page {
+  --surface-glass: rgba(255, 255, 255, 0.045);
+  --surface-glass-strong: rgba(255, 255, 255, 0.07);
+  --surface-line: rgba(255, 255, 255, 0.085);
+  --surface-shadow-soft: 0 26px 70px rgba(0, 0, 0, 0.38);
+  background:
+    radial-gradient(1200px 620px at 14% -8%, rgba(122, 92, 255, 0.18), transparent 62%),
+    radial-gradient(900px 520px at 92% 2%, rgba(56, 189, 248, 0.10), transparent 58%),
+    radial-gradient(900px 620px at 62% 108%, rgba(251, 146, 60, 0.07), transparent 60%),
+    linear-gradient(180deg, #07070b 0%, #08080d 46%, #0b0b12 100%);
+}
+
+.chat-page::before {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.028) 1px, transparent 1px);
+  background-size: 76px 76px;
+  mask-image: radial-gradient(circle at 50% 26%, #000 0 30%, transparent 76%);
+}
+
+.workspace-shell,
+.single-session-layout {
+  width: min(100%, 1480px);
+}
+
+.chat-stage {
+  border-radius: 26px;
+}
+
+/* ---------- 空状态 ---------- */
+
+.empty-state {
+  display: flex;
+  width: min(100%, 760px);
+  flex-direction: column;
+  align-items: center;
+  margin: clamp(18px, 4vh, 40px) auto 0;
+  text-align: center;
+}
+
+.empty-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(56, 189, 248, 0.32);
+  border-radius: 16px;
+  background: rgba(56, 189, 248, 0.14);
+  color: #7dd3fc;
+}
+
+.empty-badge svg {
+  width: 22px;
+  height: 22px;
+}
+
+.empty-state .empty-kicker {
+  color: rgba(125, 211, 252, 0.82);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.empty-state h1 {
+  max-width: 20ch;
+  margin: 12px auto 0;
+  font-size: clamp(30px, 3.6vw, 46px);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.empty-copy {
+  max-width: 540px;
+  margin: 14px auto 0;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.quick-starts {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.quick-start-block {
+  width: 100%;
+  margin-top: 18px;
+}
+
+.quick-start-label {
+  margin-bottom: 10px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.quick-start-block .quick-starts {
+  margin-top: 0;
+}
+
+.quick-start {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    transform 180ms ease;
+}
+
+.quick-start:hover {
+  transform: translateY(-1px);
+  border-color: rgba(56, 189, 248, 0.38);
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.quick-start-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.quick-start-title {
+  font-size: 13px;
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.quick-start-head svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.quick-start-desc {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+@media (max-width: 780px) {
+  .quick-starts {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- 参数台 ---------- */
+
+.composer-console {
+  border-color: rgba(255, 255, 255, 0.10);
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow:
+    0 26px 70px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.send-btn.ready {
+  background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%);
+  color: #04121c;
+}
+
+/* =========================================================================
+ * v4 分签 + Agent 面板（所有宽度通用）
+ * ========================================================================= */
+
+.composer-bar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 54px;
+  padding-right: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.005));
+}
+
+.composer-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
+}
+
+.composer-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.composer-tab:hover {
+  color: rgba(255, 255, 255, 0.86);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.composer-tab.is-active {
+  color: #fff;
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.composer-tab.is-active::after {
+  content: '';
+  position: absolute;
+  right: 12px;
+  bottom: 0;
+  left: 12px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(90deg, #7dd3fc, #38bdf8);
+}
+
+.composer-bar-model {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-self: center;
+  align-items: center;
+  gap: 7px;
+  max-width: 46%;
+  padding: 5px 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.composer-bar-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.14);
+}
+
+.composer-bar-extra {
+  padding-left: 7px;
+  margin-left: 1px;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.composer-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 12px;
+}
+
+.composer-section-title {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.composer-section-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.composer-section-chip {
+  padding: 2px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.composer-section-chip.attention {
+  border-color: rgba(251, 191, 36, 0.32);
+  background: rgba(251, 191, 36, 0.12);
+  color: #fcd34d;
+}
+
+.composer-tab-badge {
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: rgba(56, 189, 248, 0.16);
+  color: #7dd3fc;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.agent-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 14px 0;
+  padding: 16px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(56, 189, 248, 0.1), rgba(255, 255, 255, 0.02));
+}
+
+.agent-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-panel-kicker {
+  color: rgba(125, 211, 252, 0.85);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.agent-panel-badge {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(56, 189, 248, 0.16);
+  color: #7dd3fc;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.agent-panel-title {
+  margin: 0;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.agent-panel-copy {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.agent-panel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-panel-list li {
+  position: relative;
+  padding-left: 16px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.agent-panel-list li::before {
+  content: '';
+  position: absolute;
+  top: 7px;
+  left: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #38bdf8;
+}
+
+.agent-panel-note {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+/* Agent 模式下隐藏图片视频模式的参数区 */
+.composer-dock.mode-agent .composer-console,
+.composer-dock.mode-agent .referenced-mentions {
+  display: none !important;
+}
+
+@media (max-width: 900px) {
+  .composer-bar {
+    min-height: 44px;
+    padding-right: 10px;
+  }
+
+  .composer-tab {
+    padding: 0 12px;
+    font-size: 11.5px;
+  }
+
+  .composer-bar-model {
+    display: none;
+  }
+
+  .composer-section-head {
+    margin-bottom: 10px;
+  }
+}
+
+/* =========================================================================
+ * v4 布局（桌面端）：左栏是一个完整输入框，参数自下而上展开
+ * ========================================================================= */
+
+@media (min-width: 901px) {
+  .workspace-main {
+    grid-template-columns: minmax(360px, 0.82fr) minmax(0, 1.18fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 14px;
+    overflow: hidden;
+  }
+
+  /* 左栏：与右栏等高，输入框贴底，参数区吃掉剩余空间 */
+  .composer-dock {
+    order: -1;
+    display: flex;
+    flex-direction: column;
+    align-self: stretch;
+    height: 100%;
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 26px;
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow:
+      0 26px 70px rgba(0, 0, 0, 0.42),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .composer-bar {
+    order: 0;
+    border-radius: 25px 25px 0 0;
+  }
+
+  .composer-console {
+    display: flex;
+    order: 1;
+    flex: 1 1 auto;
+    flex-direction: column;
+    justify-content: flex-start;
+    min-height: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  /* 参数区：固定占据 bar 与输入框之间，内容过多时内部滚动 */
+  .composer-control-panel {
+    display: flex;
+    order: 1;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    padding: 16px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+
+  .composer-section-head {
+    flex: 0 0 auto;
+  }
+
+  /* 参数区内部所有分区统一竖排、统一 12px 间距与整栏宽度 */
+  .composer-meta-row {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: stretch;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .composer-meta-row > * {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .skill-control-row {
+    padding-top: 0;
+  }
+
+  .composer-meta-row,
+  .dock-pills {
+    gap: 10px;
+  }
+
+  /* 参数胶囊排成两列网格，模型独占一行，宽度统一 */
+  .dock-pills {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .meta-pill {
+    flex: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 7px;
+    width: auto;
+    min-width: 0;
+    min-height: 78px;
+    padding: 11px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.085);
+  }
+
+  .meta-pill-model,
+  .meta-pill-mode {
+    grid-column: 1 / -1;
+  }
+
+  .meta-pill .meta-pill-label {
+    flex: 0 0 auto;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  .meta-pill .model-slot,
+  .meta-pill .duration-selector,
+  .meta-pill .ratio-selector,
+  .meta-pill .media-switch,
+  .meta-pill .video-mode-switch {
+    width: 100%;
+  }
+
+  /* 控件底色压深一档，与卡片拉开层次；高度统一 36px */
+  .meta-pill .model-slot,
+  .meta-pill .duration-selector,
+  .meta-pill .ratio-selector {
+    display: flex;
+    align-items: center;
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.3);
+  }
+
+  .meta-pill .model-slot select,
+  .meta-pill .duration-select {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  .meta-pill .duration-select-wrap {
+    display: flex;
+    align-items: center;
+    width: 100%;
+  }
+
+  .meta-pill .duration-select {
+    padding-left: 0;
+  }
+
+  .meta-pill .duration-select:disabled {
+    color: rgba(255, 255, 255, 0.62);
+    cursor: not-allowed;
+  }
+
+  /* 比例锁定时不再显示下拉箭头，避免误以为可选 */
+  .meta-pill-ratio.ratio-locked .duration-caret {
+    opacity: 0;
+  }
+
+  .meta-pill .duration-select option {
+    background: #1b1e26;
+    color: #fff;
+  }
+
+  .meta-pill .duration-caret {
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 11px;
+  }
+
+  .meta-pill .ratio-current-btn {
+    border: 0;
+    background: transparent;
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  /* 分段切换：深底 + 高对比选中态 */
+  .meta-pill .media-switch,
+  .meta-pill .video-mode-switch {
+    align-items: center;
+    height: 36px;
+    gap: 3px;
+    padding: 2px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.3);
+  }
+
+  .meta-pill .switch-btn {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 30px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .meta-pill .switch-btn:not(.active):hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+  }
+
+  .meta-pill .switch-btn.active {
+    background: linear-gradient(135deg, #f7f7f2 0%, #d9dce3 100%);
+    color: #08080a;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+
+  .meta-pill .switch-btn:disabled {
+    opacity: 0.36;
+    cursor: not-allowed;
+  }
+
+  .camera-guide-row,
+  .reference-strip {
+    flex: 0 0 auto;
+    width: 100%;
+    padding: 0;
+  }
+
+  .referenced-mentions {
+    order: 2;
+    flex: 0 0 auto;
+    padding: 8px 16px 0;
+  }
+
+  .agent-panel {
+    order: 3;
+    flex: 0 0 auto;
+  }
+
+  /* Agent 模式：说明面板在剩余空间里垂直居中 */
+  .composer-dock.mode-agent .agent-panel {
+    flex: 0 0 auto;
+    margin: auto 14px;
+  }
+
+  .composer-dock.mode-agent .agent-panel-note {
+    margin: 0;
+  }
+
+  /* Agent 模式：输入框保持常规高度，空间留给说明面板 */
+  .composer-dock.mode-agent .input-shell {
+    flex: 0 0 auto;
+    min-height: 0;
+    height: auto;
+  }
+
+  /* 发送框：固定高度，位置不随参数多少变化 */
+  .input-shell {
+    display: flex;
+    order: 4;
+    flex: 0 0 auto;
+    flex-direction: column;
+    height: clamp(190px, 21vh, 280px);
+    min-height: 0;
+    margin: 10px 14px 14px;
+    padding: 12px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.07);
+    box-shadow: none;
+  }
+
+  .input-shell textarea {
+    flex: 1 1 auto;
+    min-height: 96px;
+  }
+
+  .composer-actions {
+    flex: 0 0 auto;
+  }
+
+  .input-shell:focus-within {
+    border-color: rgba(56, 189, 248, 0.45);
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+  }
+
+  .composer-actions {
+    padding: 10px 0 0;
+  }
+
+  /* 右栏：对话 */
+  .chat-stage {
+    order: 0;
+    padding: 0;
+    border-radius: 26px;
+  }
+
+  .chat-area {
+    width: min(100%, 940px);
+    margin: 0 auto;
+    padding: 26px 30px 30px;
+  }
+}
+
+/* =========================================================================
+ * v5 上传 / 素材卡片
+ * ========================================================================= */
+
+.upload-mini-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.022));
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.upload-card-row {
+  min-height: 80px;
+}
+
+.upload-mini-row:hover,
+.upload-card-row:hover {
+  border-color: rgba(56, 189, 248, 0.45);
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.1), rgba(255, 255, 255, 0.02));
+}
+
+.upload-mini-row.has-file,
+.upload-card-row.has-file {
+  border-style: solid;
+  border-color: rgba(52, 211, 153, 0.42);
+  background: linear-gradient(180deg, rgba(52, 211, 153, 0.1), rgba(255, 255, 255, 0.02));
+}
+
+.upload-mini-row .upload-icon-btn {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.upload-mini-row:hover .upload-icon-btn {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(56, 189, 248, 0.16);
+  color: #7dd3fc;
+}
+
+.upload-mini-row.has-file .upload-icon-btn {
+  border-color: rgba(52, 211, 153, 0.45);
+  background: rgba(52, 211, 153, 0.16);
+  color: #6ee7b7;
+}
+
+.upload-mini-row .upload-copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.upload-mini-row .upload-label {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.upload-mini-row .upload-hint {
+  display: -webkit-box;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 10.5px;
+  line-height: 1.5;
+  white-space: normal;
+  text-overflow: initial;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.upload-mini-row .upload-thumb {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.05);
+  object-fit: cover;
+}
+
+.upload-mini-row .upload-thumb-file {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.upload-mini-row .pill-filename {
+  flex: 0 1 auto;
+  max-width: 110px;
+  padding: 3px 8px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-mini-row .text-btn {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(248, 113, 113, 0.32);
+  border-radius: 8px;
+  background: rgba(248, 113, 113, 0.1);
+  color: #fca5a5;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.upload-mini-row .text-btn::before {
+  content: none;
+}
+
+.upload-mini-row .text-btn:hover {
+  border-color: rgba(248, 113, 113, 0.55);
+  background: rgba(248, 113, 113, 0.18);
+  color: #fecaca;
+}
+
+/* 两张以上素材卡时上下排列，避免窄栏里挤成一团 */
+.frame-upload-grid {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 10px;
+}
+
+/* 粘贴链接的输入框同样做成虚线槽位 */
+.reference-input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #fff;
+  font-size: 12px;
+}
+
+.reference-input::placeholder {
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.reference-input:focus {
+  outline: none;
+  border-style: solid;
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+}
+
+/* 素材 / 动作控制容器与卡片保持同一套圆角与底色 */
+.multimodal-panel,
+.motion-control-panel,
+.subject-reference-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.motion-control-note,
+.multimodal-note {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.motion-control-note small,
+.multimodal-note small {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 10.5px;
+}
+
+.ratio-lock-note {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(251, 191, 36, 0.22);
+  border-radius: 10px;
+  background: rgba(251, 191, 36, 0.08);
+  color: rgba(253, 224, 71, 0.85);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+/* 参数区底部说明，把剩余空间收束住 */
+.composer-panel-foot {
+  flex: 0 0 auto;
+  margin: auto 0 0;
+  padding-top: 14px;
+  color: rgba(255, 255, 255, 0.26);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+/* 多模态参考：三组素材位统一成虚线槽 */
+.multimodal-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.multimodal-group {
+  padding: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.multimodal-group-title {
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.multimodal-group-count {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+}
+
+.multimodal-add-btn {
+  width: 52px;
+  height: 52px;
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.multimodal-add-btn:hover {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(56, 189, 248, 0.14);
+  color: #7dd3fc;
+}
+
+/* 参数区滚动条：常驻细条，提示还有内容 */
+.composer-control-panel {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+
+.composer-control-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.composer-control-panel::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.composer-control-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 输入框左下角的操作提示 */
+.composer-hint {
+  margin-right: auto;
+  color: rgba(255, 255, 255, 0.32);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .upload-mini-row {
+    min-height: 60px;
+    padding: 9px 10px;
+    gap: 8px;
+  }
+
+  .upload-card-row {
+    min-height: 76px;
+  }
+
+  .upload-mini-row .upload-icon-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
+    font-size: 18px;
+  }
+
+  .upload-mini-row .upload-thumb {
+    width: 38px;
+    height: 38px;
+    border-radius: 9px;
+  }
+
+  .upload-mini-row .pill-filename {
+    max-width: 84px;
+  }
+}
 </style>
