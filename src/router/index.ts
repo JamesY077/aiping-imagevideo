@@ -22,13 +22,14 @@ const routes = [
     path: '/studio',
     name: 'Chat',
     component: () => import('@/views/ChatCreate.vue'),
-    meta: { requiresNoAuth: true },
+    // 三个创作页都必须在「登录页」完成登录后才能进入（首页 → 登录页 → 创作页）。
+    meta: { requiresAuth: true },
   },
   {
     path: '/voice',
     name: 'Voice',
     component: () => import('@/views/VoiceCreate.vue'),
-    meta: { requiresNoAuth: true },
+    meta: { requiresAuth: true },
   },
   {
     path: '/canvas',
@@ -59,9 +60,10 @@ const router = createRouter({
 router.beforeEach((to, _from, next) => {
   invalidateExpiredApiSession()
 
+  // 未登录访问任何创作页时统一进登录页，并记住目标页，登录完成后直接回到该页。
   if (to.meta.requiresAuth && !hasActiveApiSession()) {
-    next('/')
-  } else if (to.path === '/setup' && hasActiveApiSession()) {
+    next({ path: '/setup', query: { redirect: to.fullPath } })
+  } else if (to.path === '/setup' && hasActiveApiSession() && !to.query.redirect) {
     next('/studio')
   } else {
     next()
