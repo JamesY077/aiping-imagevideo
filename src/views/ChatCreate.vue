@@ -75,7 +75,7 @@
           </div>
         </section>
 
-        <section class="composer-dock" :class="{ 'ratio-open': showAspectRatioMenu, 'mode-agent': composerMode === 'agent' }">
+        <section class="composer-dock" :class="{ 'mode-agent': composerMode === 'agent' }">
           <div class="composer-bar">
             <div class="composer-tabs" role="tablist" aria-label="创作模式">
               <button
@@ -107,8 +107,8 @@
             </span>
           </div>
 
-          <div class="composer-console" :class="{ 'ratio-open': showAspectRatioMenu }">
-            <div id="composer-control-panel" class="composer-control-panel" :class="{ 'ratio-open': showAspectRatioMenu }">
+          <div class="composer-console">
+            <div id="composer-control-panel" class="composer-control-panel">
               <div class="composer-section-head">
                 <span class="composer-section-title">参数设置</span>
                 <span class="composer-section-meta">
@@ -181,39 +181,28 @@
 
               <div class="meta-pill meta-pill-ratio" :class="{ 'ratio-locked': isFrameRatioLocked }">
                 <span class="meta-pill-label">比例</span>
-                <div class="ratio-selector" :class="{ open: showAspectRatioMenu }">
-                  <button
-                    class="ratio-current-btn"
-                    type="button"
-                    :disabled="isFrameRatioLocked"
-                    :aria-expanded="showAspectRatioMenu"
-                    aria-label="选择比例"
-                    @click="showAspectRatioMenu = !showAspectRatioMenu"
-                  >
-                    <span class="ratio-chip">
-                      <span
-                        class="ratio-current-box"
-                        :style="{ width: `${selectedAspectRatioOption.boxWidth}px`, height: `${selectedAspectRatioOption.boxHeight}px` }"
-                      />
-                      {{ selectedAspectRatioOption.label }}
-                    </span>
-                    <span class="ratio-caret">▾</span>
-                  </button>
-
-                  <div v-if="showAspectRatioMenu" class="ratio-dropdown">
-                    <button
-                      v-for="option in aspectRatioOptions"
-                      :key="option.value"
-                      type="button"
-                      class="ratio-dropdown-item"
-                      :class="{ active: settingsStore.aspectRatio === option.value }"
-                      @click="handleAspectRatioMenuSelect(option.value)"
+                <div class="duration-selector">
+                  <div class="duration-select-wrap">
+                    <select
+                      v-if="isFrameRatioLocked"
+                      class="duration-select"
+                      disabled
+                      aria-label="比例由上传图片决定"
                     >
-                      <span class="ratio-option-preview">
-                        <span class="ratio-option-box" :style="{ width: `${option.boxWidth}px`, height: `${option.boxHeight}px` }" />
-                      </span>
-                      <span>{{ option.label }}</span>
-                    </button>
+                      <option>跟随图片</option>
+                    </select>
+                    <select
+                      v-else
+                      class="duration-select"
+                      :value="settingsStore.aspectRatio"
+                      aria-label="选择比例"
+                      @change="onAspectRatioSelect"
+                    >
+                      <option v-for="option in aspectRatioOptions" :key="option.value" :value="option.value">
+                        {{ option.label }}
+                      </option>
+                    </select>
+                    <span class="duration-caret" aria-hidden="true">▾</span>
                   </div>
                 </div>
               </div>
@@ -869,7 +858,6 @@ function syncAppHeight() {
     appHeight.value = '100dvh'
   }
 }
-const showAspectRatioMenu = ref(false)
 const uploadedFile = ref<UploadedFile | null>(null)
 const viduStartFrame = ref<UploadedFile | null>(null)
 const viduEndFrame = ref<UploadedFile | null>(null)
@@ -1157,14 +1145,6 @@ const aspectRatioOptions = computed(() => {
 
 const videoDurationOptions = computed(() => getSupportedVideoDurations(settingsStore.selectedModel) ?? [{ value: 6, label: '6s' }])
 
-const selectedAspectRatioOption = computed(() => {
-  return (
-    aspectRatioOptions.value.find((option) => option.value === settingsStore.aspectRatio) ||
-    aspectRatioOptions.value[0] ||
-    ASPECT_RATIO_OPTIONS[0]
-  )
-})
-
 const mediaTypeLabel = computed(() => (settingsStore.mediaType === 'image' ? '图像' : '视频'))
 const selectedModelLabel = computed(() => settingsStore.selectedModel || '未选择模型')
 const selectedVideoDurationLabel = computed(() => {
@@ -1359,15 +1339,10 @@ function selectAspectRatio(value: string) {
   settingsStore.saveToStorage()
 }
 
-function handleAspectRatioMenuSelect(value: string) {
+function onAspectRatioSelect(event: Event) {
   if (isFrameRatioLocked.value) return
-  selectAspectRatio(value)
-  showAspectRatioMenu.value = false
+  selectAspectRatio((event.target as HTMLSelectElement).value)
 }
-
-watch(isFrameRatioLocked, (locked) => {
-  if (locked) showAspectRatioMenu.value = false
-})
 
 function ensureSupportedAspectRatio() {
   if (isFrameRatioLocked.value) return
@@ -2040,7 +2015,6 @@ watch(
     }
     ensureSupportedAspectRatio()
     ensureSupportedVideoDuration()
-    showAspectRatioMenu.value = false
   }
 )
 
@@ -5604,6 +5578,26 @@ async function handleRegenerate(message: Message) {
     color: #fff;
     font-size: 12.5px;
     font-weight: 600;
+  }
+
+  .meta-pill .duration-select-wrap {
+    display: flex;
+    align-items: center;
+    width: 100%;
+  }
+
+  .meta-pill .duration-select {
+    padding-left: 0;
+  }
+
+  .meta-pill .duration-select:disabled {
+    color: rgba(255, 255, 255, 0.62);
+    cursor: not-allowed;
+  }
+
+  /* 比例锁定时不再显示下拉箭头，避免误以为可选 */
+  .meta-pill-ratio.ratio-locked .duration-caret {
+    opacity: 0;
   }
 
   .meta-pill .duration-select option {
