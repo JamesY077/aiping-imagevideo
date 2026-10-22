@@ -3,7 +3,6 @@
 // 顶部提供模版例子专区；生成结果直接进入编辑框、支持修改与下载；
 // 底部「效果测试」可对当前 skill 做图片/视频测试。
 import { ref, computed, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
 import { generateSkill, type SkillTurn } from '@/features/skill/generate'
 import { parseSkillContent } from '@/features/skill/parse'
 import { ARTSKILLS_DISPLAY_NAME } from '@/features/skill/models'
@@ -11,8 +10,8 @@ import { useSkillStore } from '@/stores/skillStore'
 import { useGenerate } from '@/composables/useGenerate'
 import { useChatStore } from '@/stores/chatStore'
 import { imageModelModules, videoModelModules } from '@/models'
+import StudioIsland from '@/components/StudioIsland.vue'
 
-const router = useRouter()
 const skillStore = useSkillStore()
 const chatStore = useChatStore()
 const { generate } = useGenerate()
@@ -127,16 +126,16 @@ async function runTest() {
   }
 }
 
-function goBack() {
-  router.back()
-}
 </script>
 
 <template>
   <div class="skill-create">
+    <StudioIsland tone="light" />
     <header class="sc-header">
-      <button class="sc-back" @click="goBack">← 返回</button>
-      <h1>创作 Skill</h1>
+      <div class="sc-title-block">
+        <span class="sc-title-kicker">Skill Studio</span>
+        <h1>创作 Skill</h1>
+      </div>
       <div class="sc-model">当前模型：{{ ARTSKILLS_DISPLAY_NAME }}</div>
     </header>
 
@@ -265,6 +264,8 @@ function goBack() {
   height: 100vh;
   height: 100dvh;
   color: var(--color-text);
+  /* 左侧悬浮岛胶囊预留通道 */
+  padding-left: 84px;
   background:
     radial-gradient(circle at 12% 0%, rgba(10, 132, 255, 0.10), transparent 30%),
     radial-gradient(circle at 92% 4%, rgba(0, 0, 0, 0.05), transparent 26%),
@@ -280,31 +281,34 @@ function goBack() {
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
 }
+.sc-title-block {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.sc-title-kicker {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.52;
+}
 .sc-header h1 {
   font-size: 18px;
   font-weight: 700;
   margin: 0;
-  flex: 1;
   letter-spacing: -0.01em;
-}
-.sc-back {
-  background: var(--color-surface-strong);
-  border: 1px solid var(--color-border-strong);
-  color: var(--color-text);
-  padding: 7px 13px;
-  border-radius: 12px;
-  cursor: pointer;
-  box-shadow: var(--color-shadow-soft);
-  transition: border-color var(--transition-base), background var(--transition-base), transform var(--transition-base);
-}
-.sc-back:hover {
-  background: #ffffff;
-  border-color: rgba(10, 132, 255, 0.38);
-  transform: translateY(-1px);
 }
 .sc-model {
   font-size: 13px;
   color: var(--color-text-secondary);
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.62);
+  white-space: nowrap;
 }
 .sc-templates {
   display: flex;
@@ -656,7 +660,6 @@ function goBack() {
   background: rgba(255, 255, 255, 0.04);
 }
 
-.sc-back,
 .sc-template,
 .sc-composer,
 .sc-editor-actions button,
@@ -675,7 +678,6 @@ function goBack() {
   border-color: #2b3342;
 }
 
-.sc-back:hover,
 .sc-template:hover,
 .sc-editor-actions button:hover:not(:disabled),
 .sc-test-toggle:hover {
@@ -707,6 +709,10 @@ function goBack() {
 }
 
 @media (max-width: 760px) {
+  .skill-create {
+    padding-left: 66px;
+  }
+
   .sc-header {
     padding: 10px 14px;
     gap: 10px;

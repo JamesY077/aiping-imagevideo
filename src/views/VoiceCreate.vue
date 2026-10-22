@@ -1,5 +1,6 @@
 <template>
   <div class="voice-page">
+    <StudioIsland />
     <div class="voice-aurora" aria-hidden="true" />
 
     <header class="top-nav">
@@ -9,11 +10,6 @@
       </button>
 
       <nav class="nav-actions" aria-label="功能导航">
-        <button class="nav-ghost" type="button" @click="router.push('/studio')">图片视频生成</button>
-        <button class="nav-ghost" type="button" @click="router.push('/skill')">
-          <span aria-hidden="true">✦</span>
-          Skill 创作
-        </button>
         <button class="nav-ghost" type="button" @click="router.push('/canvas')">无限画布</button>
         <button class="nav-ghost" type="button" @click="router.push('/settings')">设置</button>
       </nav>
@@ -69,6 +65,7 @@
 import { useRouter } from 'vue-router'
 import { assetUrl } from '@/utils/assets'
 import { VOICE_MODELS } from '@/features/voice/models'
+import StudioIsland from '@/components/StudioIsland.vue'
 
 const router = useRouter()
 const voiceModels = VOICE_MODELS
@@ -112,6 +109,8 @@ const plannedFeatures = [
     radial-gradient(circle at 84% 6%, rgba(120, 90, 255, 0.20), transparent 48%),
     linear-gradient(180deg, #06060b 0%, #05050a 100%);
   isolation: isolate;
+  /* 左侧悬浮岛预留的通道 */
+  padding-left: 84px;
 }
 
 .voice-aurora {
@@ -395,6 +394,10 @@ const plannedFeatures = [
 }
 
 @media (max-width: 960px) {
+  .voice-page {
+    padding-left: 72px;
+  }
+
   .voice-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -405,6 +408,10 @@ const plannedFeatures = [
 }
 
 @media (max-width: 640px) {
+  .voice-page {
+    padding-left: 62px;
+  }
+
   .voice-main {
     width: min(100% - 28px, 1080px);
     padding-top: 32px;

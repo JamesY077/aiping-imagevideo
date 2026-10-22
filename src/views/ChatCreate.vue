@@ -1,5 +1,6 @@
 <template>
   <div class="chat-page" :style="{ height: appHeight, '--app-height': appHeight }">
+    <StudioIsland />
     <div class="workspace-shell single-session-layout">
       <header class="top-nav">
         <div class="brand-lockup">
@@ -10,10 +11,6 @@
         </div>
 
         <div class="top-nav-actions">
-          <button class="skill-create-btn" type="button" @click="router.push('/skill')">
-            <span class="skill-create-icon" aria-hidden="true">✦</span>
-            创作 Skill
-          </button>
           <button class="canvas-entry-btn" type="button" @click="router.push('/canvas')">
             <span class="canvas-entry-text">无限画布</span>
             <span class="canvas-entry-new" aria-label="测试版功能">BETA</span>
@@ -718,6 +715,7 @@ import { useRoute, useRouter } from 'vue-router'
 import ChatBubble from '@/components/ChatBubble.vue'
 import ModelSelector from '@/components/ModelSelector.vue'
 import CameraMovementGuide from '@/components/CameraMovementGuide.vue'
+import StudioIsland from '@/components/StudioIsland.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT } from '@/stores/settingsStore'
 import { useGenerate } from '@/composables/useGenerate'
@@ -2247,36 +2245,6 @@ async function handleRegenerate(message: Message) {
   font-size: 12px;
   line-height: 1.65;
   color: rgba(71, 85, 105, 0.86);
-}
-
-/* 侧边栏「创作 Skill」独立按钮（位于无限画布按钮上方） */
-.skill-create-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 18px;
-  border: 1px solid var(--color-action-border);
-  border-radius: 16px;
-  cursor: pointer;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--color-action-text);
-  background: var(--color-action-bg);
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
-  transition: transform var(--transition-base), box-shadow var(--transition-base);
-}
-
-.skill-create-btn:hover {
-  transform: translateY(-1px);
-  background: var(--color-action-bg-hover);
-  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.24);
-}
-
-.skill-create-icon {
-  font-size: 14px;
-  line-height: 1;
 }
 
 /* 无限画布：黑色平面按钮 + NEW 标志 */
@@ -3896,7 +3864,6 @@ async function handleRegenerate(message: Message) {
 .mode-switch-btn.active,
 .ratio-current-btn,
 .send-btn.ready,
-.skill-create-btn,
 .canvas-entry-btn {
   background: #f7f7f2;
   color: #08080a;
@@ -4431,7 +4398,6 @@ async function handleRegenerate(message: Message) {
   gap: 6px;
 }
 
-.top-nav-actions .skill-create-btn,
 .top-nav-actions .canvas-entry-btn,
 .top-nav-actions .sidebar-secondary-btn {
   min-height: 34px;
@@ -4441,23 +4407,9 @@ async function handleRegenerate(message: Message) {
   font-weight: 700;
   letter-spacing: 0;
   gap: 6px;
-}
-
-.top-nav-actions .skill-create-btn {
-  background: var(--color-action-bg);
-  color: var(--color-action-text);
-  border-color: var(--color-action-border);
-}
-
-.top-nav-actions .canvas-entry-btn,
-.top-nav-actions .sidebar-secondary-btn {
   background: #1c1f26;
   color: #e6e8ef;
   border: 1px solid #2a2e37;
-}
-
-.top-nav-actions .skill-create-icon {
-  font-size: 12px;
 }
 
 .top-nav-actions .canvas-entry-new {
@@ -4777,7 +4729,6 @@ async function handleRegenerate(message: Message) {
     min-height: auto;
   }
 
-  .top-nav-actions .skill-create-btn,
   .top-nav-actions .canvas-entry-btn,
   .top-nav-actions .sidebar-secondary-btn {
     min-height: 32px;
@@ -4914,7 +4865,6 @@ async function handleRegenerate(message: Message) {
     display: none;
   }
 
-  .top-nav-actions .skill-create-btn,
   .top-nav-actions .canvas-entry-btn,
   .top-nav-actions .sidebar-secondary-btn {
     flex: 0 0 auto;
@@ -4965,4 +4915,26 @@ async function handleRegenerate(message: Message) {
   }
 }
 
+/* 左侧悬浮岛胶囊预留通道 */
+.chat-page {
+  padding-left: 88px;
+}
+
+@media (max-width: 1100px) {
+  .chat-page {
+    padding-left: 76px;
+  }
+}
+
+@media (max-width: 900px) {
+  .chat-page {
+    padding-left: 68px;
+  }
+}
+
+@media (max-width: 640px) {
+  .chat-page {
+    padding-left: 62px;
+  }
+}
 </style>
