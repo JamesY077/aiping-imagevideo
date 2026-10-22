@@ -700,7 +700,7 @@
             <p class="agent-panel-note">多步规划链路正在接入，当前先按单轮生成执行。</p>
           </div>
 
-          <div :class="['input-shell', { expanded: isComposerExpanded }]">
+          <div class="input-shell">
             <div
               v-if="showMentionMenu && mentionableAssets.length"
               ref="mentionMenuRef"
@@ -735,18 +735,7 @@
 
 
             <div class="composer-actions">
-              <button
-                class="icon-btn"
-                :title="isComposerExpanded ? '收起输入框' : '展开输入框'"
-                :aria-label="isComposerExpanded ? '收起输入框' : '展开输入框'"
-                @click="toggleComposerExpanded"
-              >
-
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M8 16L16 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                  <path d="M9 8H16V15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
+              <span class="composer-hint">支持 @ 引用素材</span>
               <button
                 class="polish-btn"
                 :disabled="isPolishing || activeSessionGenerating || !hasPromptPolishModelConfigured"
@@ -864,13 +853,10 @@ const viduEndInput = ref<HTMLInputElement | null>(null)
 const motionControlImageInput = ref<HTMLInputElement | null>(null)
 const motionControlVideoInput = ref<HTMLInputElement | null>(null)
 const isPolishing = ref(false)
-const isComposerExpanded = ref(false)
 /** 左栏分签：图片视频模式 / Agent 模式 */
 const composerMode = ref<'media' | 'agent'>('media')
 const COMPOSER_TEXTAREA_DEFAULT = 104
 const COMPOSER_TEXTAREA_MOBILE = 88
-const COMPOSER_TEXTAREA_MOBILE_EXPANDED = 160
-const COMPOSER_TEXTAREA_EXPANDED = 220
 const composerTextareaHeight = ref(COMPOSER_TEXTAREA_DEFAULT)
 const isMobileViewport = () => window.matchMedia('(max-width: 900px)').matches
 // 移动端页面高度跟随可视视口（地址栏收缩、软键盘弹出时保持输入区可见）
@@ -1970,23 +1956,6 @@ function insertCameraCommand(text: string) {
     textarea.focus()
     textarea.setSelectionRange(caret, caret)
   })
-}
-
-async function toggleComposerExpanded() {
-  const nextExpanded = !isComposerExpanded.value
-  isComposerExpanded.value = nextExpanded
-  if (nextExpanded && isMobileViewport()) {
-    // 移动端展开输入框时使用更高的输入区
-    composerTextareaHeight.value = COMPOSER_TEXTAREA_MOBILE_EXPANDED
-  } else {
-    composerTextareaHeight.value = nextExpanded
-      ? Math.max(composerTextareaHeight.value, COMPOSER_TEXTAREA_EXPANDED)
-      : isMobileViewport()
-        ? COMPOSER_TEXTAREA_MOBILE
-        : COMPOSER_TEXTAREA_DEFAULT
-  }
-  await nextTick()
-  promptInputRef.value?.focus()
 }
 
 function scrollChatToBottom() {
@@ -5706,11 +5675,11 @@ async function handleRegenerate(message: Message) {
     height: auto;
   }
 
-  /* 发送框：左栏主输入区，高度有限度地吃掉剩余空间 */
+  /* 发送框：左栏主输入区；参数多时它先让位，保证参数不被裁切 */
   .input-shell {
     display: flex;
     order: 4;
-    flex: 0 1 340px;
+    flex: 0 50 340px;
     flex-direction: column;
     min-height: 190px;
     margin: 10px 14px 14px;
@@ -5751,6 +5720,310 @@ async function handleRegenerate(message: Message) {
     width: min(100%, 940px);
     margin: 0 auto;
     padding: 26px 30px 30px;
+  }
+}
+
+/* =========================================================================
+ * v5 上传 / 素材卡片
+ * ========================================================================= */
+
+.upload-mini-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.022));
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.upload-card-row {
+  min-height: 80px;
+}
+
+.upload-mini-row:hover,
+.upload-card-row:hover {
+  border-color: rgba(56, 189, 248, 0.45);
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.1), rgba(255, 255, 255, 0.02));
+}
+
+.upload-mini-row.has-file,
+.upload-card-row.has-file {
+  border-style: solid;
+  border-color: rgba(52, 211, 153, 0.42);
+  background: linear-gradient(180deg, rgba(52, 211, 153, 0.1), rgba(255, 255, 255, 0.02));
+}
+
+.upload-mini-row .upload-icon-btn {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.upload-mini-row:hover .upload-icon-btn {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(56, 189, 248, 0.16);
+  color: #7dd3fc;
+}
+
+.upload-mini-row.has-file .upload-icon-btn {
+  border-color: rgba(52, 211, 153, 0.45);
+  background: rgba(52, 211, 153, 0.16);
+  color: #6ee7b7;
+}
+
+.upload-mini-row .upload-copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.upload-mini-row .upload-label {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.upload-mini-row .upload-hint {
+  display: -webkit-box;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 10.5px;
+  line-height: 1.5;
+  white-space: normal;
+  text-overflow: initial;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.upload-mini-row .upload-thumb {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.05);
+  object-fit: cover;
+}
+
+.upload-mini-row .upload-thumb-file {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.upload-mini-row .pill-filename {
+  flex: 0 1 auto;
+  max-width: 110px;
+  padding: 3px 8px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-mini-row .text-btn {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(248, 113, 113, 0.32);
+  border-radius: 8px;
+  background: rgba(248, 113, 113, 0.1);
+  color: #fca5a5;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.upload-mini-row .text-btn::before {
+  content: none;
+}
+
+.upload-mini-row .text-btn:hover {
+  border-color: rgba(248, 113, 113, 0.55);
+  background: rgba(248, 113, 113, 0.18);
+  color: #fecaca;
+}
+
+/* 两张以上素材卡时上下排列，避免窄栏里挤成一团 */
+.frame-upload-grid {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 10px;
+}
+
+/* 粘贴链接的输入框同样做成虚线槽位 */
+.reference-input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #fff;
+  font-size: 12px;
+}
+
+.reference-input::placeholder {
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.reference-input:focus {
+  outline: none;
+  border-style: solid;
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+}
+
+/* 素材 / 动作控制容器与卡片保持同一套圆角与底色 */
+.multimodal-panel,
+.motion-control-panel,
+.subject-reference-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.motion-control-note,
+.multimodal-note {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.motion-control-note small,
+.multimodal-note small {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 10.5px;
+}
+
+.ratio-lock-note {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(251, 191, 36, 0.22);
+  border-radius: 10px;
+  background: rgba(251, 191, 36, 0.08);
+  color: rgba(253, 224, 71, 0.85);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+/* 多模态参考：三组素材位统一成虚线槽 */
+.multimodal-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.multimodal-group {
+  padding: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.multimodal-group-title {
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.multimodal-group-count {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+}
+
+.multimodal-add-btn {
+  width: 52px;
+  height: 52px;
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.multimodal-add-btn:hover {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(56, 189, 248, 0.14);
+  color: #7dd3fc;
+}
+
+/* 参数区滚动条：常驻细条，提示还有内容 */
+.composer-control-panel {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+
+.composer-control-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.composer-control-panel::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.composer-control-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 输入框左下角的操作提示 */
+.composer-hint {
+  margin-right: auto;
+  color: rgba(255, 255, 255, 0.32);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .upload-mini-row {
+    min-height: 60px;
+    padding: 9px 10px;
+    gap: 8px;
+  }
+
+  .upload-card-row {
+    min-height: 76px;
+  }
+
+  .upload-mini-row .upload-icon-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
+    font-size: 18px;
+  }
+
+  .upload-mini-row .upload-thumb {
+    width: 38px;
+    height: 38px;
+    border-radius: 9px;
+  }
+
+  .upload-mini-row .pill-filename {
+    max-width: 84px;
   }
 }
 </style>
