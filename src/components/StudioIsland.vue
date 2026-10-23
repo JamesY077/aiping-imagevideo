@@ -69,8 +69,8 @@ const items = [
     path: '/studio',
     key: 'media',
     label: '图片视频生成',
-    accent: '#38bdf8',
-    accentSoft: 'rgba(56, 189, 248, 0.20)',
+    accent: '#d9cdb8',
+    accentSoft: 'rgba(217, 205, 184, 0.20)',
   },
   {
     path: '/voice',

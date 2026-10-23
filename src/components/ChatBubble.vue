@@ -45,7 +45,7 @@
         <div
           v-if="resultItems.length"
           class="result-list"
-          :class="{ 'has-multiple': resultItems.length > 1, 'stack-rows': isVideoBatch }"
+          :class="{ 'has-multiple': resultItems.length > 1 }"
         >
           <div
             v-if="resultItems.length > 1 || (message.batchSize && message.batchSize > 1)"
@@ -87,7 +87,10 @@
             aria-label="复制提示词到输入框"
             @click="$emit('copyPrompt', message.content)"
           >
-            ⧉
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="8.5" y="8.5" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.8" />
+              <path d="M15.5 8.5V6.8A2.3 2.3 0 0 0 13.2 4.5H6.8A2.3 2.3 0 0 0 4.5 6.8v6.4a2.3 2.3 0 0 0 2.3 2.3h1.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
           </button>
         </div>
       </div>
@@ -109,7 +112,6 @@ defineEmits<{
 }>()
 
 const previewFiles = computed(() => props.message.uploadedFiles?.length ? props.message.uploadedFiles : props.message.uploadedFile ? [props.message.uploadedFile] : [])
-const isVideoBatch = computed(() => props.message.generateType === 'video' && resultItems.value.length > 1)
 
 const resultItems = computed(() => (
   props.message.generateResults?.length
@@ -120,50 +122,73 @@ const resultItems = computed(() => (
 ))
 
 const imageTips = [
-  '正在理解画面主体与空间关系…',
-  '正在拆解光影、风格与材质细节…',
-  '参考图已进入提示词编排…',
-  '正在为构图匹配最佳画幅…',
-  '模型正在调度算力，马上就好…',
-  '正在渲染细节与色彩层次…',
+  '小提示：提示词写清主体、环境、光线和风格，画面会更稳定。',
+  '小提示：参考图越清晰，生成结果越容易贴近你想要的效果。',
+  '小提示：一次多生成几张，更容易挑到满意的构图。',
+  '小提示：复杂场景可以拆成几个关键词，逐层补充。',
 ]
 
 const videoTips = [
-  '正在解析分镜与运镜节奏…',
-  '参考帧已进入视频提示词编排…',
-  '正在匹配首尾帧与主体一致性…',
-  '模型正在调度视频算力…',
-  '正在渲染关键帧与动态细节…',
-  '视频任务已进入生成队列，请稍候…',
+  '小提示：写清主体动作、镜头运动和场景变化，视频会更连贯。',
+  '小提示：参考图越清晰，人物和场景的一致性通常越好。',
+  '小提示：视频生成需要一点时间，完成后结果会自动回到对话。',
+  '小提示：想要更长的视频，可以分段生成后再剪辑。',
+  '小提示：一次生成多个版本，方便对比运镜和节奏。',
 ]
 
 const tips = computed(() => (props.message.generateType === 'video' ? videoTips : imageTips))
 const tipIndex = ref(0)
 const simulatedProgress = ref(0)
+const elapsedSeconds = ref(0)
 
+let progressStartedAt = 0
 let progressTimer: ReturnType<typeof setInterval> | undefined
 let tipTimer: ReturnType<typeof setInterval> | undefined
 
 const isActiveGeneration = computed(() => props.message.generateStatus === 'pending' || props.message.generateStatus === 'processing')
 const currentTip = computed(() => tips.value[tipIndex.value % tips.value.length])
+const isVideo = computed(() => props.message.generateType === 'video')
+const batchSize = computed(() => Math.max(1, props.message.batchSize || 1))
 const loadingText = computed(() => {
-  const kind = props.message.generateType === 'video' ? '视频' : '图片'
-  const isBatch = !!props.message.batchSize && props.message.batchSize > 1
-  const batchLabel = isBatch ? `（共 ${props.message.batchSize} 个）` : ''
+  const kind = isVideo.value ? '视频' : '图片'
+  const isBatch = batchSize.value > 1
+  const batchLabel = isBatch ? `（共 ${batchSize.value} 个）` : ''
   if (props.message.generateStatus === 'pending') {
     return isBatch ? `${kind}批量任务准备中${batchLabel}` : `${kind}任务准备中`
   }
   return isBatch ? `${kind}批量生成进行中${batchLabel}` : `${kind}生成进行中`
 })
+
+/** 按真实生成耗时给出一个合理的预计区间，避免进度条几十秒就冲到 90%。 */
+const estimatedRange = computed(() => {
+  if (!isVideo.value) return batchSize.value > 1 ? '40–90 秒' : '20–60 秒'
+  const duration = props.message.duration || 6
+  const base = duration >= 10 ? '3–6 分钟' : duration <= 5 ? '1–3 分钟' : '2–4 分钟'
+  return batchSize.value >= 4 ? '3–6 分钟' : batchSize.value >= 2 ? '2–5 分钟' : base
+})
+const estimatedMaxSeconds = computed(() => {
+  if (!isVideo.value) return batchSize.value > 1 ? 90 : 60
+  return batchSize.value >= 4 ? 360 : batchSize.value >= 2 ? 300 : 240
+})
+const elapsedLabel = computed(() => {
+  const minutes = Math.floor(elapsedSeconds.value / 60)
+  const seconds = elapsedSeconds.value % 60
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+})
 const progressLabel = computed(() => {
-  if (displayProgress.value >= 88) return '收尾渲染中'
-  if (displayProgress.value >= 45) return '主体与细节生成中'
-  return '正在理解创作意图'
+  if (elapsedSeconds.value > estimatedMaxSeconds.value) {
+    return `已用时 ${elapsedLabel.value} · 仍在生成`
+  }
+  return `已用时 ${elapsedLabel.value} · 预计 ${estimatedRange.value}`
 })
 const displayProgress = computed(() => {
   const real = props.message.progress
   const normalizedReal = typeof real === 'number' && Number.isFinite(real) ? Math.min(real, 99) : 0
   return Math.min(99, Math.max(simulatedProgress.value, normalizedReal))
+})
+const simulatedTau = computed(() => {
+  const base = isVideo.value ? 70 : 16
+  return batchSize.value > 1 ? base * 1.2 : base
 })
 
 function clearGenerationTimers() {
@@ -173,24 +198,36 @@ function clearGenerationTimers() {
   tipTimer = undefined
 }
 
+function updateSimulatedProgress() {
+  const elapsed = Math.max(0, (Date.now() - progressStartedAt) / 1000)
+  elapsedSeconds.value = Math.floor(elapsed)
+  // 用时间衰减曲线逼近 92%，视频约 2 分钟后到 75% 左右，不再几十秒跑完。
+  const next = 4 + 88 * (1 - Math.exp(-elapsed / simulatedTau.value))
+  simulatedProgress.value = Math.min(92, Math.round(next * 10) / 10)
+}
+
 function startGenerationAnimation() {
   clearGenerationTimers()
-  simulatedProgress.value = Math.max(simulatedProgress.value, 4)
-  tipIndex.value = 0
+  if (!progressStartedAt) {
+    progressStartedAt = Date.now()
+    elapsedSeconds.value = 0
+    simulatedProgress.value = 4
+    tipIndex.value = 0
+  }
+  updateSimulatedProgress()
 
-  progressTimer = setInterval(() => {
-    const next = simulatedProgress.value + (92 - simulatedProgress.value) * 0.028 + 0.25
-    simulatedProgress.value = Math.min(92, Math.round(next * 10) / 10)
-  }, 800)
+  progressTimer = setInterval(updateSimulatedProgress, 1000)
 
   tipTimer = setInterval(() => {
     tipIndex.value += 1
-  }, 3200)
+  }, 5600)
 }
 
 function stopGenerationAnimation() {
   clearGenerationTimers()
   simulatedProgress.value = 0
+  elapsedSeconds.value = 0
+  progressStartedAt = 0
 }
 
 watch(
@@ -203,6 +240,8 @@ watch(
     if (status === 'completed') {
       clearGenerationTimers()
       simulatedProgress.value = 100
+      progressStartedAt = 0
+      elapsedSeconds.value = 0
       return
     }
     stopGenerationAnimation()
@@ -258,8 +297,10 @@ onBeforeUnmount(clearGenerationTimers)
 }
 
 .message.user .bubble {
-  background: var(--color-user-bubble);
-  border-color: transparent;
+  border-color: rgba(217, 205, 184, 0.26);
+  background: linear-gradient(135deg, rgba(82, 69, 51, 0.82), rgba(34, 30, 24, 0.90));
+  color: #f7f2e9;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .message.system .bubble {
@@ -291,8 +332,8 @@ onBeforeUnmount(clearGenerationTimers)
   position: relative;
   overflow: hidden;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.86);
-  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .frame-badge {
@@ -320,8 +361,8 @@ onBeforeUnmount(clearGenerationTimers)
   display: block;
   padding: 6px 10px;
   font-size: 11px;
-  color: var(--color-text-secondary);
-  border-top: 1px solid var(--color-border);
+  color: rgba(255, 255, 255, 0.62);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .generate-result {
@@ -334,22 +375,18 @@ onBeforeUnmount(clearGenerationTimers)
 
 .result-list.has-multiple {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
   align-items: start;
-}
-
-/* 视频批量结果：一行一个，纵向堆叠 */
-.result-list.stack-rows {
-  grid-template-columns: 1fr;
 }
 
 .batch-note {
   grid-column: 1 / -1;
   padding: 6px 10px;
+  border: 1px solid rgba(217, 205, 184, 0.16);
   border-radius: 10px;
-  background: rgba(10, 132, 255, 0.08);
-  color: rgba(30, 64, 175, 0.86);
+  background: rgba(24, 21, 17, 0.72);
+  color: rgba(242, 236, 225, 0.88);
   font-size: 11px;
   font-weight: 700;
 }
@@ -360,9 +397,10 @@ onBeforeUnmount(clearGenerationTimers)
   gap: 9px;
   margin-top: 4px;
   padding: 11px 12px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.56);
-  border: 1px solid rgba(30, 41, 59, 0.08);
+  border: 1px solid rgba(217, 205, 184, 0.20);
+  border-radius: 14px;
+  background: linear-gradient(160deg, rgba(45, 39, 31, 0.82), rgba(18, 16, 13, 0.84));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 16px 34px rgba(0, 0, 0, 0.16);
 }
 
 .inline-loading {
@@ -376,8 +414,9 @@ onBeforeUnmount(clearGenerationTimers)
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 2px solid rgba(0, 113, 227, 0.18);
-  border-top-color: var(--color-primary);
+  border: 2px solid rgba(217, 205, 184, 0.18);
+  border-top-color: #d9cdb8;
+  box-shadow: 0 0 10px rgba(217, 205, 184, 0.18);
   animation: spin 0.75s linear infinite;
 }
 
@@ -385,22 +424,28 @@ onBeforeUnmount(clearGenerationTimers)
 .time,
 .progress-text {
   font-size: 11px;
-  color: var(--color-text-secondary);
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.loading-text {
+  color: rgba(255, 255, 255, 0.78);
+  font-weight: 600;
 }
 
 .progress-bar {
   position: relative;
   height: 7px;
   border-radius: 999px;
-  background: rgba(29, 29, 31, 0.08);
+  background: rgba(255, 255, 255, 0.08);
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #0071e3 0%, #54a8ff 100%);
-  transition: width var(--transition-base);
+  background: linear-gradient(90deg, #a8987d 0%, #d9cdb8 55%, #f2ece1 100%);
+  box-shadow: 0 0 12px rgba(217, 205, 184, 0.38);
+  transition: width 0.9s linear;
 }
 
 .progress-meta {
@@ -408,28 +453,39 @@ onBeforeUnmount(clearGenerationTimers)
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-width: 0;
 }
 
 .progress-label {
+  min-width: 0;
+  overflow: hidden;
   font-size: 11px;
   font-weight: 600;
-  color: var(--color-text);
+  color: rgba(255, 255, 255, 0.72);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .progress-text {
   flex-shrink: 0;
+  color: rgba(242, 236, 225, 0.92);
+  font-variant-numeric: tabular-nums;
 }
 
 .tip-window {
   min-height: 18px;
+  padding: 5px 8px;
   overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .generation-tip {
   display: block;
   font-size: 11px;
-  line-height: 18px;
-  color: var(--color-text-secondary);
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .tip-slide-enter-active,
@@ -468,25 +524,35 @@ onBeforeUnmount(clearGenerationTimers)
   justify-content: center;
   width: 22px;
   height: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.36);
+  border: 1px solid rgba(255, 255, 255, 0.24);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
-  color: inherit;
+  background: rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.8);
   font-size: 12px;
 }
 
-.icon-btn:hover {
-  background: rgba(255, 255, 255, 0.28);
+.icon-btn svg {
+  display: block;
+  width: 13px;
+  height: 13px;
 }
 
-.message.user .icon-btn {
-  border-color: rgba(255, 255, 255, 0.62);
-  background: rgba(255, 255, 255, 0.2);
+.icon-btn:hover {
+  border-color: rgba(255, 255, 255, 0.38);
+  background: rgba(255, 255, 255, 0.18);
   color: #fff;
 }
 
+.message.user .icon-btn {
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.94);
+}
+
 .message.user .icon-btn:hover {
-  background: rgba(255, 255, 255, 0.32);
+  border-color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.24);
+  color: #fff;
 }
 
 .error {
@@ -508,8 +574,9 @@ onBeforeUnmount(clearGenerationTimers)
   border-radius: 8px;
   font-size: 11px;
   line-height: 1.5;
-  background: rgba(234, 179, 8, 0.12);
-  color: #92610e;
+  background: rgba(251, 191, 36, 0.10);
+  border: 1px solid rgba(251, 191, 36, 0.16);
+  color: rgba(253, 224, 71, 0.82);
 }
 
 .retry-btn {

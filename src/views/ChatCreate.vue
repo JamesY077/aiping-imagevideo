@@ -1,17 +1,24 @@
 <template>
-  <div class="chat-page" :style="{ height: appHeight, '--app-height': appHeight }">
+  <div class="chat-page" :style="{ height: appHeight, '--app-height': appHeight, '--studio-accent': '#d9cdb8' }">
     <StudioIsland />
     <div class="workspace-shell single-session-layout">
       <StudioHeader
         kicker="Image & Video Studio"
         title="图片视频生成"
         subtitle="输入主体、风格、光线与构图，批量生成后逐条返回结果"
-        accent="#38bdf8"
+        accent="#d9cdb8"
       />
 
 
       <main class="workspace-main">
         <section class="chat-stage">
+          <header class="studio-panel-head chat-stage-head">
+            <div class="studio-panel-headings">
+              <span class="studio-kicker">Conversation</span>
+              <h2 class="studio-panel-title">创作对话</h2>
+            </div>
+            <span class="studio-panel-meta">{{ activeMessages.length }} 条</span>
+          </header>
           <div class="chat-area" ref="chatAreaRef">
             <div v-if="activeMessages.length === 0" class="empty-state">
               <span class="empty-badge" aria-hidden="true">
@@ -75,30 +82,10 @@
           </div>
         </section>
 
-        <section class="composer-dock" :class="{ 'mode-agent': composerMode === 'agent' }">
+        <section class="composer-dock">
           <div class="composer-bar">
-            <div class="composer-tabs" role="tablist" aria-label="创作模式">
-              <button
-                class="composer-tab"
-                :class="{ 'is-active': composerMode === 'media' }"
-                type="button"
-                role="tab"
-                :aria-selected="composerMode === 'media'"
-                @click="composerMode = 'media'"
-              >
-                图片视频模式
-              </button>
-              <button
-                class="composer-tab"
-                :class="{ 'is-active': composerMode === 'agent' }"
-                type="button"
-                role="tab"
-                :aria-selected="composerMode === 'agent'"
-                @click="composerMode = 'agent'"
-              >
-                Agent 模式
-                <span class="composer-tab-badge">Beta</span>
-              </button>
+            <div class="composer-tabs" aria-label="创作模式">
+              <span class="composer-tab is-active composer-tab-static">图片视频模式</span>
             </div>
             <span class="composer-bar-model" :title="`${selectedModelLabel} ${selectedVideoDurationLabel}`">
               <span class="composer-bar-dot" aria-hidden="true" />
@@ -673,23 +660,6 @@
             </span>
           </div>
 
-          <div v-if="composerMode === 'agent'" class="agent-panel">
-            <div class="agent-panel-head">
-              <span class="agent-panel-kicker">Agent Console</span>
-              <span class="agent-panel-badge">Beta</span>
-            </div>
-            <p class="agent-panel-title">一句话描述目标</p>
-            <p class="agent-panel-copy">
-              Agent 会按你的描述拆解步骤、挑选合适的模型，并把生成结果按顺序放回右侧对话。
-            </p>
-            <ul class="agent-panel-list">
-              <li>自动拆解任务并规划生成顺序</li>
-              <li>沿用当前模型与参数作为起点</li>
-              <li>结果直接回到对话，可继续追加要求</li>
-            </ul>
-            <p class="agent-panel-note">多步规划链路正在接入，当前先按单轮生成执行。</p>
-          </div>
-
           <div class="input-shell">
             <div
               v-if="showMentionMenu && mentionableAssets.length"
@@ -843,12 +813,10 @@ const viduEndInput = ref<HTMLInputElement | null>(null)
 const motionControlImageInput = ref<HTMLInputElement | null>(null)
 const motionControlVideoInput = ref<HTMLInputElement | null>(null)
 const isPolishing = ref(false)
-/** 左栏分签：图片视频模式 / Agent 模式 */
-const composerMode = ref<'media' | 'agent'>('media')
 const COMPOSER_TEXTAREA_DEFAULT = 104
 const COMPOSER_TEXTAREA_MOBILE = 88
 const composerTextareaHeight = ref(COMPOSER_TEXTAREA_DEFAULT)
-const isMobileViewport = () => window.matchMedia('(max-width: 900px)').matches
+const isMobileViewport = () => window.matchMedia('(max-width: 980px)').matches
 // 移动端页面高度跟随可视视口（地址栏收缩、软键盘弹出时保持输入区可见）
 const appHeight = ref('100dvh')
 function syncAppHeight() {
@@ -3983,8 +3951,7 @@ async function handleRegenerate(message: Message) {
 }
 
 :deep(.message .avatar-icon),
-:deep(.message .bubble),
-:deep(.result-card) {
+:deep(.message .bubble) {
   border-color: rgba(255, 255, 255, 0.11);
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.9);
@@ -3992,9 +3959,18 @@ async function handleRegenerate(message: Message) {
   backdrop-filter: blur(20px) saturate(135%);
 }
 
+:deep(.result-card) {
+  border-color: rgba(217, 205, 184, 0.14);
+  background: linear-gradient(180deg, rgba(20, 18, 15, 0.92), rgba(10, 9, 8, 0.88));
+  color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px) saturate(135%);
+}
+
 :deep(.message.user .bubble) {
-  background: #f7f7f2;
-  color: #08080a;
+  border-color: rgba(217, 205, 184, 0.26);
+  background: linear-gradient(135deg, rgba(82, 69, 51, 0.82), rgba(34, 30, 24, 0.90));
+  color: #f7f2e9;
 }
 
 :deep(.content p),
@@ -4005,7 +3981,7 @@ async function handleRegenerate(message: Message) {
 
 :deep(.message.user .content p),
 :deep(.message.user .time) {
-  color: #08080a;
+  color: rgba(255, 255, 255, 0.94);
 }
 
 :deep(.message.system .bubble) {
@@ -4013,10 +3989,16 @@ async function handleRegenerate(message: Message) {
 }
 
 :deep(.meta-pair),
-:deep(.media-frame),
 :deep(.provider-pill) {
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.76);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+:deep(.media-frame) {
+  background:
+    radial-gradient(circle at 50% 20%, rgba(217, 205, 184, 0.12), transparent 55%),
+    rgba(12, 11, 9, 0.72);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
@@ -4392,7 +4374,7 @@ async function handleRegenerate(message: Message) {
   overflow: visible;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 980px) {
   .workspace-main {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(0, 1fr) auto;
@@ -4519,7 +4501,7 @@ async function handleRegenerate(message: Message) {
   overflow: visible;
 }
 
-@media (min-width: 901px) {
+@media (min-width: 981px) {
   .composer-control-panel.ratio-open .ratio-dropdown {
     top: calc(100% + 10px);
     bottom: auto;
@@ -4755,7 +4737,7 @@ async function handleRegenerate(message: Message) {
   font-size: 12px;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 980px) {
   .input-shell {
     margin-top: 0;
   }
@@ -4778,7 +4760,7 @@ async function handleRegenerate(message: Message) {
 }
 
 /* 移动端布局收口：单列聊天 + 底部参数面板，优先保证聊天区可读、输入区可用 */
-@media (max-width: 900px) {
+@media (max-width: 980px) {
   .chat-page {
     height: var(--app-height, 100dvh);
     padding: 8px;
@@ -4792,7 +4774,8 @@ async function handleRegenerate(message: Message) {
 
   .workspace-main {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(40px, 1fr) minmax(0, auto);
+    /* 窄屏上下堆叠时给对话区一个可读的最小高度，参数区按内容展开，由主区域滚动 */
+    grid-template-rows: 520px max-content;
     gap: 8px;
     overflow-x: hidden;
     overflow-y: auto;
@@ -4801,7 +4784,12 @@ async function handleRegenerate(message: Message) {
 
   .chat-stage {
     min-height: 0;
+    padding: 0;
     border-radius: 20px;
+  }
+
+  .chat-area {
+    padding: 18px 18px 24px;
   }
 
   .composer-dock {
@@ -4810,16 +4798,16 @@ async function handleRegenerate(message: Message) {
     gap: 6px;
     flex: 0 0 auto;
     min-height: 0;
-    /* 用实际可视高度（--app-height 跟随地址栏/软键盘）做硬上限，避免百分比解析异常 */
-    max-height: calc(var(--app-height, 100dvh) - 132px);
-    overflow: hidden;
+    /* 堆叠布局下参数区按内容展开，避免输入框被固定高度裁掉；滚动交给 workspace-main */
+    max-height: none;
+    overflow: visible;
     border-radius: 20px;
   }
 
   .composer-console {
     flex: 0 0 auto;
     min-height: 0;
-    order: 0;
+    order: 3;
     max-height: none;
     overflow: visible;
     border-radius: 20px;
@@ -4857,6 +4845,7 @@ async function handleRegenerate(message: Message) {
 
   .input-shell {
     flex: 0 0 auto;
+    order: 2;
     border-radius: 18px;
   }
 
@@ -4967,7 +4956,7 @@ async function handleRegenerate(message: Message) {
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 980px) {
   .chat-page {
     padding-left: 68px;
   }
@@ -4990,7 +4979,7 @@ async function handleRegenerate(message: Message) {
   --surface-shadow-soft: 0 26px 70px rgba(0, 0, 0, 0.38);
   background:
     radial-gradient(1200px 620px at 14% -8%, rgba(122, 92, 255, 0.18), transparent 62%),
-    radial-gradient(900px 520px at 92% 2%, rgba(56, 189, 248, 0.10), transparent 58%),
+    radial-gradient(900px 520px at 92% 2%, rgba(217, 205, 184, 0.10), transparent 58%),
     radial-gradient(900px 620px at 62% 108%, rgba(251, 146, 60, 0.07), transparent 60%),
     linear-gradient(180deg, #07070b 0%, #08080d 46%, #0b0b12 100%);
 }
@@ -5030,10 +5019,10 @@ async function handleRegenerate(message: Message) {
   width: 46px;
   height: 46px;
   margin-bottom: 14px;
-  border: 1px solid rgba(56, 189, 248, 0.32);
+  border: 1px solid rgba(217, 205, 184, 0.32);
   border-radius: 16px;
-  background: rgba(56, 189, 248, 0.14);
-  color: #7dd3fc;
+  background: rgba(217, 205, 184, 0.14);
+  color: #f2ece1;
 }
 
 .empty-badge svg {
@@ -5042,7 +5031,7 @@ async function handleRegenerate(message: Message) {
 }
 
 .empty-state .empty-kicker {
-  color: rgba(125, 211, 252, 0.82);
+  color: rgba(242, 236, 225, 0.82);
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -5113,8 +5102,8 @@ async function handleRegenerate(message: Message) {
 
 .quick-start:hover {
   transform: translateY(-1px);
-  border-color: rgba(56, 189, 248, 0.38);
-  background: rgba(56, 189, 248, 0.08);
+  border-color: rgba(217, 205, 184, 0.38);
+  background: rgba(217, 205, 184, 0.08);
 }
 
 .quick-start-head {
@@ -5161,12 +5150,12 @@ async function handleRegenerate(message: Message) {
 }
 
 .send-btn.ready {
-  background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%);
-  color: #04121c;
+  background: linear-gradient(135deg, #f2ece1 0%, #d9cdb8 100%);
+  color: #1a1611;
 }
 
 /* =========================================================================
- * v4 分签 + Agent 面板（所有宽度通用）
+ * v4 创作栏（所有宽度通用）
  * ========================================================================= */
 
 .composer-bar {
@@ -5213,7 +5202,7 @@ async function handleRegenerate(message: Message) {
 
 .composer-tab.is-active {
   color: #fff;
-  background: rgba(56, 189, 248, 0.08);
+  background: rgba(217, 205, 184, 0.08);
 }
 
 .composer-tab.is-active::after {
@@ -5224,7 +5213,7 @@ async function handleRegenerate(message: Message) {
   left: 12px;
   height: 2px;
   border-radius: 2px 2px 0 0;
-  background: linear-gradient(90deg, #7dd3fc, #38bdf8);
+  background: linear-gradient(90deg, #f2ece1, #d9cdb8);
 }
 
 .composer-bar-model {
@@ -5251,8 +5240,8 @@ async function handleRegenerate(message: Message) {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #38bdf8;
-  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.14);
+  background: #d9cdb8;
+  box-shadow: 0 0 0 3px rgba(217, 205, 184, 0.14);
 }
 
 .composer-bar-extra {
@@ -5302,106 +5291,16 @@ async function handleRegenerate(message: Message) {
   color: #fcd34d;
 }
 
-.composer-tab-badge {
-  padding: 1px 5px;
-  border-radius: 6px;
-  background: rgba(56, 189, 248, 0.16);
-  color: #7dd3fc;
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+.composer-tab-static {
+  cursor: default;
 }
 
-.agent-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 12px 14px 0;
-  padding: 16px;
-  border: 1px solid rgba(56, 189, 248, 0.2);
-  border-radius: 18px;
-  background: linear-gradient(160deg, rgba(56, 189, 248, 0.1), rgba(255, 255, 255, 0.02));
-}
-
-.agent-panel-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.agent-panel-kicker {
-  color: rgba(125, 211, 252, 0.85);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.agent-panel-badge {
-  padding: 1px 6px;
-  border-radius: 6px;
-  background: rgba(56, 189, 248, 0.16);
-  color: #7dd3fc;
-  font-size: 9.5px;
-  font-weight: 700;
-}
-
-.agent-panel-title {
-  margin: 0;
+.composer-tab-static:hover {
   color: #fff;
-  font-size: 15px;
-  font-weight: 700;
+  background: rgba(217, 205, 184, 0.08);
 }
 
-.agent-panel-copy {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.62);
-  font-size: 12px;
-  line-height: 1.7;
-}
-
-.agent-panel-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.agent-panel-list li {
-  position: relative;
-  padding-left: 16px;
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 11.5px;
-  line-height: 1.6;
-}
-
-.agent-panel-list li::before {
-  content: '';
-  position: absolute;
-  top: 7px;
-  left: 0;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #38bdf8;
-}
-
-.agent-panel-note {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 10.5px;
-  line-height: 1.6;
-}
-
-/* Agent 模式下隐藏图片视频模式的参数区 */
-.composer-dock.mode-agent .composer-console,
-.composer-dock.mode-agent .referenced-mentions {
-  display: none !important;
-}
-
-@media (max-width: 900px) {
+@media (max-width: 980px) {
   .composer-bar {
     min-height: 44px;
     padding-right: 10px;
@@ -5412,30 +5311,26 @@ async function handleRegenerate(message: Message) {
     font-size: 11.5px;
   }
 
-  .composer-bar-model {
-    display: none;
-  }
-
   .composer-section-head {
     margin-bottom: 10px;
   }
 }
 
 /* =========================================================================
- * v4 布局（桌面端）：左栏是一个完整输入框，参数自下而上展开
+ * v4 布局（桌面端）：左侧是完整的对话 / 结果区，右侧是参数栏
  * ========================================================================= */
 
-@media (min-width: 901px) {
+@media (min-width: 981px) {
   .workspace-main {
-    grid-template-columns: minmax(360px, 0.82fr) minmax(0, 1.18fr);
+    grid-template-columns: minmax(0, 1fr) 400px;
     grid-template-rows: minmax(0, 1fr);
     gap: 14px;
     overflow: hidden;
   }
 
-  /* 左栏：与右栏等高，输入框贴底，参数区吃掉剩余空间 */
+  /* 桌面端：左侧保留完整的对话/结果区，右侧是 400px 参数栏，与配音页控制栏同宽 */
   .composer-dock {
-    order: -1;
+    order: 0;
     display: flex;
     flex-direction: column;
     align-self: stretch;
@@ -5454,6 +5349,11 @@ async function handleRegenerate(message: Message) {
   .composer-bar {
     order: 0;
     border-radius: 25px 25px 0 0;
+  }
+
+  /* 模型已在参数区完整展示，右栏顶部的摘要 chip 在 400px 内会挤掉标签，直接隐藏 */
+  .composer-bar-model {
+    display: none;
   }
 
   .composer-console {
@@ -5630,6 +5530,22 @@ async function handleRegenerate(message: Message) {
     background: rgba(0, 0, 0, 0.3);
   }
 
+  /* 视频模型最多有 5~6 个生成方式，400px 参数栏里单行会换行并溢出；
+     改成自动列网格，让「多模态参考」等末项留在面板内。 */
+  .meta-pill .video-mode-switch {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(94px, 1fr));
+    align-items: stretch;
+    height: auto;
+    min-height: 36px;
+  }
+
+  .meta-pill .video-mode-switch .switch-btn {
+    width: 100%;
+    min-width: 0;
+    padding: 0 6px;
+  }
+
   .meta-pill .switch-btn {
     flex: 1 1 auto;
     min-width: 0;
@@ -5672,28 +5588,6 @@ async function handleRegenerate(message: Message) {
     padding: 8px 16px 0;
   }
 
-  .agent-panel {
-    order: 3;
-    flex: 0 0 auto;
-  }
-
-  /* Agent 模式：说明面板在剩余空间里垂直居中 */
-  .composer-dock.mode-agent .agent-panel {
-    flex: 0 0 auto;
-    margin: auto 14px;
-  }
-
-  .composer-dock.mode-agent .agent-panel-note {
-    margin: 0;
-  }
-
-  /* Agent 模式：输入框保持常规高度，空间留给说明面板 */
-  .composer-dock.mode-agent .input-shell {
-    flex: 0 0 auto;
-    min-height: 0;
-    height: auto;
-  }
-
   /* 发送框：固定高度，位置不随参数多少变化 */
   .input-shell {
     display: flex;
@@ -5720,9 +5614,9 @@ async function handleRegenerate(message: Message) {
   }
 
   .input-shell:focus-within {
-    border-color: rgba(56, 189, 248, 0.45);
+    border-color: rgba(217, 205, 184, 0.45);
     background: rgba(255, 255, 255, 0.06);
-    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+    box-shadow: 0 0 0 3px rgba(217, 205, 184, 0.12);
   }
 
   .composer-actions {
@@ -5768,8 +5662,8 @@ async function handleRegenerate(message: Message) {
 
 .upload-mini-row:hover,
 .upload-card-row:hover {
-  border-color: rgba(56, 189, 248, 0.45);
-  background: linear-gradient(180deg, rgba(56, 189, 248, 0.1), rgba(255, 255, 255, 0.02));
+  border-color: rgba(217, 205, 184, 0.45);
+  background: linear-gradient(180deg, rgba(217, 205, 184, 0.1), rgba(255, 255, 255, 0.02));
 }
 
 .upload-mini-row.has-file,
@@ -5794,9 +5688,9 @@ async function handleRegenerate(message: Message) {
 }
 
 .upload-mini-row:hover .upload-icon-btn {
-  border-color: rgba(56, 189, 248, 0.5);
-  background: rgba(56, 189, 248, 0.16);
-  color: #7dd3fc;
+  border-color: rgba(217, 205, 184, 0.5);
+  background: rgba(217, 205, 184, 0.16);
+  color: #f2ece1;
 }
 
 .upload-mini-row.has-file .upload-icon-btn {
@@ -5910,8 +5804,8 @@ async function handleRegenerate(message: Message) {
 .reference-input:focus {
   outline: none;
   border-style: solid;
-  border-color: rgba(56, 189, 248, 0.5);
-  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+  border-color: rgba(217, 205, 184, 0.5);
+  box-shadow: 0 0 0 3px rgba(217, 205, 184, 0.12);
 }
 
 /* 素材 / 动作控制容器与卡片保持同一套圆角与底色 */
@@ -5995,9 +5889,9 @@ async function handleRegenerate(message: Message) {
 }
 
 .multimodal-add-btn:hover {
-  border-color: rgba(56, 189, 248, 0.5);
-  background: rgba(56, 189, 248, 0.14);
-  color: #7dd3fc;
+  border-color: rgba(217, 205, 184, 0.5);
+  background: rgba(217, 205, 184, 0.14);
+  color: #f2ece1;
 }
 
 /* 参数区滚动条：常驻细条，提示还有内容 */
@@ -6028,7 +5922,28 @@ async function handleRegenerate(message: Message) {
   white-space: nowrap;
 }
 
-@media (max-width: 900px) {
+/* 对话面板头：与配音 / Skill 页的 studio-panel-head 对齐 */
+.chat-stage-head {
+  flex: 0 0 auto;
+  background: linear-gradient(90deg, rgba(217, 205, 184, 0.07), rgba(217, 205, 184, 0) 62%);
+}
+
+/* 稍窄的桌面端给对话区再让 40px，参数栏仍保持可读宽度 */
+@media (min-width: 981px) and (max-width: 1180px) {
+  .workspace-main {
+    grid-template-columns: minmax(0, 1fr) 360px;
+  }
+}
+
+/* 右侧参数栏只有 400/360px：图片 / 视频 / 音频三组素材改为纵向排列，
+   每组独占整行，缩略图和添加入口不再被压成两列半。 */
+@media (min-width: 981px) {
+  .multimodal-groups {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 980px) {
   .upload-mini-row {
     min-height: 60px;
     padding: 9px 10px;
@@ -6054,6 +5969,17 @@ async function handleRegenerate(message: Message) {
 
   .upload-mini-row .pill-filename {
     max-width: 84px;
+  }
+}
+
+/* 手机宽度下顶栏空间有限，模型名回到参数区展示 */
+@media (max-width: 640px) {
+  .composer-bar-model {
+    display: none;
+  }
+
+  .multimodal-groups {
+    grid-template-columns: 1fr;
   }
 }
 </style>

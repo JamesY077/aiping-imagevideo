@@ -1,41 +1,33 @@
 <template>
   <article class="result-card video-result">
-    <button class="media-frame" type="button" :style="thumbnailStyle" @click="openPreview">
+    <button class="media-frame" type="button" @click="openPreview">
       <video :src="result.url" :poster="result.thumbnail" class="video-player" muted playsinline preload="metadata" />
       <span class="media-chip">视频</span>
-      <span class="media-overlay">点击查看原视频</span>
+      <span class="media-ratio-chip">{{ ratioLabel }}</span>
+      <span class="media-play" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M9 6.8v10.4a1 1 0 0 0 1.52.85l8.2-5.2a1 1 0 0 0 0-1.7l-8.2-5.2A1 1 0 0 0 9 6.8Z" />
+        </svg>
+      </span>
+      <span class="media-overlay">查看原视频</span>
     </button>
 
     <div class="result-body">
-      <div class="title-stack">
-        <span v-if="result.provider" class="provider-pill">{{ result.provider }}</span>
+      <div class="result-heading">
         <h3 class="result-title">{{ result.model }}</h3>
+        <span v-if="result.provider" class="provider-name">{{ result.provider }}</span>
       </div>
-
-      <dl class="meta-list">
-        <div class="meta-pair">
-          <dt>比例</dt>
-          <dd>{{ ratioLabel }}</dd>
-        </div>
-        <div v-if="result.duration" class="meta-pair">
-          <dt>时长</dt>
-          <dd>{{ result.duration }} 秒</dd>
-        </div>
-        <div v-if="result.size" class="meta-pair">
-          <dt>尺寸</dt>
-          <dd>{{ result.size.width }} × {{ result.size.height }}</dd>
-        </div>
-        <div v-if="createdTimeLabel" class="meta-pair">
-          <dt>生成时间</dt>
-          <dd>{{ createdTimeLabel }}</dd>
-        </div>
-      </dl>
+      <div class="meta-line">
+        <span v-if="result.duration" class="meta-chip">{{ result.duration }} 秒</span>
+        <span v-if="result.size" class="meta-chip">{{ result.size.width }} × {{ result.size.height }}</span>
+        <span v-if="createdTimeLabel" class="meta-chip">{{ createdTimeLabel }}</span>
+      </div>
     </div>
 
     <footer class="result-actions">
-      <button class="action-btn action-btn-primary" type="button" @click="download">下载视频</button>
-      <button class="action-btn" type="button" @click="openPreview">查看原视频</button>
-      <button class="action-btn action-btn-subtle" type="button" @click="$emit('regenerate')">重新生成</button>
+      <button class="action-btn action-btn-primary" type="button" title="下载视频" @click="download">下载</button>
+      <button class="action-btn" type="button" title="查看原视频" @click="openPreview">查看</button>
+      <button class="action-btn action-btn-subtle" type="button" title="重新生成" @click="$emit('regenerate')">重生成</button>
     </footer>
   </article>
 </template>
@@ -63,20 +55,6 @@ const createdTimeLabel = computed(() => {
   })
 })
 
-const thumbnailStyle = computed(() => {
-  const width = props.result.size?.width
-  const height = props.result.size?.height
-  if (!width || !height) {
-    return {
-      aspectRatio: '16 / 9',
-    }
-  }
-
-  return {
-    aspectRatio: `${width} / ${height}`,
-  }
-})
-
 function download() {
   const link = document.createElement('a')
   link.href = props.result.url
@@ -95,147 +73,212 @@ function openPreview() {
 
 <style scoped>
 .result-card {
-  display: grid;
-  grid-template-columns: minmax(120px, 208px) minmax(0, 1fr);
-  gap: 16px;
-  width: min(100%, 560px);
-  padding: 16px;
-  border-radius: 24px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.72));
-  border: 1px solid rgba(30, 41, 59, 0.08);
-  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 360px;
+  padding: 10px;
+  border: 1px solid rgba(217, 205, 184, 0.14);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(20, 18, 15, 0.92), rgba(10, 9, 8, 0.88));
+  color: rgba(255, 255, 255, 0.90);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(18px);
+  transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.result-card:hover {
+  border-color: rgba(217, 205, 184, 0.30);
+  box-shadow: 0 22px 46px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  transform: translateY(-2px);
 }
 
 .media-frame {
   position: relative;
   width: 100%;
+  aspect-ratio: 4 / 3;
+  max-height: 190px;
+  padding: 0;
   overflow: hidden;
   border: 0;
-  border-radius: 20px;
-  padding: 0;
-  background: linear-gradient(180deg, rgba(245, 247, 251, 0.96), rgba(237, 241, 247, 0.92));
-  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(217, 205, 184, 0.12), transparent 55%),
+    rgba(12, 11, 9, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
   cursor: zoom-in;
 }
 
+.media-frame img,
 .video-player {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+}
+
+.video-player {
   pointer-events: none;
 }
 
 .media-chip,
+.media-ratio-chip,
 .media-overlay {
   position: absolute;
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  padding: 0 10px;
+  min-height: 20px;
+  padding: 0 7px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 9.5px;
+  font-weight: 600;
+  backdrop-filter: blur(10px);
 }
 
 .media-chip {
-  top: 10px;
-  left: 10px;
-  background: rgba(255, 255, 255, 0.88);
-  color: var(--color-text);
-  font-weight: 700;
+  top: 8px;
+  left: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(12, 11, 9, 0.70);
+  color: rgba(255, 255, 255, 0.90);
+}
+
+.media-ratio-chip {
+  top: 8px;
+  right: 8px;
+  border: 1px solid rgba(217, 205, 184, 0.24);
+  background: rgba(12, 11, 9, 0.70);
+  color: #f2ece1;
+  font-variant-numeric: tabular-nums;
 }
 
 .media-overlay {
-  right: 10px;
-  bottom: 10px;
-  background: rgba(18, 24, 38, 0.62);
+  right: 8px;
+  bottom: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(12, 11, 9, 0.68);
+  color: rgba(255, 255, 255, 0.86);
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity var(--transition-base), transform var(--transition-base);
+}
+
+.media-frame:hover .media-overlay,
+.media-frame:focus-visible .media-overlay {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.media-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(12, 11, 9, 0.68);
   color: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.24);
+  transform: translate(-50%, -50%);
+  transition: transform var(--transition-base), background var(--transition-base);
+}
+
+.media-play svg {
+  width: 15px;
+  height: 15px;
+  margin-left: 2px;
+}
+
+.media-frame:hover .media-play {
+  background: rgba(242, 236, 225, 0.92);
+  color: #1a1611;
+  transform: translate(-50%, -50%) scale(1.06);
 }
 
 .result-body {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 2px;
+}
+
+.result-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
   min-width: 0;
 }
 
-.title-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.result-title {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.provider-pill {
+.provider-name {
+  flex: 0 1 auto;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.36);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.meta-chip {
   display: inline-flex;
   align-items: center;
-  align-self: flex-start;
-  min-height: 24px;
-  padding: 0 10px;
+  min-height: 20px;
+  padding: 0 7px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 999px;
-  background: var(--color-accent-soft);
-  color: var(--color-accent-strong);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.result-title {
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.4;
-  color: var(--color-text);
-  word-break: break-word;
-}
-
-.meta-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.meta-pair {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.66);
-  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.14);
-}
-
-.meta-pair dt {
-  font-size: 11px;
-  color: var(--color-text-hint);
-}
-
-.meta-pair dd {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text);
-  word-break: break-word;
+  background: rgba(255, 255, 255, 0.055);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 9.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .result-actions {
-  grid-column: 1 / -1;
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding-top: 4px;
+  gap: 6px;
+  padding-top: 0;
 }
 
 .action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 36px;
-  padding: 0 14px;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.10);
-  color: rgba(255, 255, 255, 0.88);
-  font-size: 12px;
+  background: rgba(255, 255, 255, 0.055);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 10.5px;
   font-weight: 600;
+  white-space: nowrap;
   transition:
     transform var(--transition-base),
     background var(--transition-base),
@@ -244,66 +287,45 @@ function openPreview() {
 }
 
 .action-btn:hover {
-  transform: translateY(-1px);
-  border-color: rgba(255, 255, 255, 0.20);
-  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(217, 205, 184, 0.22);
+  background: rgba(217, 205, 184, 0.10);
   color: #fff;
+  transform: translateY(-1px);
 }
 
 .action-btn-primary {
-  background: var(--color-action-bg);
-  border-color: var(--color-action-border);
-  color: var(--color-action-text);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.22);
+  border-color: rgba(255, 255, 255, 0.32);
+  background: linear-gradient(135deg, #f4efe6 0%, #d8cbb4 100%);
+  color: #1a1611;
+  box-shadow: 0 8px 18px rgba(160, 140, 105, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .action-btn-primary:hover {
-  background: var(--color-action-bg-hover);
-  border-color: var(--color-action-border);
-  color: var(--color-action-text);
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.26);
+  border-color: rgba(255, 255, 255, 0.42);
+  background: linear-gradient(135deg, #fbf7f0 0%, #e7dcc9 100%);
+  color: #1a1611;
+  box-shadow: 0 10px 22px rgba(160, 140, 105, 0.20), inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 .action-btn-primary:active {
-  background: var(--color-action-bg-active);
-  border-color: var(--color-action-border);
-  color: var(--color-action-text);
+  border-color: rgba(255, 255, 255, 0.28);
+  background: linear-gradient(135deg, #d9cdb8 0%, #b8a585 100%);
+  color: #1a1611;
+  box-shadow: 0 4px 10px rgba(160, 140, 105, 0.18);
   transform: translateY(0);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.20);
-}
-
-.action-btn-primary:focus-visible {
-  background: var(--color-action-bg-hover);
-  border-color: var(--color-action-border);
-  color: var(--color-action-text);
 }
 
 .action-btn-subtle {
-  margin-left: auto;
+  margin-left: 0;
 }
 
 @media (max-width: 767px) {
   .result-card {
-    grid-template-columns: 1fr;
+    max-width: 100%;
   }
 
   .media-frame {
-    width: min(100%, 240px);
-  }
-
-  .meta-list {
-    grid-template-columns: 1fr;
-  }
-
-  .result-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .action-btn,
-  .action-btn-subtle {
-    width: 100%;
-    margin-left: 0;
+    max-height: 210px;
   }
 }
 </style>
