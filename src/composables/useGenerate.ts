@@ -1,20 +1,30 @@
 import { generateImage, generateVideo } from '@/api/aiping'
 import { getImageProvider } from '@/api/providers/image'
 import { useChatStore } from '@/stores/chatStore'
-import type { GenerateResult, GenerateType, UploadedFile } from '@/types/chat'
+import type { GenerateResult, GenerateType, ImageGenerationMode, UploadedFile } from '@/types/chat'
+import { EXPAND_IMAGE_INSTRUCTION } from '@/stores/settingsStore'
 import { getModelCapability } from '@/types/model'
 import type { ModelCapability, ModelIOType } from '@/types/model'
-import type { ImageGenerateRequest, ImageGenerateResponse, VideoGenerateRequest, VideoStatusResponse } from '@/types/api'
+import type { ImageGenerateResponse, VideoGenerateRequest, VideoStatusResponse } from '@/types/api'
 import { validatePromptOrThrow } from '@/utils/errorHandling'
 import { normalizeErrorMessage, showErrorMessage } from '@/utils/errors'
-import { aspectRatioToDimensions, aspectRatioToImageSize } from '@/features/generate/aspectRatio'
+import { buildImageParams } from '@/features/generate/buildParams'
+import { aspectRatioToDimensions } from '@/features/generate/aspectRatio'
 import { fileToBase64, toRawBase64 } from '@/features/generate/files'
 import { pollVideoStatus, setVideoRatio, deleteVideoRatio } from '@/features/generate/video'
 import { resolveRealCost } from '@/utils/format'
 import { buildEffectivePrompt } from '@/features/skill/apply'
 
-type ImageRequestMode = NonNullable<ModelCapability['imageRequestMode']>
 type UploadInput = UploadedFile | UploadedFile[] | null | undefined
+
+export interface GenerateOptions {
+  /** 扩图消息会记录该字段，重新生成时仍走扩图链路。 */
+  imageMode?: ImageGenerationMode
+  /** 实际发给模型的图片；可与消息展示的 uploadedFile 不同（扩图时使用预扩画布）。 */
+  generationFile?: UploadInput
+  /** 覆盖图片请求的 size（扩图使用 2K 目标尺寸）。 */
+  imageSize?: string
+}
 
 function ioTypeToGenerateType(ioType: ModelIOType): GenerateType {
   return ioType === 'text2image' || ioType === 'image2image' ? 'image' : 'video'
@@ -23,48 +33,6 @@ function ioTypeToGenerateType(ioType: ModelIOType): GenerateType {
 function getKlingAspectRatio(aspectRatio: string): string {
   if (['16:9', '9:16', '1:1'].includes(aspectRatio)) return aspectRatio
   throw new Error('当前可灵视频模型仅支持 16:9、9:16、1:1，请切换比例或模型后重试。')
-}
-
-function buildImageParams(
-  prompt: string,
-  model: string | null,
-  uploadedFile: UploadInput,
-  aspectRatio: string,
-  mode: ImageRequestMode | undefined
-): Promise<ImageGenerateRequest> | ImageGenerateRequest {
-  const build = async () => {
-    const primaryFile = Array.isArray(uploadedFile) ? uploadedFile[0] : uploadedFile
-    let imageInput = primaryFile?.url
-    if (primaryFile?.file) {
-      imageInput = await fileToBase64(primaryFile.file)
-    }
-
-    const imageParams: ImageGenerateRequest = {
-      prompt,
-      model: model || undefined,
-      image: imageInput,
-      size: aspectRatioToImageSize(aspectRatio),
-    }
-
-    if (mode && mode !== 'default') {
-      const { width, height } = aspectRatioToDimensions(aspectRatio, mode)
-      imageParams.output_format = 'png'
-      imageParams.watermark = false
-      if (mode === 'seedream-5-lite') {
-        imageParams.size = aspectRatioToImageSize(aspectRatio, mode, 'x')
-        delete imageParams.width
-        delete imageParams.height
-      } else {
-        imageParams.size = undefined
-        imageParams.width = width
-        imageParams.height = height
-      }
-    }
-
-    return imageParams
-  }
-
-  return build()
 }
 
 async function buildVideoParams(
@@ -344,18 +312,28 @@ function normalizeBatchSize(value: number): number {
   return Number.isFinite(parsed) ? Math.min(MAX_BATCH_SIZE, Math.max(1, parsed)) : 1
 }
 
+function parseImageSize(size: string | undefined): { width: number; height: number } | null {
+  if (!size) return null
+  const match = size.match(/^(\d+)[*x](\d+)$/)
+  if (!match) return null
+  const width = Number(match[1])
+  const height = Number(match[2])
+  return width && height ? { width, height } : null
+}
+
 function buildImageResult(
   response: ImageGenerateResponse,
   model: string | null,
   aspectRatio: string,
-  capability: ModelCapability | null
+  capability: ModelCapability | null,
+  outputSize?: { width: number; height: number } | null
 ): GenerateResult {
   const url = response.data[0]?.url || ''
   if (!url) {
     throw new Error('图片生成完成但未返回有效图片地址，请稍后重试或切换模型。')
   }
 
-  return buildImageResultFromUrl(url, response, model, aspectRatio, capability)
+  return buildImageResultFromUrl(url, response, model, aspectRatio, capability, outputSize)
 }
 
 function buildImageResultFromUrl(
@@ -363,7 +341,8 @@ function buildImageResultFromUrl(
   response: ImageGenerateResponse,
   model: string | null,
   aspectRatio: string,
-  capability: ModelCapability | null
+  capability: ModelCapability | null,
+  outputSize?: { width: number; height: number } | null
 ): GenerateResult {
   return {
     type: 'image',
@@ -373,7 +352,7 @@ function buildImageResultFromUrl(
     cost: resolveRealCost(response) / Math.max(response.data.length, 1),
     aspectRatio,
     createdAt: Date.now(),
-    size: aspectRatioToDimensions(aspectRatio, capability?.imageRequestMode),
+    size: outputSize || aspectRatioToDimensions(aspectRatio, capability?.imageRequestMode),
   }
 }
 
@@ -424,14 +403,20 @@ export function useGenerate() {
     // 视频分辨率档位（MiniMax-H3 使用：768P / 2K，其余模型忽略）。
     videoResolution: string | null = null,
     // 简易模式单轮批量生成数量，限制为 1-5。
-    batchSize = 1
+    batchSize = 1,
+    options: GenerateOptions = {}
   ) {
 
-    validatePromptOrThrow(prompt)
+    const isExpand = options.imageMode === 'expand'
+    // 扩图允许不写提示词；若用户写了内容，仍执行敏感词/格式校验。
+    if (!isExpand || prompt.trim()) {
+      validatePromptOrThrow(prompt)
+    }
 
     chatStore.isGenerating = true
     const generateType = ioTypeToGenerateType(ioType)
-    const requestedBatchSize = normalizeBatchSize(batchSize)
+    // 扩图一次只生成一张，避免批量结果与单个结果卡片的快捷扩图语义冲突。
+    const requestedBatchSize = isExpand ? 1 : normalizeBatchSize(batchSize)
 
     chatStore.addMessage({
       type: 'user',
@@ -443,6 +428,7 @@ export function useGenerate() {
       model: model || undefined,
       duration,
       batchSize: requestedBatchSize,
+      imageMode: options.imageMode,
     })
 
     const assistantId = chatStore.addMessage({
@@ -456,21 +442,26 @@ export function useGenerate() {
 
     try {
       // 有 Skill 时先把规范压缩成 400-500 字，再拼接用户提示词下发。
-      const effectivePrompt = await buildEffectivePrompt(prompt, skillContent)
+      // 扩图固定使用扩图指令，忽略 Skill，避免 Skill 里的主体/风格要求覆盖「保持原图不变」。
+      const effectivePrompt = isExpand
+        ? [EXPAND_IMAGE_INSTRUCTION, prompt.trim()].filter(Boolean).join('\n\n')
+        : await buildEffectivePrompt(prompt, skillContent)
       const capability = getModelCapability(model)
+      const outputSize = parseImageSize(options.imageSize)
 
       if (generateType === 'image') {
         const imageParams = await buildImageParams(
           effectivePrompt,
           model,
-          uploadedFile,
+          options.generationFile || uploadedFile,
           aspectRatio,
-          capability?.imageRequestMode
+          capability?.imageRequestMode,
+          options.imageSize,
         )
 
         if (requestedBatchSize === 1) {
           const result = await generateImage(imageParams)
-          const imageResult = buildImageResult(result, model, aspectRatio, capability)
+          const imageResult = buildImageResult(result, model, aspectRatio, capability, outputSize)
           chatStore.updateMessage(assistantId, {
             generateStatus: 'completed',
             generateResult: imageResult,
@@ -491,7 +482,7 @@ export function useGenerate() {
             const batchResults = batchResult.data
               .filter((item) => !!item.url)
               .slice(0, requestedBatchSize)
-              .map((item) => buildImageResultFromUrl(item.url as string, batchResult, model, aspectRatio, capability))
+              .map((item) => buildImageResultFromUrl(item.url as string, batchResult, model, aspectRatio, capability, outputSize))
             imageResults.push(...batchResults)
             if (imageResults.length) {
               chatStore.updateMessage(assistantId, {
@@ -518,7 +509,7 @@ export function useGenerate() {
         if (remainingCount > 0) {
           const imageTasks = Array.from({ length: remainingCount }, async () => {
             const result = await generateImage({ ...imageParams })
-            const imageResult = buildImageResult(result, model, aspectRatio, capability)
+            const imageResult = buildImageResult(result, model, aspectRatio, capability, outputSize)
             imageResults.push(imageResult)
             // 出一张显示一张，不必等整批完成。
             chatStore.updateMessage(assistantId, {

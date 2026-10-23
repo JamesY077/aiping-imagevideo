@@ -57,6 +57,7 @@
               :message="msg"
               @regenerate="handleRegenerate"
               @copy-prompt="handleCopyPrompt"
+              @expand-image="handleExpandImage"
             />
 
             <div v-if="!hasUserMessages" class="quick-start-block">
@@ -127,6 +128,7 @@
                     :key="settingsStore.mediaType"
                     :mediaType="settingsStore.mediaType"
                     compact
+                    :disabled="isExpandMode"
                     v-model="settingsStore.selectedModel"
                     @update:modelValue="settingsStore.saveToStorage()"
                   />
@@ -167,7 +169,7 @@
               </div>
 
               <div class="meta-pill meta-pill-ratio" :class="{ 'ratio-locked': isFrameRatioLocked }">
-                <span class="meta-pill-label">比例</span>
+                <span class="meta-pill-label">{{ isExpandMode ? '扩图比例' : '比例' }}</span>
                 <div class="duration-selector">
                   <div class="duration-select-wrap">
                     <select
@@ -231,7 +233,7 @@
                 </div>
               </div>
 
-              <div class="meta-pill meta-pill-duration duration-slot batch-size-slot">
+              <div v-if="!isExpandMode" class="meta-pill meta-pill-duration duration-slot batch-size-slot">
                 <span class="meta-pill-label">单轮数量</span>
                 <div class="duration-selector">
                   <div class="duration-select-wrap">
@@ -255,6 +257,12 @@
             </p>
             <p v-if="videoMode === 'startEnd2video'" class="ratio-lock-note">
               首尾帧上传图片比例需要一致
+            </p>
+            <p v-if="isExpandMode" class="ratio-lock-note expand-mode-note">
+              扩图模式固定使用 Qwen-Image-2.0-Pro；请上传原图并选择与原图不同的目标比例。
+            </p>
+            <p v-if="isExpandMode && isExpandRatioSame" class="ratio-lock-note expand-ratio-warning">
+              当前扩图比例与原图一致，请选择其他比例后再发送。
             </p>
 
 
@@ -565,7 +573,11 @@
               </template>
 
 
-              <div v-else-if="isImageReferenceMode" class="upload-mini-row upload-card-row" :class="{ 'has-file': !!uploadedFile }">
+              <div
+                v-else-if="isImageReferenceMode || isExpandMode"
+                class="upload-mini-row upload-card-row"
+                :class="{ 'has-file': !!uploadedFile, 'is-expand-upload': isExpandMode }"
+              >
                 <input
                   ref="fileInput"
                   type="file"
@@ -573,12 +585,19 @@
                   class="file-input"
                   @change="handleFileChange"
                 />
-                <button class="upload-btn upload-icon-btn" type="button" aria-label="上传参考图" @click="fileInput?.click()">
+                <button
+                  class="upload-btn upload-icon-btn"
+                  type="button"
+                  :aria-label="isExpandMode ? '上传扩图原图' : '上传参考图'"
+                  @click="fileInput?.click()"
+                >
                   +
                 </button>
                 <div class="upload-copy">
-                  <span class="upload-label">参考图</span>
-                  <span class="upload-hint">用于图生图，支持 PNG / JPG / WebP 等格式</span>
+                  <span class="upload-label">{{ isExpandMode ? '原图' : '参考图' }}</span>
+                  <span class="upload-hint">
+                    {{ isExpandMode ? '上传需要向外扩展的原图，支持 PNG / JPG / WebP 等格式' : '用于图生图，支持 PNG / JPG / WebP 等格式' }}
+                  </span>
                 </div>
                 <img v-if="uploadedFile" class="upload-thumb" :src="uploadedFile.url" alt="已上传素材" />
                 <span v-if="uploadedFile" class="pill-filename">{{ uploadedFile.name }}</span>
@@ -615,7 +634,7 @@
               />
               </div>
 
-              <div class="skill-control-row">
+              <div v-if="!isExpandMode" class="skill-control-row">
                 <input
                   ref="skillFileInput"
                   type="file"
@@ -643,7 +662,9 @@
                 </button>
               </div>
             </div>
-            <p class="composer-panel-foot">参数会随模型自动收窄；内容较多时可上下滚动。</p>
+            <p class="composer-panel-foot">
+              {{ isExpandMode ? '扩图模式固定使用 Qwen-Image-2.0-Pro；上传原图、选择目标比例即可开始。' : '参数会随模型自动收窄；内容较多时可上下滚动。' }}
+            </p>
           </div>
           </div>
 
@@ -730,6 +751,65 @@
         </section>
       </main>
     </div>
+
+    <Teleport to="body">
+      <div v-if="quickExpandResult" class="expand-modal-mask" @click.self="closeQuickExpand">
+        <div class="expand-modal" role="dialog" aria-modal="true" aria-labelledby="expand-modal-title">
+          <header class="expand-modal-head">
+            <div>
+              <span class="expand-modal-kicker">OUTPAINTING</span>
+              <h3 id="expand-modal-title">扩图</h3>
+            </div>
+            <button class="expand-modal-close" type="button" aria-label="关闭扩图弹窗" @click="closeQuickExpand">×</button>
+          </header>
+
+          <div class="expand-modal-preview">
+            <img
+              :src="quickExpandResult.url"
+              alt="待扩图的原图"
+              referrerpolicy="no-referrer"
+              loading="lazy"
+              decoding="async"
+            />
+            <span class="expand-modal-source">原图 · {{ quickExpandSourceLabel }}</span>
+          </div>
+
+          <p class="expand-modal-copy">
+            选择目标比例后立即开始扩图。原图主体、构图、光线与色彩会尽量保持不变，只向画面外围自然延展。
+          </p>
+
+          <div class="expand-ratio-grid">
+            <button
+              v-for="option in ASPECT_RATIO_OPTIONS"
+              :key="option.value"
+              type="button"
+              class="expand-ratio-btn"
+              :class="{ 'is-source-ratio': isQuickExpandRatioSame(option.value) }"
+              :disabled="isQuickExpandRatioSame(option.value) || activeSessionGenerating"
+              @click="confirmQuickExpand(option.value)"
+            >
+              <span
+                class="expand-ratio-box"
+                :style="{ width: `${option.boxWidth}px`, height: `${option.boxHeight}px` }"
+                aria-hidden="true"
+              />
+              <span class="expand-ratio-label">{{ option.label }}</span>
+              <span class="expand-ratio-size">
+                {{ getExpandTargetSize(option.value).width }}×{{ getExpandTargetSize(option.value).height }}
+              </span>
+              <span v-if="isQuickExpandRatioSame(option.value)" class="expand-ratio-note">原比例</span>
+            </button>
+          </div>
+
+          <footer class="expand-modal-foot">
+            <span class="expand-modal-hint">
+              {{ activeSessionGenerating ? '当前正在生成，请稍后再试。' : '点击比例后会直接发送新的扩图任务。' }}
+            </span>
+            <button type="button" class="expand-modal-cancel" @click="closeQuickExpand">取消</button>
+          </footer>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -742,7 +822,7 @@ import CameraMovementGuide from '@/components/CameraMovementGuide.vue'
 import StudioHeader from '@/components/StudioHeader.vue'
 import StudioIsland from '@/components/StudioIsland.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT } from '@/stores/settingsStore'
+import { DEFAULT_EXPAND_SYSTEM_PROMPT, DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT } from '@/stores/settingsStore'
 import { useGenerate } from '@/composables/useGenerate'
 import { useChatStore } from '@/stores/chatStore'
 import { useSkillStore } from '@/stores/skillStore'
@@ -764,8 +844,9 @@ import {
 } from '@/types/model'
 import { showErrorMessage } from '@/utils/errors'
 import { getReadableErrorMessage, validatePromptOrThrow } from '@/utils/errorHandling'
-import type { Message, UploadedFile } from '@/types/chat'
+import type { GenerateResult, ImageGenerationMode, Message, UploadedFile } from '@/types/chat'
 import { resolveGenerateIoType } from '@/features/generate/media'
+import { createExpandedUploadedFile, getExpandTargetSize } from '@/features/generate/expand'
 import {
   IMAGE_FILE_ACCEPT,
   IMAGE_FORMAT_HINT,
@@ -875,8 +956,13 @@ function applyQuickPrompt(text: string) {
     el.setSelectionRange(text.length, text.length)
   })
 }
-type ImageMode = 'text2image' | 'image2image'
+type ImageMode = ImageGenerationMode
 type VideoMode = VideoGenerationMode
+
+/** 扩图固定使用的模型。 */
+const EXPAND_MODEL_ID = 'Qwen-Image-2.0-Pro'
+/** 快捷扩图弹窗当前选中的生成结果。 */
+const quickExpandResult = ref<GenerateResult | null>(null)
 
 
 interface ImageDimensions {
@@ -915,6 +1001,7 @@ const mentionMenuStyle = ref<Record<string, string>>({})
 const imageModeOptions: Array<{ value: ImageMode; label: string }> = [
   { value: 'text2image', label: '文生图' },
   { value: 'image2image', label: '图生图' },
+  { value: 'expand', label: '扩图' },
 ]
 const viduVideoModeOptions: Array<{ value: VideoMode; label: string }> = [
   { value: 'text2video', label: '文生视频' },
@@ -1065,6 +1152,18 @@ const supportsImageReferenceMode = computed(() => {
 const isImageReferenceMode = computed(() => {
   return settingsStore.mediaType === 'image' && imageMode.value === 'image2image' && supportsImageReferenceMode.value
 })
+const isExpandMode = computed(() => settingsStore.mediaType === 'image' && imageMode.value === 'expand')
+const expandSourceAspectRatio = computed(() => {
+  const dimensions = uploadedFile.value?.dimensions
+  if (!dimensions?.width || !dimensions?.height) return null
+  return dimensions.width / dimensions.height
+})
+const isExpandRatioSame = computed(() => {
+  if (!isExpandMode.value || !expandSourceAspectRatio.value) return false
+  const targetRatio = parseAspectRatio(settingsStore.aspectRatio)
+  if (!targetRatio) return false
+  return Math.abs(expandSourceAspectRatio.value - targetRatio) < 0.01
+})
 const requiresUpload = computed(() => {
   if (!modelRequiresReference(settingsStore.selectedModel)) return false
   return !!modelCapability.value?.inputs.includes('image') && !inputText.value.trim()
@@ -1072,7 +1171,7 @@ const requiresUpload = computed(() => {
 const showReferenceUrlInput = computed(() => requiresUpload.value && !isUploadEnabled.value)
 const showReferenceField = computed(() => {
   if (usesViduLikeVideoMode.value) return videoMode.value !== 'text2video'
-  if (settingsStore.mediaType === 'image') return isImageReferenceMode.value || showReferenceUrlInput.value
+  if (settingsStore.mediaType === 'image') return isImageReferenceMode.value || isExpandMode.value || showReferenceUrlInput.value
   return isUploadEnabled.value || showReferenceUrlInput.value
 })
 
@@ -1127,8 +1226,31 @@ const activeGenerateModeLabel = computed(() => {
   }
   return uploadedFile.value ? '参考生成' : '文生视频'
 })
+
+const quickExpandSourceRatio = computed(() => {
+  const result = quickExpandResult.value
+  if (!result) return null
+  return parseAspectRatio(result.aspectRatio)
+    ?? (result.size?.width && result.size?.height ? result.size.width / result.size.height : null)
+})
+
+const quickExpandSourceLabel = computed(() => {
+  const result = quickExpandResult.value
+  if (!result) return ''
+  if (result.aspectRatio) return result.aspectRatio
+  if (result.size?.width && result.size?.height) return `${result.size.width}×${result.size.height}`
+  return '原图'
+})
+
+function isQuickExpandRatioSame(ratio: string): boolean {
+  const sourceRatio = quickExpandSourceRatio.value
+  const targetRatio = parseAspectRatio(ratio)
+  if (!sourceRatio || !targetRatio) return false
+  return Math.abs(sourceRatio - targetRatio) < 0.01
+}
 const needsMaterialAttention = computed(() => {
   if (!showReferenceField.value) return false
+  if (isExpandMode.value) return !uploadedFile.value
   if (isImageReferenceMode.value) return !uploadedFile.value
   if (!usesViduLikeVideoMode.value) return showReferenceUrlInput.value ? !referenceUrl.value.trim() : false
   if (videoMode.value === 'image2video' || videoMode.value === 'endFrame2video') return !uploadedFile.value
@@ -1141,6 +1263,7 @@ const needsMaterialAttention = computed(() => {
 })
 const materialSummaryLabel = computed(() => {
   if (!showReferenceField.value) return ''
+  if (isExpandMode.value) return uploadedFile.value ? `原图：${uploadedFile.value.name}` : '原图：待上传'
   if (isImageReferenceMode.value) return uploadedFile.value ? `素材：${uploadedFile.value.name}` : '素材：待上传'
   if (showReferenceUrlInput.value) return referenceUrl.value.trim() ? '参考链接已填写' : '参考链接待填写'
   if (usesViduLikeVideoMode.value) {
@@ -1170,6 +1293,9 @@ const materialSummaryLabel = computed(() => {
 })
 
 const inputPlaceholder = computed(() => {
+  if (isExpandMode.value) {
+    return '（可选）描述扩展区域希望出现的画面；留空则只按目标比例自然向外延展。'
+  }
   if (usesViduLikeVideoMode.value && videoMode.value === 'text2video') {
     return '描述你想生成的视频：场景、运动、节奏、情绪和镜头语言。'
   }
@@ -1206,6 +1332,9 @@ const inputPlaceholder = computed(() => {
 })
 
 const canSend = computed(() => {
+  if (isExpandMode.value) {
+    return !!uploadedFile.value && !isExpandRatioSame.value
+  }
   if (!inputText.value.trim()) return false
   if (usesViduLikeVideoMode.value) {
     if (videoMode.value === 'text2video') return true
@@ -1278,6 +1407,11 @@ function setImageMode(mode: ImageMode) {
 
   if (mode === 'image2image' && !supportsImageReferenceMode.value) return
   if (imageMode.value === mode) return
+  if (mode === 'expand') {
+    // 扩图模式固定 Qwen-Image-2.0-Pro，并锁定模型选择。
+    settingsStore.selectedModel = EXPAND_MODEL_ID
+    settingsStore.saveToStorage()
+  }
   imageMode.value = mode
   removeUploadedFile()
   referenceUrl.value = ''
@@ -1388,6 +1522,13 @@ function getGreatestCommonDivisor(a: number, b: number): number {
 function getAspectRatioLabel(dimensions: ImageDimensions): string {
   const divisor = getGreatestCommonDivisor(dimensions.width, dimensions.height)
   return `${dimensions.width / divisor}:${dimensions.height / divisor}`
+}
+
+function parseAspectRatio(value: string | undefined | null): number | null {
+  if (!value) return null
+  const [width, height] = value.split(':').map((item) => Number(item))
+  if (!width || !height) return null
+  return width / height
 }
 
 function hasSameAspectRatio(a: ImageDimensions, b: ImageDimensions): boolean {
@@ -1522,7 +1663,14 @@ function handleFileChange(e: Event) {
   }
 
   removeUploadedFile()
-  uploadedFile.value = createUploadedFile(file, isImage ? 'image' : 'video')
+  const nextFile = createUploadedFile(file, isImage ? 'image' : 'video')
+  uploadedFile.value = nextFile
+  // 扩图模式需要知道原图比例，用于拦截「目标比例与原图一致」的无意义请求。
+  // 这里必须传 ref 中的响应式对象，直接在原始 File 包装对象上写 dimensions
+  // 不会触发 computed 更新。
+  if (isImage && isExpandMode.value && uploadedFile.value) {
+    void resolveUploadedImageDimensions(uploadedFile.value).catch(() => {})
+  }
 }
 
 async function handleViduFrameChange(e: Event, position: 'start' | 'end') {
@@ -1853,7 +2001,9 @@ async function handlePolishPrompt() {
       messages: [
         {
           role: 'system',
-          content: settingsStore.promptPolishSystemPrompt.trim() || DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT,
+          content: isExpandMode.value
+            ? DEFAULT_EXPAND_SYSTEM_PROMPT
+            : settingsStore.promptPolishSystemPrompt.trim() || DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT,
         },
         {
           role: 'user',
@@ -1994,17 +2144,107 @@ watch(
   }
 )
 
+/**
+ * 统一的扩图生成入口：先预扩画布，再把扩展后的图片交给 Qwen。
+ * 若远程结果图因 CORS 无法读入 Canvas，则自动降级为原图直传 + 扩图指令。
+ */
+async function runExpandGeneration(source: UploadedFile, ratio: string, prompt = '') {
+  const preparedFile = await createExpandedUploadedFile(source, ratio)
+  const target = getExpandTargetSize(ratio)
+
+  settingsStore.setMediaType('image')
+  settingsStore.selectedModel = EXPAND_MODEL_ID
+  settingsStore.aspectRatio = ratio
+  imageMode.value = 'expand'
+
+  await generate(
+    prompt,
+    'image2image',
+    EXPAND_MODEL_ID,
+    source,
+    ratio,
+    settingsStore.videoDuration,
+    false,
+    null,
+    settingsStore.videoResolution,
+    1,
+    {
+      imageMode: 'expand',
+      generationFile: preparedFile || source,
+      imageSize: target.size,
+    },
+  )
+
+  settingsStore.saveToStorage()
+  await nextTick()
+  scrollChatToBottom()
+}
+
+function handleExpandImage(result: GenerateResult) {
+  quickExpandResult.value = result
+}
+
+function closeQuickExpand() {
+  quickExpandResult.value = null
+}
+
+async function confirmQuickExpand(ratio: string) {
+  const result = quickExpandResult.value
+  if (!result || activeSessionGenerating.value || isQuickExpandRatioSame(ratio)) return
+
+  quickExpandResult.value = null
+  const source: UploadedFile = {
+    name: `扩图原图-${Date.now()}.png`,
+    type: 'image',
+    url: result.url,
+    size: 0,
+    dimensions: result.size,
+  }
+  await runExpandGeneration(source, ratio)
+}
+
 async function handleSend() {
   const prompt = inputText.value.trim()
 
-  try {
-    validatePromptOrThrow(prompt)
-  } catch (error) {
-    alert(getReadableErrorMessage(error, '提示词校验失败，请修改后重试。'))
-    return
+  if (!isExpandMode.value || prompt) {
+    try {
+      validatePromptOrThrow(prompt)
+    } catch (error) {
+      alert(getReadableErrorMessage(error, '提示词校验失败，请修改后重试。'))
+      return
+    }
   }
 
   if (!canSend.value || activeSessionGenerating.value) return
+
+  // 扩图链路：原图作为消息展示，预扩画布作为实际模型输入。
+  if (isExpandMode.value) {
+    const source = uploadedFile.value
+    if (!source) return
+
+    // 上传后尺寸读取是异步的；发送前再确认一次，避免目标比例与原图一致。
+    let sourceDimensions: ImageDimensions | null = null
+    try {
+      sourceDimensions = await resolveUploadedImageDimensions(source)
+    } catch {
+      // 读不到尺寸时不阻塞发送，交给预扩画布按目标比例兜底。
+    }
+    const targetRatio = parseAspectRatio(settingsStore.aspectRatio)
+    const isSameRatio = !!sourceDimensions && !!targetRatio
+      && Math.abs(sourceDimensions.width / sourceDimensions.height - targetRatio) < 0.01
+    if (isSameRatio || isExpandRatioSame.value) {
+      showErrorMessage('当前扩图比例与原图一致，请选择其他比例后再发送。')
+      return
+    }
+
+    inputText.value = ''
+    removeUploadedFile({ revoke: false })
+    showMentionMenu.value = false
+    referenceUrl.value = ''
+
+    await runExpandGeneration(source, settingsStore.aspectRatio, prompt)
+    return
+  }
 
   if (usesViduLikeVideoMode.value && videoMode.value === 'startEnd2video') {
     const isAspectRatioValid = await validateViduFrameAspectRatio()
@@ -2082,8 +2322,16 @@ async function handleRegenerate(message: Message) {
   const idx = activeMessages.value.findIndex((m) => m.id === message.id)
   const userMsg = idx > 0 ? activeMessages.value[idx - 1] : null
   if (userMsg && userMsg.type === 'user') {
-    const model = userMsg.model || settingsStore.selectedModel
     const aspectRatio = userMsg.aspectRatio || settingsStore.aspectRatio
+    const source = userMsg.uploadedFiles?.[0] || userMsg.uploadedFile
+
+    // 扩图消息重生成：仍以原图为源图，重新走预扩画布 + Qwen 扩图链路。
+    if (userMsg.imageMode === 'expand' && source) {
+      await runExpandGeneration(source, aspectRatio, userMsg.content)
+      return
+    }
+
+    const model = userMsg.model || settingsStore.selectedModel
     const duration = userMsg.duration || settingsStore.videoDuration
     const batchSize = userMsg.batchSize || settingsStore.batchSize
     await generate(
@@ -5980,6 +6228,271 @@ async function handleRegenerate(message: Message) {
 
   .multimodal-groups {
     grid-template-columns: 1fr;
+  }
+}
+
+/* 扩图模式：上传区用暖色强调，和普通参考图区分 */
+.upload-card-row.is-expand-upload {
+  border-color: rgba(217, 205, 184, 0.34);
+  background: linear-gradient(180deg, rgba(217, 205, 184, 0.09), rgba(255, 255, 255, 0.02));
+}
+
+.upload-card-row.is-expand-upload.has-file {
+  border-color: rgba(52, 211, 153, 0.46);
+}
+
+.expand-mode-note {
+  color: rgba(242, 236, 225, 0.72);
+}
+
+.expand-ratio-warning {
+  border-color: rgba(248, 113, 113, 0.26);
+  background: rgba(248, 113, 113, 0.1);
+  color: rgba(254, 202, 202, 0.92);
+}
+
+/* 结果图快捷扩图弹窗 */
+.expand-modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(7, 6, 5, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.expand-modal {
+  width: min(100%, 520px);
+  max-height: min(720px, calc(100dvh - 40px));
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid rgba(217, 205, 184, 0.24);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 90% 0%, rgba(217, 205, 184, 0.12), transparent 36%),
+    linear-gradient(180deg, #1b1813 0%, #0e0c09 100%);
+  color: #f4efe6;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.58), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  animation: expand-modal-in 0.22s ease-out;
+}
+
+@keyframes expand-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.expand-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.expand-modal-kicker {
+  display: block;
+  margin-bottom: 4px;
+  color: rgba(217, 205, 184, 0.62);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+.expand-modal-head h3 {
+  margin: 0;
+  color: #f7f2e9;
+  font-size: 21px;
+  font-weight: 720;
+  letter-spacing: 0.01em;
+}
+
+.expand-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.expand-modal-close:hover {
+  border-color: rgba(217, 205, 184, 0.34);
+  background: rgba(217, 205, 184, 0.12);
+  color: #fff;
+}
+
+.expand-modal-preview {
+  position: relative;
+  margin-top: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.32);
+  aspect-ratio: 16 / 8;
+}
+
+.expand-modal-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.expand-modal-source {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(12, 11, 9, 0.74);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 9.5px;
+  font-weight: 600;
+  backdrop-filter: blur(10px);
+}
+
+.expand-modal-copy {
+  margin: 12px 0 14px;
+  color: rgba(244, 239, 230, 0.6);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.expand-ratio-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.expand-ratio-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 88px;
+  padding: 9px 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.86);
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.expand-ratio-btn:hover:not(:disabled) {
+  border-color: rgba(217, 205, 184, 0.42);
+  background: rgba(217, 205, 184, 0.13);
+  transform: translateY(-2px);
+}
+
+.expand-ratio-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.expand-ratio-box {
+  display: block;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  opacity: 0.78;
+}
+
+.expand-ratio-label {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.expand-ratio-size {
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 8.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.expand-ratio-note {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: rgba(217, 205, 184, 0.16);
+  color: rgba(242, 236, 225, 0.8);
+  font-size: 7.5px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.expand-modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 13px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.expand-modal-hint {
+  color: rgba(255, 255, 255, 0.36);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.expand-modal-cancel {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.expand-modal-cancel:hover {
+  border-color: rgba(217, 205, 184, 0.32);
+  background: rgba(217, 205, 184, 0.1);
+  color: #fff;
+}
+
+@media (max-width: 560px) {
+  .expand-modal-mask {
+    padding: 12px;
+  }
+
+  .expand-modal {
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .expand-ratio-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .expand-modal-foot {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

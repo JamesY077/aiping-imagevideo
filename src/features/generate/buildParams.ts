@@ -18,7 +18,8 @@ export async function buildImageParams(
   model: string | null,
   uploadedFile: UploadInput,
   aspectRatio: string,
-  mode: ImageRequestMode | undefined
+  mode: ImageRequestMode | undefined,
+  sizeOverride?: string
 ): Promise<ImageGenerateRequest> {
   const primaryFile = Array.isArray(uploadedFile) ? uploadedFile[0] : uploadedFile
   let imageInput = primaryFile?.url
@@ -46,6 +47,13 @@ export async function buildImageParams(
       imageParams.width = width
       imageParams.height = height
     }
+  }
+
+  // 扩图需要与预扩画布保持同一目标尺寸；只在明确传入时覆盖。
+  if (sizeOverride) {
+    imageParams.size = sizeOverride
+    delete imageParams.width
+    delete imageParams.height
   }
 
   return imageParams

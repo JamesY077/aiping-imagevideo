@@ -8,6 +8,9 @@
     <div class="bubble">
       <div class="content">
         <p v-if="message.content">{{ message.content }}</p>
+        <span v-if="message.imageMode === 'expand'" class="expand-mode-chip">
+          扩图 · {{ message.aspectRatio || '目标比例' }}
+        </span>
         <div v-if="previewFiles.length" class="file-preview-list">
           <div
             v-for="(file, index) in previewFiles"
@@ -61,6 +64,7 @@
               v-if="result.type === 'image'"
               :result="result"
               @regenerate="$emit('regenerate', message)"
+              @expand="$emit('expandImage', result)"
             />
             <VideoResult
               v-else-if="result.type === 'video'"
@@ -102,13 +106,14 @@
 import ImageResult from './ImageResult.vue'
 import VideoResult from './VideoResult.vue'
 import { formatTime } from '@/utils/format'
-import type { Message } from '@/types/chat'
+import type { GenerateResult, Message } from '@/types/chat'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 const props = defineProps<{ message: Message }>()
 defineEmits<{
   (e: 'regenerate', message: Message): void
   (e: 'copyPrompt', prompt: string): void
+  (e: 'expandImage', result: GenerateResult): void
 }>()
 
 const previewFiles = computed(() => props.message.uploadedFiles?.length ? props.message.uploadedFiles : props.message.uploadedFile ? [props.message.uploadedFile] : [])
@@ -319,6 +324,22 @@ onBeforeUnmount(clearGenerationTimers)
 .message.user .content p,
 .message.user .time {
   color: rgba(255, 255, 255, 0.96);
+}
+
+.expand-mode-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  margin-top: 6px;
+  padding: 0 9px;
+  border: 1px solid rgba(217, 205, 184, 0.30);
+  border-radius: 999px;
+  background: rgba(217, 205, 184, 0.12);
+  color: #f4efe6;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1;
 }
 
 .file-preview-list {

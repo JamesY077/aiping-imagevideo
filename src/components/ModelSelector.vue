@@ -1,6 +1,11 @@
 <template>
-  <div class="model-selector" :class="{ compact }">
-    <select v-model="selectedModel" @change="onChange">
+  <div class="model-selector" :class="{ compact, disabled }">
+    <select
+      v-model="selectedModel"
+      :disabled="disabled"
+      :title="disabled ? '扩图模式固定使用 Qwen-Image-2.0-Pro' : undefined"
+      @change="onChange"
+    >
       <!-- 普通模型 -->
       <option v-for="model in normalModels" :key="model.id" :value="model.id">
         {{ formatModelLabel(model.id) }}
@@ -53,6 +58,7 @@ const props = defineProps<{
   mediaType: MediaType
   modelValue: string | null
   compact?: boolean
+  disabled?: boolean
 }>()
 
 const emit = defineEmits<{ (e: 'update:modelValue', value: string | null): void }>()
@@ -213,6 +219,15 @@ select option {
 
 select:focus {
   border-color: var(--color-border-strong);
+}
+
+.model-selector.disabled select {
+  cursor: not-allowed;
+  opacity: 0.78;
+}
+
+.model-selector.disabled .select-icon {
+  opacity: 0.55;
 }
 
 .select-icon {

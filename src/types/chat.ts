@@ -4,6 +4,9 @@ export type GenerateStatus = 'idle' | 'pending' | 'processing' | 'completed' | '
 
 export type GenerateType = 'image' | 'video'
 
+/** 图片生成方式：扩图（expand）固定走原图向外延展链路。 */
+export type ImageGenerationMode = 'text2image' | 'image2image' | 'expand'
+
 export interface GenerateResult {
   type: GenerateType
   url: string
@@ -42,6 +45,8 @@ export interface Message {
   duration?: number
   aspectRatio?: string
   model?: string
+  /** 用户发起本轮生成时选择的图片生成方式；扩图消息用于重新生成。 */
+  imageMode?: ImageGenerationMode
 }
 
 export interface MotionControlOptions {

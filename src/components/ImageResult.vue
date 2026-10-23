@@ -20,6 +20,7 @@
 
     <footer class="result-actions">
       <button class="action-btn action-btn-primary" type="button" title="下载图片" @click="download">下载</button>
+      <button class="action-btn action-btn-expand" type="button" title="以这张图片为基础扩图" @click="$emit('expand')">扩图</button>
       <button class="action-btn" type="button" title="查看原图" @click="openPreview">查看</button>
       <button class="action-btn action-btn-subtle" type="button" title="重新生成" @click="$emit('regenerate')">重生成</button>
     </footer>
@@ -31,7 +32,10 @@ import { computed } from 'vue'
 import type { GenerateResult } from '@/types/chat'
 
 const props = defineProps<{ result: GenerateResult }>()
-defineEmits<{ (e: 'regenerate'): void }>()
+defineEmits<{
+  (e: 'regenerate'): void
+  (e: 'expand'): void
+}>()
 
 const ratioLabel = computed(() => {
   if (props.result.aspectRatio) return props.result.aspectRatio
@@ -311,6 +315,17 @@ function openPreview() {
 
 .action-btn-subtle {
   margin-left: 0;
+}
+
+.action-btn-expand {
+  border-color: rgba(217, 205, 184, 0.28);
+  background: rgba(217, 205, 184, 0.10);
+  color: #f4efe6;
+}
+
+.action-btn-expand:hover {
+  border-color: rgba(217, 205, 184, 0.46);
+  background: rgba(217, 205, 184, 0.18);
 }
 
 @media (max-width: 767px) {
