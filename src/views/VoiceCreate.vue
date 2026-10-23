@@ -5,97 +5,1948 @@
     <StudioHeader
       kicker="Voice Studio"
       title="配音创作"
-      subtitle="文本转语音、音色演绎与多角色对白将在这里完成"
+      subtitle="文本转语音与声音复刻：音色、语速、语调、音量都能直接调"
       accent="#fb923c"
     >
       <template #actions>
-        <span class="studio-chip">施工中</span>
+        <span class="studio-chip">{{ model.displayName }}</span>
       </template>
     </StudioHeader>
 
     <main class="voice-main">
-      <section class="voice-hero">
-        <p class="voice-kicker">Voice Studio</p>
-        <h1>配音创作</h1>
-        <p class="voice-subtitle">
-          为画面配上情绪与节奏。文本转语音、音色演绎与多角色对白将在这里完成，
-          工作台正在搭建中。
-        </p>
-        <span class="voice-status">
-          <span class="status-dot" aria-hidden="true" />
-          施工中 · 交互与接口待接入
-        </span>
-      </section>
+      <!-- ---------- 分区切换 ---------- -->
+      <div class="voice-tabs" role="tablist" aria-label="配音创作功能">
+        <button
+          class="voice-tab"
+          :class="{ active: activeTab === 'speech' }"
+          type="button"
+          role="tab"
+          :aria-selected="activeTab === 'speech'"
+          @click="switchTab('speech')"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 6h16M4 12h10M4 18h13" />
+          </svg>
+          文本转语音
+        </button>
+        <button
+          class="voice-tab"
+          :class="{ active: activeTab === 'clone' }"
+          type="button"
+          role="tab"
+          :aria-selected="activeTab === 'clone'"
+          @click="switchTab('clone')"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="9" y="3.2" width="6" height="11" rx="3" />
+            <path d="M5.6 11.4a6.4 6.4 0 0 0 12.8 0M12 17.8v3" />
+          </svg>
+          声音克隆
+          <span v-if="myVoices.length" class="tab-badge">{{ myVoices.length }}</span>
+        </button>
 
-      <section class="voice-grid" aria-label="规划中的能力">
-        <article v-for="item in plannedFeatures" :key="item.title" class="studio-panel feature-card">
-          <span class="feature-icon" aria-hidden="true">{{ item.icon }}</span>
-          <h2>{{ item.title }}</h2>
-          <p>{{ item.desc }}</p>
-          <span class="feature-state">{{ item.state }}</span>
-        </article>
-      </section>
+        <div v-if="catalogState === 'loading' || catalogState === 'error'" class="tabs-meta">
+          <span v-if="catalogState === 'loading'">音色加载中…</span>
+          <span v-else class="tabs-meta-warn">音色列表加载失败，已用内置音色</span>
+        </div>
+      </div>
 
-      <section class="studio-panel model-panel" aria-labelledby="voice-model-title">
-        <div class="panel-head">
-          <div>
-            <p class="panel-kicker">Ready Models</p>
-            <h2 id="voice-model-title">已接入的语音模型</h2>
-          </div>
-          <span class="panel-count">{{ voiceModels.length }} 个</span>
+      <!-- ================= 文本转语音 ================= -->
+      <div v-show="activeTab === 'speech'" class="speech-layout">
+        <div class="speech-col">
+          <!-- 脚本 -->
+          <section class="studio-panel script-panel">
+            <header class="studio-panel-head">
+              <div class="studio-panel-headings">
+                <span class="studio-kicker">Script · 01</span>
+                <h2 class="studio-panel-title">待配音文本</h2>
+              </div>
+              <span class="studio-panel-meta" :class="{ 'is-over': charCount >= maxChars }">
+                {{ charCount }} / {{ maxChars }}
+              </span>
+            </header>
+
+            <div class="script-body">
+              <textarea
+                ref="scriptRef"
+                v-model="text"
+                class="studio-field script-input"
+                :maxlength="maxChars"
+                placeholder="把要配音的文字粘进来。支持段落换行、<#1.2#> 停顿时长与 (laughs) 语气词，也可以点下方快捷标签插入。"
+                spellcheck="false"
+                @keydown.meta.enter.prevent="handleGenerate"
+                @keydown.ctrl.enter.prevent="handleGenerate"
+                @input="rememberScriptSelection"
+                @select="rememberScriptSelection"
+                @keyup="rememberScriptSelection"
+                @mouseup="rememberScriptSelection"
+                @focus="rememberScriptSelection"
+                @blur="rememberScriptSelection"
+              />
+
+              <div class="script-foot">
+                <div class="script-tips">
+                  <span><kbd>⌘</kbd><kbd>↵</kbd> 快速生成</span>
+                  <span v-if="translateStatus" class="script-translate-status">{{ translateStatus }}</span>
+                </div>
+                <div class="script-actions">
+                  <span v-if="charCount > model.capability.streamSuggestChars" class="script-warn">
+                    超过 {{ model.capability.streamSuggestChars }} 字，合成会慢一些
+                  </span>
+                  <button
+                    ref="translateBtnRef"
+                    class="ghost-btn translate-btn"
+                    type="button"
+                    title="翻译当前文案（可选）"
+                    :disabled="!text.trim() || translating"
+                    :aria-busy="translating"
+                    @click="openTranslatePicker"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M4 5h9M8.5 5v2c0 3.2-2 6-5 7.5M6.2 9.5c1.3 2.2 3.1 3.8 5.4 4.8M14 20l4-10 4 10M15.7 16h4.6" />
+                    </svg>
+                    {{ translating ? '翻译中…' : '翻译' }}
+                  </button>
+                  <button class="ghost-btn" type="button" :disabled="!text" @click="clearScript">清空</button>
+                </div>
+              </div>
+
+              <p v-if="translateError" class="inline-error script-translate-error">{{ translateError }}</p>
+
+              <!-- 停顿 / 语气词快捷插入 -->
+              <div class="tag-panel">
+                <div class="tag-panel-head">
+                  <div class="tag-panel-title">
+                    <span class="tag-panel-dot" aria-hidden="true" />
+                    快捷插入
+                    <em>停顿 · 19 种语气词</em>
+                  </div>
+                  <span class="tag-panel-hint">点击写入光标处</span>
+                </div>
+
+                <div class="tag-panel-body">
+                  <div class="tag-group">
+                    <span class="tag-group-label">停顿</span>
+                    <div class="tag-chips">
+                      <button
+                        v-for="seconds in PAUSE_PRESETS"
+                        :key="seconds"
+                        class="tag-chip tag-chip--pause"
+                        type="button"
+                        :title="`插入 ${formatPauseTag(seconds)} 停顿`"
+                        @mousedown.prevent
+                        @click="insertPause(seconds)"
+                      >
+                        +{{ seconds }}s
+                      </button>
+                      <span class="tag-custom">
+                        <input
+                          v-model.number="customPauseSeconds"
+                          type="number"
+                          min="0.01"
+                          max="99.99"
+                          step="0.1"
+                          aria-label="自定义停顿时长（秒）"
+                          @keydown.enter.prevent="insertPause(customPauseSeconds)"
+                        />
+                        <button
+                          class="tag-chip tag-chip--pause"
+                          type="button"
+                          @mousedown.prevent
+                          @click="insertPause(customPauseSeconds)"
+                        >
+                          自定义
+                        </button>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="tag-group">
+                    <span class="tag-group-label">语气词</span>
+                    <div class="tag-chips">
+                      <button
+                        v-for="tag in INTERJECTION_TAGS"
+                        :key="tag.code"
+                        class="tag-chip"
+                        type="button"
+                        :title="`${tag.hint} · (${tag.code})`"
+                        @mousedown.prevent
+                        @click="insertInterjection(tag.code)"
+                      >
+                        {{ tag.label }}<em>{{ tag.code }}</em>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="preset-row">
+                <button
+                  v-for="preset in TEXT_PRESETS"
+                  :key="preset.title"
+                  class="preset-card"
+                  type="button"
+                  :title="`套用「${preset.title}」文案与音色「${preset.voiceName}」`"
+                  @click="applyPreset(preset)"
+                >
+                  <span class="preset-card-head">
+                    <strong>{{ preset.title }}</strong>
+                    <em class="preset-voice">音色 · {{ preset.voiceName }}</em>
+                  </span>
+                  <span>{{ preset.desc }}</span>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <!-- 结果 -->
+          <section ref="resultPanelRef" class="studio-panel result-panel">
+            <header class="studio-panel-head">
+              <div class="studio-panel-headings">
+                <span class="studio-kicker">Output · 02</span>
+                <h2 class="studio-panel-title">生成结果</h2>
+              </div>
+              <span class="studio-panel-meta">{{ result ? resultMeta : '等待生成' }}</span>
+            </header>
+
+            <div class="result-body">
+              <div v-if="generating" class="result-loading">
+                <span class="loading-ring" aria-hidden="true" />
+                <div>
+                  <strong>正在合成语音…</strong>
+                  <p>{{ charCount }} 个字符 · {{ selectedVoice.name }} · {{ generatingHint }}</p>
+                </div>
+              </div>
+
+              <template v-else-if="result">
+                <VoicePlayer
+                  :key="result.url"
+                  :src="result.url"
+                  :duration-ms="result.durationMs"
+                  :waveform="resultWaveform"
+                  autoplay
+                >
+                  <template #actions>
+                    <button class="mini-btn" type="button" @click="downloadResult">下载</button>
+                    <button class="mini-btn" type="button" @click="handleGenerate">重新生成</button>
+                  </template>
+                </VoicePlayer>
+
+                <div class="result-meta-row">
+                  <span class="meta-pill">{{ resultVoiceName }}</span>
+                  <span class="meta-pill">{{ formatDurationMs(result.durationMs) }}</span>
+                  <span class="meta-pill">{{ result.format.toUpperCase() }}</span>
+                  <span class="meta-pill">{{ formatBytes(result.size) }}</span>
+                  <span class="meta-pill">计费字符 {{ result.usageCharacters }}</span>
+                </div>
+
+                <p class="result-text">{{ resultText }}</p>
+              </template>
+
+              <div v-else class="result-empty">
+                <span class="empty-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 12v-1a8 8 0 0 1 16 0v1" />
+                    <rect x="3.2" y="12.4" width="4" height="7" rx="2" />
+                    <rect x="16.8" y="12.4" width="4" height="7" rx="2" />
+                  </svg>
+                </span>
+                <p>写好文本、选好音色，点「生成配音」。</p>
+              </div>
+
+              <p v-if="generateError" class="inline-error">{{ generateError }}</p>
+            </div>
+          </section>
+
+          <!-- 本次会话记录 -->
+          <section v-if="history.length" class="studio-panel history-panel">
+            <header class="studio-panel-head">
+              <div class="studio-panel-headings">
+                <span class="studio-kicker">Session · 03</span>
+                <h2 class="studio-panel-title">本次生成记录</h2>
+              </div>
+              <div class="history-head-actions">
+                <span class="studio-panel-meta">共 {{ history.length }} 条</span>
+                <button class="ghost-btn" type="button" @click="clearHistory">清空</button>
+              </div>
+            </header>
+
+            <ul class="history-list">
+              <li v-for="item in pagedHistory" :key="item.id" class="history-item">
+                <div class="history-top">
+                  <span class="history-voice">{{ item.voiceName }}</span>
+                  <span class="history-time">{{ formatClock(item.createdAt) }}</span>
+                </div>
+                <p class="history-text">{{ item.text }}</p>
+                <VoicePlayer
+                  :src="item.audioUrl"
+                  :duration-ms="item.durationMs"
+                  :bars="48"
+                  compact
+                >
+                  <template #actions>
+                    <button class="mini-btn" type="button" @click="downloadHistory(item)">下载</button>
+                  </template>
+                </VoicePlayer>
+              </li>
+            </ul>
+
+            <footer v-if="historyPageCount > 1" class="history-pager">
+              <button
+                class="pager-btn"
+                type="button"
+                :disabled="historyPage <= 1"
+                @click="historyPage -= 1"
+              >
+                上一页
+              </button>
+              <div class="pager-pages">
+                <button
+                  v-for="page in historyPageCount"
+                  :key="page"
+                  class="pager-dot"
+                  :class="{ active: page === historyPage }"
+                  type="button"
+                  :aria-label="`第 ${page} 页`"
+                  :aria-current="page === historyPage ? 'page' : undefined"
+                  @click="historyPage = page"
+                >
+                  {{ page }}
+                </button>
+              </div>
+              <button
+                class="pager-btn"
+                type="button"
+                :disabled="historyPage >= historyPageCount"
+                @click="historyPage += 1"
+              >
+                下一页
+              </button>
+            </footer>
+          </section>
         </div>
 
-        <ul class="model-list">
-          <li v-for="model in voiceModels" :key="model.id" class="model-item">
-            <div class="model-main">
-              <strong>{{ model.displayName }}</strong>
-              <p>{{ model.description }}</p>
+        <!-- 声音与参数 -->
+        <aside class="studio-panel control-panel">
+          <header class="studio-panel-head control-head">
+            <div class="studio-panel-headings">
+              <span class="studio-kicker">Voice &amp; Params</span>
+              <h2 class="studio-panel-title">声音与参数</h2>
             </div>
-            <span class="model-tag">{{ model.capability.expressive ? '情绪演绎' : '基础合成' }}</span>
-          </li>
-        </ul>
-      </section>
+            <button class="ghost-btn" type="button" @click="resetParams">重置</button>
+          </header>
+
+          <div class="control-body studio-scroll">
+            <!-- 01 声音 -->
+            <section class="side-card">
+              <header class="side-card-head">
+                <span class="side-index">01</span>
+                <div class="side-card-titles">
+                  <h3>声音</h3>
+                  <p>{{ model.displayName }} · 已接入</p>
+                </div>
+              </header>
+
+              <div class="side-card-body">
+                <div class="voice-current">
+                  <div class="voice-current-main">
+                    <span class="voice-current-label">当前音色</span>
+                    <strong>{{ selectedVoice.name }}</strong>
+                    <p>{{ selectedVoice.description || selectedVoice.voiceId }}</p>
+                  </div>
+                  <button class="mini-btn" type="button" :disabled="previewing" @click="handlePreviewVoice">
+                    {{ previewing ? '合成中…' : '试听' }}
+                  </button>
+                </div>
+
+                <VoicePlayer
+                  v-if="preview && preview.voiceId === selectedVoice.voiceId && !voiceModalOpen"
+                  :key="preview.url"
+                  :src="preview.url"
+                  :duration-ms="preview.durationMs"
+                  :waveform="preview.waveform"
+                  :bars="40"
+                  compact
+                  autoplay
+                />
+
+                <p v-if="previewHint" class="field-hint field-hint--flush">{{ previewHint }}</p>
+
+                <button ref="voiceChangeBtnRef" class="voice-change-btn" type="button" @click="openVoicePicker">
+                  <svg
+                    class="voice-change-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4" />
+                  </svg>
+                  <span>更换音色</span>
+                  <em>{{ catalogState === 'loading' ? '加载中…' : `${allVoices.length} 个可选` }}</em>
+                  <svg
+                    class="voice-change-arrow"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="m9 6 6 6-6 6" />
+                  </svg>
+                </button>
+              </div>
+            </section>
+
+            <!-- 02 演绎 -->
+            <section class="side-card">
+              <header class="side-card-head">
+                <span class="side-index">02</span>
+                <div class="side-card-titles">
+                  <h3>演绎</h3>
+                  <p>语速 · 语调 · 音量 · 情绪</p>
+                </div>
+              </header>
+
+              <div class="side-card-body side-card-body--params">
+                <div class="param-row">
+                  <div class="param-head">
+                    <span class="field-label">语速</span>
+                    <span class="param-value">{{ speed.toFixed(2) }}×</span>
+                  </div>
+                  <input
+                    v-model.number="speed"
+                    class="voice-range"
+                    type="range"
+                    :min="speedRange.min"
+                    :max="speedRange.max"
+                    :step="speedRange.step"
+                    :style="{ '--fill': percentOf(speed, speedRange) }"
+                    aria-label="语速"
+                  />
+                </div>
+
+                <div class="param-row">
+                  <div class="param-head">
+                    <span class="field-label">语调</span>
+                    <span class="param-value">{{ pitch > 0 ? '+' : '' }}{{ pitch }}</span>
+                  </div>
+                  <input
+                    v-model.number="pitch"
+                    class="voice-range"
+                    type="range"
+                    :min="pitchRange.min"
+                    :max="pitchRange.max"
+                    :step="pitchRange.step"
+                    :style="{ '--fill': percentOf(pitch, pitchRange) }"
+                    aria-label="语调"
+                  />
+                </div>
+
+                <div class="param-row">
+                  <div class="param-head">
+                    <span class="field-label">音量</span>
+                    <span class="param-value">{{ vol.toFixed(1) }}</span>
+                  </div>
+                  <input
+                    v-model.number="vol"
+                    class="voice-range"
+                    type="range"
+                    :min="volRange.min"
+                    :max="volRange.max"
+                    :step="volRange.step"
+                    :style="{ '--fill': percentOf(vol, volRange) }"
+                    aria-label="音量"
+                  />
+                </div>
+
+                <div class="param-row">
+                  <div class="param-head">
+                    <span class="field-label">情绪</span>
+                    <span class="field-note">7 种可选 · 不指定则自动判断</span>
+                  </div>
+                  <div class="emotion-grid">
+                    <button
+                      class="emotion-chip"
+                      :class="{ active: emotion === '' }"
+                      type="button"
+                      @click="emotion = ''"
+                    >
+                      不指定
+                    </button>
+                    <button
+                      v-for="item in VOICE_EMOTIONS"
+                      :key="item.value"
+                      class="emotion-chip"
+                      :class="{ active: emotion === item.value }"
+                      type="button"
+                      @click="emotion = emotion === item.value ? '' : item.value"
+                    >
+                      <span aria-hidden="true">{{ item.icon }}</span>{{ item.label }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- 03 输出 -->
+            <details class="side-card side-card--collapsible">
+              <summary class="side-card-head side-card-summary">
+                <span class="side-index">03</span>
+                <div class="side-card-titles">
+                  <h3>输出</h3>
+                  <p>格式与音质</p>
+                </div>
+                <span class="side-card-meta">{{ audioSummary }}</span>
+                <svg
+                  class="toggle-chevron"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </summary>
+
+              <div class="side-card-body">
+                <div class="output-grid">
+                  <label class="adv-field">
+                    <span>格式</span>
+                    <select v-model="audioFormat" class="voice-select">
+                      <option v-for="item in SPEECH_FORMATS" :key="item.value" :value="item.value">{{ item.label }}</option>
+                    </select>
+                  </label>
+                  <label class="adv-field">
+                    <span>采样率</span>
+                    <select v-model.number="sampleRate" class="voice-select">
+                      <option v-for="rate in SPEECH_SAMPLE_RATES" :key="rate" :value="rate">{{ rate }} Hz</option>
+                    </select>
+                  </label>
+                  <label class="adv-field">
+                    <span>比特率</span>
+                    <select v-model.number="bitrate" class="voice-select" :disabled="audioFormat !== 'mp3'">
+                      <option v-for="rate in SPEECH_BITRATES" :key="rate" :value="rate">{{ rate / 1000 }} kbps</option>
+                    </select>
+                  </label>
+                  <label class="adv-field">
+                    <span>声道</span>
+                    <select v-model.number="channel" class="voice-select">
+                      <option :value="1">单声道</option>
+                      <option :value="2">双声道</option>
+                    </select>
+                  </label>
+                </div>
+
+                <label class="switch-row">
+                  <input v-model="textNormalization" type="checkbox" />
+                  <span>中英文文本规范化（数字、单位读法）</span>
+                </label>
+
+                <p class="field-hint field-hint--flush">MP3 体积最小，最适合入片；WAV / FLAC 无损但体积更大。</p>
+              </div>
+            </details>
+          </div>
+
+          <footer class="control-footer">
+            <div class="cost-line">
+              <span>{{ charCount }} 字符</span>
+              <span class="dot" aria-hidden="true">·</span>
+              <span class="cost-voice">{{ selectedVoice.name }}</span>
+            </div>
+            <button
+              class="studio-btn studio-btn--primary generate-btn"
+              type="button"
+              :disabled="!canGenerate"
+              @click="handleGenerate"
+            >
+              {{ generating ? '合成中…' : '生成配音' }}
+              <svg v-if="!generating" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M7 17 17 7M9 7h8v8" />
+              </svg>
+            </button>
+            <p v-if="generateError" class="control-error">{{ generateError }}</p>
+          </footer>
+        </aside>
+      </div>
+
+      <!-- ================= 声音克隆 ================= -->
+      <div v-show="activeTab === 'clone'" class="clone-layout">
+        <!-- 样本 -->
+        <section class="studio-panel sample-panel">
+          <header class="studio-panel-head">
+            <div class="studio-panel-headings">
+              <span class="studio-kicker">Sample</span>
+              <h2 class="studio-panel-title">第一步 · 准备样本音频</h2>
+            </div>
+            <span class="studio-panel-meta">10 秒 ~ 5 分钟</span>
+          </header>
+
+          <div class="sample-body">
+            <div
+              class="dropzone"
+              :class="{ 'is-over': dragOver, 'has-sample': !!sample }"
+              role="button"
+              tabindex="0"
+              @click="openFilePicker"
+              @keydown.enter.prevent="openFilePicker"
+              @dragover.prevent="dragOver = true"
+              @dragleave.prevent="dragOver = false"
+              @drop.prevent="handleDrop"
+            >
+              <span class="dropzone-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 16V4m0 0L7.6 8.4M12 4l4.4 4.4" />
+                  <path d="M4.4 15.2v2.4a2.4 2.4 0 0 0 2.4 2.4h10.4a2.4 2.4 0 0 0 2.4-2.4v-2.4" />
+                </svg>
+              </span>
+              <strong>{{ sample ? '重新选择样本音频' : '拖入音频，或点击选择文件' }}</strong>
+              <p>支持 mp3 / m4a / wav，≤ 20MB。单人、安静、无背景音乐的人声效果最好。</p>
+              <input
+                ref="sampleInputRef"
+                type="file"
+                accept=".mp3,.m4a,.wav,audio/mpeg,audio/mp4,audio/wav,audio/x-wav"
+                class="file-input"
+                @change="handleFileChange"
+              />
+            </div>
+
+            <div class="record-box">
+              <div class="record-head">
+                <div>
+                  <strong>或者直接录一段</strong>
+                  <p>点击开始，录满 10 秒后停止；录音会自动转成 WAV 上传。</p>
+                </div>
+                <span class="record-timer" :class="{ 'is-live': recorder.isRecording.value }">
+                  {{ formatDurationMs(recorder.elapsedMs.value) }}
+                </span>
+              </div>
+
+              <div class="record-controls">
+                <button
+                  class="record-btn"
+                  :class="{ 'is-recording': recorder.isRecording.value }"
+                  type="button"
+                  :disabled="recorder.isProcessing.value || recorder.isRequesting.value || sampleProcessing"
+                  @click="toggleRecord"
+                >
+                  <span class="record-dot" aria-hidden="true" />
+                  {{
+                    recorder.isRequesting.value
+                      ? '等待麦克风授权…'
+                      : recorder.isProcessing.value
+                        ? '处理中…'
+                        : recorder.isRecording.value
+                          ? '停止录音'
+                          : recorder.elapsedMs.value
+                            ? '重新录制'
+                            : '开始录音'
+                  }}
+                </button>
+
+                <div class="level-meter" aria-hidden="true">
+                  <span
+                    v-for="index in 16"
+                    :key="index"
+                    :style="{ opacity: recorder.isRecording.value ? Math.max(0.14, recorder.level.value * 1.6 - index * 0.04) : 0.14 }"
+                  />
+                </div>
+              </div>
+
+              <p v-if="recorder.error.value" class="inline-error">{{ recorder.error.value }}</p>
+            </div>
+
+            <div v-if="sample" class="sample-card">
+              <div class="sample-card-head">
+                <div>
+                  <strong>{{ sample.name }}</strong>
+                  <p>
+                    {{ formatDurationMs(sample.durationSec * 1000) }} · {{ formatBytes(sample.size) }} ·
+                    {{ sample.source === 'record' ? '麦克风录音' : '上传文件' }}
+                  </p>
+                </div>
+                <div class="sample-card-actions">
+                  <button class="mini-btn" type="button" @click="openFilePicker">更换</button>
+                  <button class="mini-btn danger" type="button" @click="clearSample">移除</button>
+                </div>
+              </div>
+              <VoicePlayer
+                :key="sample.previewUrl"
+                :src="sample.previewUrl"
+                :duration-ms="sample.durationSec * 1000"
+                :bars="56"
+                compact
+              />
+            </div>
+
+            <p v-if="sampleError" class="inline-error">{{ sampleError }}</p>
+
+            <ul class="sample-tips">
+              <li>时长 10 秒 ~ 5 分钟，文件 ≤ 20MB</li>
+              <li>单人说话、无其他人声与背景音乐</li>
+              <li>复刻音色 7 天内未被使用会被上游自动删除</li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- 复刻 -->
+        <section class="studio-panel clone-panel">
+          <header class="studio-panel-head">
+            <div class="studio-panel-headings">
+              <span class="studio-kicker">Clone</span>
+              <h2 class="studio-panel-title">第二步 · 复刻音色</h2>
+            </div>
+            <span class="studio-panel-meta">不占本地存储</span>
+          </header>
+
+          <div class="clone-body">
+            <label class="adv-field">
+              <span>音色名称（只存在本机）</span>
+              <input
+                v-model="cloneName"
+                class="studio-field clone-input"
+                type="text"
+                maxlength="24"
+                :placeholder="`我的音色 ${myVoices.length + 1}`"
+              />
+            </label>
+
+            <label class="adv-field">
+              <span>复刻试听文本</span>
+              <textarea
+                v-model="cloneDemoText"
+                class="studio-field clone-input clone-textarea"
+                maxlength="200"
+                rows="3"
+              />
+            </label>
+
+            <div class="switch-group">
+              <label class="switch-row">
+                <input v-model="noiseReduction" type="checkbox" />
+                <span>样本降噪</span>
+              </label>
+              <label class="switch-row">
+                <input v-model="volumeNormalization" type="checkbox" />
+                <span>音量归一化</span>
+              </label>
+            </div>
+
+            <ol class="clone-steps">
+              <li :class="stepClass('uploading')">
+                <span class="step-index">1</span>
+                <div>
+                  <strong>上传样本</strong>
+                  <p>{{ cloneStage === 'uploading' ? '正在上传音频…' : '拿到 file_id' }}</p>
+                </div>
+              </li>
+              <li :class="stepClass('cloning')">
+                <span class="step-index">2</span>
+                <div>
+                  <strong>复刻音色</strong>
+                  <p>{{ cloneStage === 'cloning' ? '上游正在训练音色…' : '生成 voice_id' }}</p>
+                </div>
+              </li>
+              <li :class="stepClass('done')">
+                <span class="step-index">3</span>
+                <div>
+                  <strong>试听确认</strong>
+                  <p>{{ cloneStage === 'done' ? '可以直接拿去配音' : '自动合成一句试听' }}</p>
+                </div>
+              </li>
+            </ol>
+
+            <button
+              class="studio-btn studio-btn--primary clone-submit"
+              type="button"
+              :disabled="!canClone"
+              @click="handleClone"
+            >
+              {{ cloneBusy ? (cloneStage === 'uploading' ? '上传中…' : '复刻中…') : '开始复刻' }}
+            </button>
+
+            <p v-if="!sample" class="field-hint">先在上面准备一段样本音频。</p>
+            <p v-if="cloneError" class="inline-error">{{ cloneError }}</p>
+
+            <div v-if="cloneResult" class="clone-result">
+              <div class="clone-result-head">
+                <strong>复刻完成</strong>
+                <span class="clone-id">{{ cloneResult.voiceId }}</span>
+              </div>
+
+              <VoicePlayer
+                v-if="cloneResult.demoDataUrl || cloneResult.demoUrl"
+                :key="cloneResult.demoDataUrl || cloneResult.demoUrl"
+                :src="cloneResult.demoDataUrl || cloneResult.demoUrl"
+                :duration-ms="cloneResult.durationMs || 0"
+                :bars="48"
+                compact
+                autoplay
+              />
+
+              <div class="clone-result-actions">
+                <button class="mini-btn" type="button" @click="useVoiceForSpeech(cloneResult.voiceId)">
+                  用它配音
+                </button>
+                <button class="mini-btn" type="button" @click="clearSample">再录一段</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 我的音色 -->
+        <section class="studio-panel my-voices-panel">
+          <header class="studio-panel-head">
+            <div class="studio-panel-headings">
+              <span class="studio-kicker">My Voices</span>
+              <h2 class="studio-panel-title">我的音色</h2>
+            </div>
+            <span class="studio-panel-meta">{{ myVoices.length }} 个</span>
+          </header>
+
+          <div class="my-voices-body">
+            <p v-if="!myVoices.length" class="voice-empty">
+              还没有复刻音色。录一段或上传一段人声，10 秒就能得到自己的声音。
+            </p>
+
+            <ul v-else class="my-voices-list">
+              <li v-for="voice in myVoices" :key="voice.voiceId" class="my-voice-card">
+                <div class="my-voice-head">
+                  <strong>{{ voice.name }}</strong>
+                  <span class="my-voice-date">{{ formatDate(voice.createdAt) }}</span>
+                </div>
+                <code class="my-voice-id">{{ voice.voiceId }}</code>
+
+                <VoicePlayer
+                  v-if="voice.demoDataUrl || voice.demoUrl"
+                  :key="voice.demoDataUrl || voice.demoUrl"
+                  :src="voice.demoDataUrl || voice.demoUrl"
+                  :duration-ms="voice.durationMs || 0"
+                  :bars="40"
+                  compact
+                />
+                <p v-else class="field-hint">这个音色没有可用的试听音频。</p>
+
+                <div class="my-voice-actions">
+                  <button class="mini-btn" type="button" @click="useVoiceForSpeech(voice.voiceId)">用于配音</button>
+                  <button
+                    class="mini-btn danger"
+                    type="button"
+                    :disabled="deletingVoiceId === voice.voiceId"
+                    @click="handleDeleteVoice(voice)"
+                  >
+                    {{ deletingVoiceId === voice.voiceId ? '删除中…' : '删除' }}
+                  </button>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </section>
+      </div>
     </main>
+
+    <!-- ================= 翻译语言选择 ================= -->
+    <Teleport to="body">
+      <div v-if="translateOpen" class="voice-modal-layer translate-layer" @click.self="closeTranslatePicker">
+        <section
+          ref="translateDialogRef"
+          class="translate-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="translate-dialog-title"
+          tabindex="-1"
+        >
+          <header class="translate-head">
+            <div class="translate-headings">
+              <span class="studio-kicker">Translate</span>
+              <h2 id="translate-dialog-title">翻译配音文案</h2>
+              <p>选择目标语言，换一种语言继续配音。停顿和语气词标记会保留。</p>
+            </div>
+            <button class="voice-modal-close" type="button" aria-label="关闭翻译语言选择" @click="closeTranslatePicker">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+                <path d="M6 6l12 12M18 6 6 18" />
+              </svg>
+            </button>
+          </header>
+
+          <div class="translate-body studio-scroll">
+            <div class="translate-grid">
+              <button
+                v-for="language in TRANSLATION_LANGUAGES"
+                :key="language.code"
+                class="translate-option"
+                type="button"
+                @click="handleTranslate(language)"
+              >
+                <strong>{{ language.label }}</strong>
+                <span>{{ language.nativeLabel }}</span>
+              </button>
+            </div>
+
+            <p class="translate-model">翻译模型 · {{ translationModelLabel }}</p>
+          </div>
+        </section>
+      </div>
+    </Teleport>
+
+    <!-- ================= 音色选择（大面板） ================= -->
+    <Teleport to="body">
+      <div v-if="voiceModalOpen" class="voice-modal-layer" @click.self="closeVoicePicker">
+        <section
+          class="voice-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="voice-modal-title"
+          tabindex="-1"
+        >
+          <header class="voice-modal-head">
+            <div class="voice-modal-headings">
+              <span class="studio-kicker">Voice Library</span>
+              <h2 id="voice-modal-title">选择音色</h2>
+              <p>搜索或按语言筛选，点选后可直接试听；确认后回到创作。</p>
+            </div>
+            <div class="voice-modal-head-actions">
+              <span class="voice-modal-count">
+                {{ catalogState === 'loading' ? '加载中…' : `${allVoices.length} 个音色` }}
+              </span>
+              <button class="voice-modal-close" type="button" aria-label="关闭音色选择" @click="closeVoicePicker">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6 6 18" />
+                </svg>
+              </button>
+            </div>
+          </header>
+
+          <div class="voice-modal-toolbar">
+            <label class="voice-modal-search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="6.5" />
+                <path d="m16 16 4 4" />
+              </svg>
+              <input
+                ref="voiceSearchRef"
+                v-model="voiceQuery"
+                type="search"
+                placeholder="搜索音色名称 / ID / 描述"
+                aria-label="搜索音色"
+              />
+              <button v-if="voiceQuery" class="voice-search-clear" type="button" @click="voiceQuery = ''">
+                清除
+              </button>
+            </label>
+            <button
+              class="mini-btn voice-refresh"
+              type="button"
+              :disabled="catalogState === 'loading'"
+              @click="loadCatalog(true)"
+            >
+              {{ catalogState === 'loading' ? '刷新中…' : '刷新' }}
+            </button>
+          </div>
+
+          <div class="voice-modal-filters">
+            <div class="lang-tabs">
+              <button
+                v-for="language in languageOptions"
+                :key="language.key"
+                class="lang-tab"
+                :class="{ active: languageFilter === language.key }"
+                type="button"
+                @click="languageFilter = language.key"
+              >
+                {{ language.label }}
+              </button>
+            </div>
+            <span class="voice-modal-result">{{ visibleVoiceCount }} 个匹配</span>
+          </div>
+
+          <div class="voice-modal-list studio-scroll">
+            <template v-if="filteredClonedVoices.length">
+              <p class="voice-group-label">
+                我的音色 · 复刻
+                <em>{{ filteredClonedVoices.length }}</em>
+              </p>
+              <div class="voice-grid">
+                <button
+                  v-for="voice in filteredClonedVoices"
+                  :key="voice.voiceId"
+                  class="voice-option"
+                  :class="{ active: voice.voiceId === selectedVoiceId }"
+                  type="button"
+                  @click="selectVoice(voice.voiceId)"
+                >
+                  <span class="voice-option-top">
+                    <strong>{{ voice.name }}</strong>
+                    <span class="voice-option-meta">
+                      <svg
+                        v-if="voice.voiceId === selectedVoiceId"
+                        class="voice-option-check"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="m5 12 4 4L19 6" />
+                      </svg>
+                      <em
+                        class="voice-lang-tag is-clone"
+                        title="复刻音色"
+                      >
+                        {{ getVoiceLanguageTag(voice) }}
+                      </em>
+                    </span>
+                  </span>
+                  <span class="voice-option-desc">{{ voice.voiceId }}</span>
+                </button>
+              </div>
+            </template>
+
+            <template v-for="group in groupedVoices" :key="group.key">
+              <p class="voice-group-label">
+                {{ group.label }}
+                <em>{{ group.voices.length }}</em>
+              </p>
+              <div class="voice-grid">
+                <button
+                  v-for="voice in group.voices"
+                  :key="voice.voiceId"
+                  class="voice-option"
+                  :class="{ active: voice.voiceId === selectedVoiceId }"
+                  type="button"
+                  @click="selectVoice(voice.voiceId)"
+                >
+                  <span class="voice-option-top">
+                    <strong>{{ voice.name }}</strong>
+                    <span class="voice-option-meta">
+                      <svg
+                        v-if="voice.voiceId === selectedVoiceId"
+                        class="voice-option-check"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="m5 12 4 4L19 6" />
+                      </svg>
+                      <em
+                        class="voice-lang-tag"
+                        :title="getVoiceLanguageTag(voice)"
+                      >
+                        {{ getVoiceLanguageTag(voice) }}
+                      </em>
+                    </span>
+                  </span>
+                  <span class="voice-option-desc">{{ voice.description || voice.voiceId }}</span>
+                </button>
+              </div>
+            </template>
+
+            <div v-if="!filteredClonedVoices.length && !groupedVoices.length" class="voice-empty">
+              没有匹配的音色，换个关键词或切换语言分组试试。
+              <button v-if="voiceQuery" class="link-btn" type="button" @click="voiceQuery = ''">清除搜索</button>
+            </div>
+          </div>
+
+          <div v-if="preview && preview.voiceId === selectedVoice.voiceId" class="voice-modal-preview">
+            <VoicePlayer
+              :key="preview.url"
+              :src="preview.url"
+              :duration-ms="preview.durationMs"
+              :waveform="preview.waveform"
+              :bars="80"
+              compact
+              autoplay
+            />
+          </div>
+
+          <footer class="voice-modal-foot">
+            <div class="voice-modal-current">
+              <span class="voice-current-label">当前音色</span>
+              <strong>{{ selectedVoice.name }}</strong>
+              <p>{{ selectedVoice.description || selectedVoice.voiceId }}</p>
+              <p v-if="previewHint" class="voice-modal-hint">{{ previewHint }}</p>
+            </div>
+            <div class="voice-modal-actions">
+              <button class="mini-btn" type="button" :disabled="previewing" @click="handlePreviewVoice">
+                {{ previewing ? '合成中…' : '试听' }}
+              </button>
+              <button class="studio-btn studio-btn--primary" type="button" @click="closeVoicePicker">完成</button>
+            </div>
+          </footer>
+        </section>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { VOICE_MODELS } from '@/features/voice/models'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import StudioHeader from '@/components/StudioHeader.vue'
 import StudioIsland from '@/components/StudioIsland.vue'
+import VoicePlayer from '@/components/VoicePlayer.vue'
+import { chatCompletion } from '@/api/aiping'
+import { cloneVoice, deleteClonedVoice, fetchVoiceCatalog, synthesizeSpeech, uploadCloneAudio } from '@/api/voice'
+import {
+  CLONE_SAMPLE_MAX_BYTES,
+  CLONE_SAMPLE_MAX_SECONDS,
+  CLONE_SAMPLE_MIN_SECONDS,
+  computeWaveform,
+  formatBytes,
+  formatDurationMs,
+  getAudioDurationMs,
+  isCloneSampleFile,
+  normalizeCloneFileName,
+  remoteAudioToDataUrl,
+} from '@/features/voice/audio'
+import {
+  DEFAULT_AUDIO_SETTING,
+  SPEECH_BITRATES,
+  SPEECH_FORMATS,
+  SPEECH_SAMPLE_RATES,
+  VOICE_EMOTIONS,
+  VOICE_MODELS,
+  VOICE_PARAM_LIMITS,
+  getCloneDemoModel,
+} from '@/features/voice/models'
+import { useVoiceRecorder } from '@/features/voice/recorder'
+import {
+  loadClonedVoices,
+  loadVoiceSettings,
+  removeStoredClonedVoice,
+  saveVoiceSettings,
+  syncClonedVoicesFromRemote,
+  upsertClonedVoice,
+} from '@/features/voice/storage'
+import { INTERJECTION_TAGS, PAUSE_PRESETS, formatPauseTag } from '@/features/voice/tags'
+import {
+  TRANSLATION_LANGUAGES,
+  buildTranslationMessages,
+  cleanTranslationOutput,
+} from '@/features/voice/translation'
+import type { TranslationLanguage } from '@/features/voice/translation'
+import { DEFAULT_TRANSLATION_MODEL, useSettingsStore } from '@/stores/settingsStore'
+import {
+  CLONE_DEMO_TEXT,
+  DEFAULT_VOICE_ID,
+  FALLBACK_SYSTEM_VOICES,
+  TEXT_PRESETS,
+  VOICE_LANGUAGES,
+  buildPreviewText,
+  getVoiceLanguageTag,
+  groupVoicesByLanguage,
+  matchesVoiceQuery,
+} from '@/features/voice/voices'
+import type { VoiceLanguageKey } from '@/features/voice/voices'
+import type {
+  CloneResult,
+  CloneSample,
+  CloneStage,
+  RemoteClonedVoice,
+  SpeechAudioFormat,
+  SpeechResult,
+  StoredClonedVoice,
+  SystemVoice,
+  VoiceEmotion,
+  VoiceHistoryItem,
+  VoicePreview,
+} from '@/features/voice/types'
 
 const accent = 'var(--studio-accent-voice)'
-const voiceModels = VOICE_MODELS
+const model = VOICE_MODELS[0]
+const maxChars = model.capability.maxChars
+const settingsStore = useSettingsStore()
 
-const plannedFeatures = [
-  {
-    icon: '✎',
-    title: '文本转语音',
-    desc: '粘贴脚本、控制断句与停顿，一键生成可直接入片的旁白。',
-    state: '规划中',
-  },
-  {
-    icon: '◍',
-    title: '音色库',
-    desc: '内置音色挑选与自定义音色管理，按角色分配声音。',
-    state: '规划中',
-  },
-  {
-    icon: '≈',
-    title: '情绪与语速',
-    desc: '情绪、语速、音量与音高独立调节，让语气更贴合画面。',
-    state: '规划中',
-  },
-  {
-    icon: '❑',
-    title: '多角色对白',
-    desc: '同一段脚本拆分多个角色，自动排队合成并拼接成完整音频。',
-    state: '规划中',
-  },
-]
+const speedRange = VOICE_PARAM_LIMITS.speed
+const pitchRange = VOICE_PARAM_LIMITS.pitch
+const volRange = VOICE_PARAM_LIMITS.vol
+
+const saved = loadVoiceSettings()
+
+/* ---------------- 基础状态 ---------------- */
+
+const activeTab = ref<'speech' | 'clone'>('speech')
+const text = ref('')
+const speed = ref(saved.speed)
+const pitch = ref(saved.pitch)
+const vol = ref(saved.vol)
+const emotion = ref<VoiceEmotion | ''>(saved.emotion)
+const audioFormat = ref<SpeechAudioFormat>(saved.format)
+const sampleRate = ref(saved.sampleRate)
+const bitrate = ref(saved.bitrate)
+const channel = ref<1 | 2>(saved.channel)
+const textNormalization = ref(saved.textNormalization)
+const validLanguageKeys: VoiceLanguageKey[] = ['all', 'zh', 'yue', 'en', 'ja', 'ko', 'other']
+const languageFilter = ref<VoiceLanguageKey>(
+  validLanguageKeys.includes(saved.languageFilter as VoiceLanguageKey)
+    ? (saved.languageFilter as VoiceLanguageKey)
+    : 'zh',
+)
+
+const selectedVoiceId = ref(saved.voiceId || DEFAULT_VOICE_ID)
+const voiceQuery = ref('')
+
+const audioSummary = computed(
+  () => `${audioFormat.value.toUpperCase()} · ${Number((sampleRate.value / 1000).toFixed(2))}kHz`,
+)
+
+const scriptRef = ref<HTMLTextAreaElement | null>(null)
+const resultPanelRef = ref<HTMLElement | null>(null)
+const voiceModalOpen = ref(false)
+const voiceSearchRef = ref<HTMLInputElement | null>(null)
+const voiceChangeBtnRef = ref<HTMLButtonElement | null>(null)
+
+const charCount = computed(() => text.value.length)
+
+/* ---------------- 文案翻译 ---------------- */
+
+const translateBtnRef = ref<HTMLButtonElement | null>(null)
+const translateDialogRef = ref<HTMLElement | null>(null)
+const translateOpen = ref(false)
+const translating = ref(false)
+const translateError = ref('')
+const translateStatus = ref('')
+
+const translationModelLabel = computed(
+  () => settingsStore.translationModel.trim() || DEFAULT_TRANSLATION_MODEL,
+)
+
+/* ---------------- 脚本快捷插入 ---------------- */
+
+const customPauseSeconds = ref(1)
+
+/**
+ * textarea 失焦前的光标 / 选区。
+ *
+ * 点击标签按钮时浏览器会先把焦点移到按钮上，此时再读 textarea 的 selectionStart
+ * 已经拿不到原来的位置；所以在 input / select / keyup / mouseup / blur 时先记下来。
+ */
+const scriptSelection = ref<{ start: number; end: number } | null>(null)
+
+function rememberScriptSelection() {
+  const el = scriptRef.value
+  if (!el) return
+  const start = el.selectionStart ?? el.value.length
+  const end = el.selectionEnd ?? start
+  scriptSelection.value = { start, end }
+}
+
+/**
+ * 把标记写进光标处（有选区则替换）；textarea 从未聚焦时追加到末尾。
+ * 超出字数上限时按上限截断，避免绕过 maxlength。
+ */
+function insertSnippet(snippet: string) {
+  const el = scriptRef.value
+  const current = text.value
+  const focused = !!el && document.activeElement === el
+  const remembered = scriptSelection.value
+  const fallback = current.length
+  const rawStart = focused ? el!.selectionStart ?? fallback : remembered?.start ?? fallback
+  const rawEnd = focused ? el!.selectionEnd ?? rawStart : remembered?.end ?? rawStart
+  const start = Math.min(Math.max(0, rawStart), current.length)
+  const end = Math.min(Math.max(start, rawEnd), current.length)
+  const next = (current.slice(0, start) + snippet + current.slice(end)).slice(0, maxChars)
+  const caret = Math.min(start + snippet.length, next.length)
+
+  text.value = next
+  // 连续点击多个标签时，以最新插入点为准。
+  scriptSelection.value = { start: caret, end: caret }
+
+  void nextTick(() => {
+    const target = scriptRef.value
+    if (!target) return
+    target.focus()
+    target.setSelectionRange(caret, caret)
+  })
+}
+
+function insertPause(seconds: number) {
+  insertSnippet(formatPauseTag(seconds))
+}
+
+function insertInterjection(code: string) {
+  insertSnippet(`(${code})`)
+}
+
+/* ---------------- 文案翻译 ---------------- */
+
+watch(translateOpen, (open) => {
+  document.body.classList.toggle('voice-modal-open', open)
+  if (open) {
+    window.addEventListener('keydown', handleTranslateKeydown)
+    void nextTick(() => translateDialogRef.value?.focus())
+  } else {
+    window.removeEventListener('keydown', handleTranslateKeydown)
+  }
+})
+
+function handleTranslateKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeTranslatePicker()
+  }
+}
+
+function openTranslatePicker() {
+  if (!text.value.trim() || translating.value) return
+  translateError.value = ''
+  translateStatus.value = ''
+  translateOpen.value = true
+}
+
+function closeTranslatePicker() {
+  translateOpen.value = false
+  void nextTick(() => translateBtnRef.value?.focus())
+}
+
+async function handleTranslate(language: TranslationLanguage) {
+  const source = text.value.trim()
+  if (!source || translating.value) return
+
+  closeTranslatePicker()
+  translating.value = true
+  translateError.value = ''
+  translateStatus.value = ''
+
+  try {
+    const raw = await chatCompletion({
+      model: translationModelLabel.value,
+      messages: buildTranslationMessages(source, language),
+      temperature: 0.2,
+    })
+    const translated = cleanTranslationOutput(raw)
+    if (!translated) {
+      throw new Error('翻译模型没有返回有效内容，请更换模型或稍后重试。')
+    }
+
+    const truncated = translated.length > maxChars
+    const nextText = truncated ? translated.slice(0, maxChars) : translated
+    text.value = nextText
+    scriptSelection.value = { start: nextText.length, end: nextText.length }
+    translateStatus.value = truncated
+      ? `已翻译为${language.label}，超出 ${maxChars} 字已截断`
+      : `已翻译为${language.label}`
+
+    await nextTick()
+    scriptRef.value?.focus()
+    scriptRef.value?.setSelectionRange(nextText.length, nextText.length)
+  } catch (error) {
+    translateError.value = error instanceof Error ? error.message : '翻译失败，请稍后重试。'
+  } finally {
+    translating.value = false
+  }
+}
+
+/* ---------------- 音色目录 ---------------- */
+
+const systemVoices = ref<SystemVoice[]>([])
+const remoteCloned = ref<RemoteClonedVoice[]>([])
+const myVoices = ref<StoredClonedVoice[]>(loadClonedVoices())
+const catalogState = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
+
+/** 本地复刻音色 + 账号里有、但本地没记录的音色。 */
+const mergedClonedVoices = computed<SystemVoice[]>(() => {
+  const local = myVoices.value.map((voice) => ({
+    voiceId: voice.voiceId,
+    name: voice.name,
+    description: '我用样本复刻的音色',
+    createdAt: '',
+    language: 'clone',
+  }))
+
+  const localIds = new Set(local.map((voice) => voice.voiceId))
+  const extra = remoteCloned.value
+    .filter((voice) => !localIds.has(voice.voiceId))
+    .map((voice) => ({
+      voiceId: voice.voiceId,
+      name: voice.name || voice.voiceId,
+      description: '账号里的复刻音色（本机没有记录名称）',
+      createdAt: voice.createdAt,
+      language: 'clone',
+    }))
+
+  return [...local, ...extra]
+})
+
+const allVoices = computed<SystemVoice[]>(() => [...mergedClonedVoices.value, ...systemVoices.value])
+
+const selectedVoice = computed<SystemVoice>(() => {
+  return (
+    allVoices.value.find((voice) => voice.voiceId === selectedVoiceId.value) || {
+      voiceId: selectedVoiceId.value,
+      name: selectedVoiceId.value,
+      description: '',
+      createdAt: '',
+      language: 'zh',
+    }
+  )
+})
+
+const filteredClonedVoices = computed(() => {
+  return mergedClonedVoices.value.filter((voice) => {
+    const keyword = voiceQuery.value.trim().toLowerCase()
+    if (!keyword) return true
+    return voice.name.toLowerCase().includes(keyword) || voice.voiceId.toLowerCase().includes(keyword)
+  })
+})
+
+const groupedVoices = computed(() => {
+  const filtered = systemVoices.value.filter((voice) => matchesVoiceQuery(voice, voiceQuery.value))
+  return groupVoicesByLanguage(filtered, languageFilter.value)
+})
+
+const visibleVoiceCount = computed(
+  () => filteredClonedVoices.value.length + groupedVoices.value.reduce((sum, group) => sum + group.voices.length, 0),
+)
+
+const languageOptions = computed(() => [{ key: 'all' as VoiceLanguageKey, label: '全部' }, ...VOICE_LANGUAGES])
+
+async function loadCatalog(force = false) {
+  if (catalogState.value === 'loading') return
+  if (catalogState.value === 'ready' && !force) return
+
+  catalogState.value = 'loading'
+  try {
+    const catalog = await fetchVoiceCatalog()
+    systemVoices.value = catalog.system.length ? catalog.system : FALLBACK_SYSTEM_VOICES
+    remoteCloned.value = catalog.cloned
+    myVoices.value = syncClonedVoicesFromRemote(catalog.cloned)
+    catalogState.value = 'ready'
+
+    // 上次选中的音色可能已过期（复刻音色 7 天未使用会被上游删除），回落到默认音色。
+    if (!allVoices.value.some((voice) => voice.voiceId === selectedVoiceId.value)) {
+      selectedVoiceId.value = DEFAULT_VOICE_ID
+    }
+  } catch (error) {
+    systemVoices.value = FALLBACK_SYSTEM_VOICES
+    catalogState.value = 'error'
+    generateError.value = error instanceof Error ? error.message : '音色列表加载失败，已使用内置音色。'
+  }
+}
+
+function selectVoice(voiceId: string) {
+  selectedVoiceId.value = voiceId
+  preview.value = null
+  previewHint.value = ''
+}
+
+/* ---------------- 音色选择大面板 ---------------- */
+
+watch(voiceModalOpen, (open) => {
+  document.body.classList.toggle('voice-modal-open', open)
+  if (open) {
+    window.addEventListener('keydown', handleVoiceModalKeydown)
+    void nextTick(() => voiceSearchRef.value?.focus())
+  } else {
+    window.removeEventListener('keydown', handleVoiceModalKeydown)
+  }
+})
+
+function handleVoiceModalKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeVoicePicker()
+  }
+}
+
+function openVoicePicker() {
+  voiceQuery.value = ''
+  voiceModalOpen.value = true
+  void loadCatalog()
+}
+
+function closeVoicePicker() {
+  voiceModalOpen.value = false
+  void nextTick(() => voiceChangeBtnRef.value?.focus())
+}
+
+/* ---------------- 试听 ---------------- */
+
+const previewing = ref(false)
+const preview = ref<VoicePreview | null>(null)
+const previewHint = ref('')
+
+async function handlePreviewVoice() {
+  if (previewing.value) return
+
+  previewing.value = true
+  previewHint.value = ''
+  try {
+    const result = await synthesizeSpeech({
+      model: model.id,
+      text: buildPreviewText(selectedVoice.value.name),
+      voice: {
+        voiceId: selectedVoice.value.voiceId,
+        speed: 1,
+        vol: 1,
+        pitch: 0,
+        emotion: '',
+      },
+      audio: { format: 'mp3', sampleRate: 32000, bitrate: 128000, channel: 1 },
+      textNormalization: true,
+    })
+
+    revokeUrl(preview.value?.url)
+    preview.value = {
+      url: result.url,
+      durationMs: result.durationMs,
+      format: result.format,
+      createdAt: Date.now(),
+      waveform: await computeWaveform(result.blob, 160),
+      voiceId: selectedVoice.value.voiceId,
+    }
+    previewHint.value = `试听按 ${result.usageCharacters} 个字符计费。`
+  } catch (error) {
+    previewHint.value = error instanceof Error ? error.message : '试听失败，请稍后重试。'
+  } finally {
+    previewing.value = false
+  }
+}
+
+/* ---------------- 语音合成 ---------------- */
+
+const generating = ref(false)
+const generateError = ref('')
+const result = ref<(SpeechResult & { waveform?: number[] }) | null>(null)
+const resultWaveform = ref<number[]>([])
+const resultVoiceName = ref('')
+const resultText = ref('')
+const history = ref<(VoiceHistoryItem & { blob: Blob })[]>([])
+
+/** 生成记录每页 3 条，超出后翻页。 */
+const HISTORY_PAGE_SIZE = 3
+const historyPage = ref(1)
+const historyPageCount = computed(() => Math.max(1, Math.ceil(history.value.length / HISTORY_PAGE_SIZE)))
+const pagedHistory = computed(() => {
+  const page = Math.min(Math.max(1, historyPage.value), historyPageCount.value)
+  const start = (page - 1) * HISTORY_PAGE_SIZE
+  return history.value.slice(start, start + HISTORY_PAGE_SIZE)
+})
+
+watch(historyPageCount, (count) => {
+  if (historyPage.value > count) historyPage.value = count
+})
+
+const generatingHint = computed(() =>
+  charCount.value > model.capability.streamSuggestChars ? '长文本需要多等一会儿' : '通常几秒内完成',
+)
+
+const resultMeta = computed(() => {
+  if (!result.value) return '等待生成'
+  return `${formatDurationMs(result.value.durationMs)} · ${formatBytes(result.value.size)}`
+})
+
+const canGenerate = computed(() => !generating.value && charCount.value > 0 && !!selectedVoiceId.value)
+
+function applyPreset(preset: (typeof TEXT_PRESETS)[number]) {
+  text.value = preset.text
+  scriptSelection.value = { start: preset.text.length, end: preset.text.length }
+
+  // 文案和配套音色一起切换：点一下就能直接生成。
+  voiceQuery.value = ''
+  languageFilter.value = 'zh'
+  selectVoice(preset.voiceId)
+
+  void nextTick(() => {
+    const el = scriptRef.value
+    if (!el) return
+    el.focus()
+    el.setSelectionRange(preset.text.length, preset.text.length)
+  })
+}
+
+function clearScript() {
+  text.value = ''
+  scriptSelection.value = { start: 0, end: 0 }
+  translateStatus.value = ''
+  translateError.value = ''
+}
+
+async function handleGenerate() {
+  if (!canGenerate.value) {
+    if (!charCount.value) generateError.value = '先写一点要配音的文字。'
+    return
+  }
+
+  generating.value = true
+  generateError.value = ''
+  const voice = { ...selectedVoice.value }
+  const sourceText = text.value.trim()
+
+  try {
+    const generated = await synthesizeSpeech({
+      model: model.id,
+      text: sourceText,
+      voice: {
+        voiceId: voice.voiceId,
+        speed: speed.value,
+        vol: vol.value,
+        pitch: pitch.value,
+        emotion: emotion.value,
+      },
+      audio: {
+        format: audioFormat.value,
+        sampleRate: sampleRate.value,
+        bitrate: bitrate.value,
+        channel: channel.value,
+      },
+      textNormalization: textNormalization.value,
+    })
+
+    revokeUrl(result.value?.url)
+    result.value = generated
+    resultWaveform.value = await computeWaveform(generated.blob, 160)
+    resultVoiceName.value = voice.name
+    resultText.value = sourceText
+
+    pushHistory(generated, voice.name, sourceText)
+
+    await nextTick()
+    resultPanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  } catch (error) {
+    generateError.value = error instanceof Error ? error.message : '语音合成失败，请稍后重试。'
+  } finally {
+    generating.value = false
+  }
+}
+
+function pushHistory(generated: SpeechResult, voiceName: string, sourceText: string) {
+  const item: VoiceHistoryItem & { blob: Blob } = {
+    id: `${generated.createdAt}-${Math.random().toString(36).slice(2, 6)}`,
+    text: sourceText,
+    voiceId: selectedVoiceId.value,
+    voiceName,
+    model: model.id,
+    createdAt: generated.createdAt,
+    durationMs: generated.durationMs,
+    usageCharacters: generated.usageCharacters,
+    audioUrl: URL.createObjectURL(generated.blob),
+    format: generated.format,
+    size: generated.size,
+    blob: generated.blob,
+  }
+
+  const next = [item, ...history.value]
+  next.slice(10).forEach((dropped) => revokeUrl(dropped.audioUrl))
+  history.value = next.slice(0, 10)
+
+  // 新生成的内容在第 1 页最前面。
+  historyPage.value = 1
+}
+
+function clearHistory() {
+  history.value.forEach((item) => revokeUrl(item.audioUrl))
+  history.value = []
+  historyPage.value = 1
+}
+
+function downloadBlob(blob: Blob, extension: string) {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = `artrealm-voice-${Date.now()}.${extension}`
+  anchor.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 2000)
+}
+
+function downloadResult() {
+  if (!result.value) return
+  downloadBlob(result.value.blob, result.value.format)
+}
+
+function downloadHistory(item: VoiceHistoryItem & { blob: Blob }) {
+  downloadBlob(item.blob, item.format)
+}
+
+/* ---------------- 参数 ---------------- */
+
+function percentOf(value: number, range: { min: number; max: number }): string {
+  const ratio = (value - range.min) / (range.max - range.min)
+  return `${Math.min(100, Math.max(0, ratio * 100))}%`
+}
+
+function resetParams() {
+  speed.value = speedRange.defaultValue
+  pitch.value = pitchRange.defaultValue
+  vol.value = volRange.defaultValue
+  emotion.value = ''
+  audioFormat.value = DEFAULT_AUDIO_SETTING.format
+  sampleRate.value = DEFAULT_AUDIO_SETTING.sampleRate
+  bitrate.value = DEFAULT_AUDIO_SETTING.bitrate
+  channel.value = 1
+  textNormalization.value = true
+}
+
+watch([speed, pitch, vol, emotion, audioFormat, sampleRate, bitrate, channel, textNormalization, selectedVoiceId, languageFilter], () => {
+  saveVoiceSettings({
+    voiceId: selectedVoiceId.value,
+    speed: speed.value,
+    vol: vol.value,
+    pitch: pitch.value,
+    emotion: emotion.value,
+    format: audioFormat.value,
+    sampleRate: sampleRate.value,
+    bitrate: bitrate.value,
+    channel: channel.value,
+    textNormalization: textNormalization.value,
+    languageFilter: languageFilter.value,
+  })
+})
+
+/* ---------------- 声音克隆 ---------------- */
+
+const recorder = useVoiceRecorder()
+const sampleInputRef = ref<HTMLInputElement | null>(null)
+const sample = ref<CloneSample | null>(null)
+const sampleProcessing = ref(false)
+const sampleError = ref('')
+const dragOver = ref(false)
+
+const cloneName = ref('')
+const cloneDemoText = ref(CLONE_DEMO_TEXT)
+const noiseReduction = ref(true)
+const volumeNormalization = ref(true)
+const cloneStage = ref<CloneStage>('idle')
+const cloneError = ref('')
+const cloneResult = ref<CloneResult | null>(null)
+const deletingVoiceId = ref('')
+
+const cloneBusy = computed(() => cloneStage.value === 'uploading' || cloneStage.value === 'cloning')
+const canClone = computed(() => !!sample.value && !cloneBusy.value)
+
+function openFilePicker() {
+  sampleInputRef.value?.click()
+}
+
+async function handleFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  if (!isCloneSampleFile(file)) {
+    sampleError.value = '只支持 mp3 / m4a / wav 三种格式。'
+    return
+  }
+  await acceptSample(file, file.name, 'upload')
+}
+
+async function handleDrop(event: DragEvent) {
+  dragOver.value = false
+  const file = event.dataTransfer?.files?.[0]
+  if (!file) return
+  if (!isCloneSampleFile(file)) {
+    sampleError.value = '只支持 mp3 / m4a / wav 三种格式。'
+    return
+  }
+  await acceptSample(file, file.name, 'upload')
+}
+
+async function acceptSample(blob: Blob, name: string, source: 'upload' | 'record') {
+  sampleError.value = ''
+  if (blob.size > CLONE_SAMPLE_MAX_BYTES) {
+    sampleError.value = `音频 ${formatBytes(blob.size)}，超过 20MB 上限，请压缩后再试。`
+    return
+  }
+
+  sampleProcessing.value = true
+  try {
+    const durationMs = await getAudioDurationMs(blob)
+    const durationSec = durationMs / 1000
+
+    if (durationSec && durationSec < CLONE_SAMPLE_MIN_SECONDS) {
+      sampleError.value = `这段音频只有 ${durationSec.toFixed(1)} 秒，至少需要 ${CLONE_SAMPLE_MIN_SECONDS} 秒。`
+      return
+    }
+    if (durationSec && durationSec > CLONE_SAMPLE_MAX_SECONDS) {
+      sampleError.value = `这段音频有 ${Math.round(durationSec / 60)} 分钟，最长支持 5 分钟。`
+      return
+    }
+
+    revokeUrl(sample.value?.previewUrl)
+    sample.value = {
+      blob,
+      name: name || 'sample',
+      durationSec,
+      size: blob.size,
+      source,
+      previewUrl: URL.createObjectURL(blob),
+    }
+    cloneResult.value = null
+    cloneStage.value = 'idle'
+  } finally {
+    sampleProcessing.value = false
+  }
+}
+
+function clearSample() {
+  revokeUrl(sample.value?.previewUrl)
+  sample.value = null
+  cloneResult.value = null
+  cloneStage.value = 'idle'
+  sampleError.value = ''
+}
+
+async function toggleRecord() {
+  if (recorder.isRequesting.value) return
+
+  if (recorder.isRecording.value) {
+    const take = await recorder.stop()
+    if (!take) return
+
+    if (take.durationMs / 1000 < CLONE_SAMPLE_MIN_SECONDS) {
+      sampleError.value = `录音只有 ${(take.durationMs / 1000).toFixed(1)} 秒，请录满 ${CLONE_SAMPLE_MIN_SECONDS} 秒以上。`
+      return
+    }
+
+    await acceptSample(take.blob, `录音-${Date.now()}`, 'record')
+    return
+  }
+
+  sampleError.value = ''
+  await recorder.start()
+}
+
+async function handleClone() {
+  if (!sample.value || cloneBusy.value) return
+
+  cloneError.value = ''
+  cloneResult.value = null
+  cloneStage.value = 'uploading'
+
+  try {
+    const fileName = normalizeCloneFileName(sample.value.name, sample.value.source)
+    const fileId = await uploadCloneAudio(sample.value.blob, fileName)
+
+    cloneStage.value = 'cloning'
+    const demoText = cloneDemoText.value.trim()
+    const cloned = await cloneVoice({
+      fileId,
+      demoText: demoText || undefined,
+      demoModel: demoText ? getCloneDemoModel(model.id) : undefined,
+      needNoiseReduction: noiseReduction.value,
+      needVolumeNormalization: volumeNormalization.value,
+    })
+
+    let demoDataUrl: string | undefined
+    if (cloned.demoUrl) demoDataUrl = await remoteAudioToDataUrl(cloned.demoUrl, 200 * 1024)
+
+    const name = cloneName.value.trim() || `我的音色 ${myVoices.value.length + 1}`
+    myVoices.value = upsertClonedVoice({
+      voiceId: cloned.voiceId,
+      name,
+      createdAt: Date.now(),
+      demoDataUrl,
+      demoUrl: cloned.demoUrl,
+      durationMs: cloned.durationMs,
+    })
+
+    cloneResult.value = { ...cloned, demoDataUrl }
+    cloneStage.value = 'done'
+    cloneName.value = ''
+    selectedVoiceId.value = cloned.voiceId
+  } catch (error) {
+    cloneError.value = error instanceof Error ? error.message : '音色复刻失败，请稍后重试。'
+    cloneStage.value = 'idle'
+  }
+}
+
+function stepClass(step: CloneStage) {
+  if (cloneStage.value === 'done') return { 'is-done': step !== 'idle', 'is-active': false }
+
+  const order: CloneStage[] = ['idle', 'uploading', 'cloning', 'done']
+  const current = order.indexOf(cloneStage.value)
+  const target = order.indexOf(step)
+  return {
+    'is-done': current > target && target > 0,
+    'is-active': current === target,
+  }
+}
+
+function useVoiceForSpeech(voiceId: string) {
+  selectedVoiceId.value = voiceId
+  preview.value = null
+  switchTab('speech')
+  void nextTick(() => scriptRef.value?.focus())
+}
+
+async function handleDeleteVoice(voice: StoredClonedVoice) {
+  if (!window.confirm(`删除音色「${voice.name}」？删除后该音色将无法再用于合成。`)) return
+
+  deletingVoiceId.value = voice.voiceId
+  let remoteMessage = ''
+  try {
+    await deleteClonedVoice(voice.voiceId)
+  } catch (error) {
+    remoteMessage = error instanceof Error ? error.message : '服务端删除没有成功。'
+  } finally {
+    myVoices.value = removeStoredClonedVoice(voice.voiceId)
+    remoteCloned.value = remoteCloned.value.filter((item) => item.voiceId !== voice.voiceId)
+    if (selectedVoiceId.value === voice.voiceId) selectedVoiceId.value = DEFAULT_VOICE_ID
+    deletingVoiceId.value = ''
+  }
+
+  if (remoteMessage) {
+    window.alert(`${remoteMessage}\n已从本机列表移除，未保存的远端音色会在 7 天后自动过期。`)
+  }
+}
+
+/* ---------------- 待确认：试听数据 ---------------- */
+
+function switchTab(tab: 'speech' | 'clone') {
+  // 切到配音页时停掉正在进行的录音，避免麦克风在后台一直占用。
+  if (tab === 'speech' && recorder.isRecording.value) recorder.cancel()
+  activeTab.value = tab
+}
+
+/* ---------------- 工具 ---------------- */
+
+function revokeUrl(url?: string) {
+  if (url && url.startsWith('blob:')) URL.revokeObjectURL(url)
+}
+
+function formatClock(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' })
+}
+
+function formatDate(timestamp: number): string {
+  return new Date(timestamp).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+}
+
+/* ---------------- 生命周期 ---------------- */
+
+onMounted(() => {
+  settingsStore.loadFromStorage()
+  void loadCatalog()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleVoiceModalKeydown)
+  window.removeEventListener('keydown', handleTranslateKeydown)
+  document.body.classList.remove('voice-modal-open')
+  revokeUrl(result.value?.url)
+  revokeUrl(preview.value?.url)
+  history.value.forEach((item) => revokeUrl(item.audioUrl))
+  revokeUrl(sample.value?.previewUrl)
+  recorder.cancel()
+})
 </script>
 
 <style scoped>
+/* ========================= 页面骨架 ========================= */
+
 .voice-page {
   color: #fff;
 }
@@ -103,233 +1954,2467 @@ const plannedFeatures = [
 .voice-main {
   position: relative;
   z-index: 2;
-  width: min(100% - 48px, 1080px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: min(100% - 48px, var(--studio-max-width));
   margin: 0 auto;
-  padding: 56px 0 96px;
+  padding: 18px 0 80px;
 }
 
-.voice-kicker {
-  margin-bottom: 14px;
-  background: linear-gradient(135deg, #ffd7a8, #ff9f7a 60%, #c2a8ff 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  font-size: 11px;
+/* ========================= 分区切换 ========================= */
+
+.voice-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--studio-panel-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(20px);
+  align-self: flex-start;
+}
+
+.voice-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--studio-text-soft);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background var(--transition-base), color var(--transition-base);
+}
+
+.voice-tab svg {
+  width: 15px;
+  height: 15px;
+}
+
+.voice-tab:hover {
+  color: #fff;
+}
+
+.voice-tab.active {
+  background: linear-gradient(135deg, rgba(255, 214, 173, 0.96), rgba(251, 146, 60, 0.92));
+  color: #1a0e06;
+  box-shadow: 0 10px 28px rgba(251, 146, 60, 0.22);
+}
+
+.tab-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.30em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.voice-tab.active .tab-badge {
+  background: rgba(20, 10, 4, 0.18);
+}
+
+.tabs-meta {
+  margin-left: auto;
+  padding-right: 12px;
+  color: var(--studio-text-hint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.tabs-meta-warn {
+  color: rgba(255, 196, 140, 0.8);
+}
+
+/* ========================= 通用块 ========================= */
+
+.speech-layout,
+.clone-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: 16px;
+  align-items: start;
+}
+
+.speech-col {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 用头部色带强化每个分区的起点，避免几块面板糊成一片 */
+.script-panel .studio-panel-head,
+.result-panel .studio-panel-head,
+.history-panel .studio-panel-head,
+.control-panel .studio-panel-head {
+  background: linear-gradient(90deg, rgba(251, 146, 60, 0.075), rgba(251, 146, 60, 0) 62%);
+}
+
+.script-panel,
+.result-panel,
+.history-panel,
+.control-panel {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.ghost-btn,
+.link-btn,
+.mini-btn {
+  border: 0;
+  background: transparent;
+  color: var(--studio-text-hint);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color var(--transition-base), background var(--transition-base), border-color var(--transition-base);
+}
+
+.ghost-btn {
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+}
+
+.ghost-btn:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.link-btn:hover:not(:disabled) {
+  color: #ffcda4;
+}
+
+.mini-btn {
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.76);
+  white-space: nowrap;
+}
+
+.mini-btn:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
+}
+
+.mini-btn:disabled,
+.ghost-btn:disabled,
+.link-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.mini-btn.danger:hover:not(:disabled) {
+  border-color: rgba(255, 120, 120, 0.5);
+  background: rgba(255, 90, 90, 0.12);
+  color: #ffb8b8;
+}
+
+.inline-error {
+  margin-top: 10px;
+  color: #ffb4a8;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.field-hint {
+  margin-top: 8px;
+  color: var(--studio-text-hint);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+/* ========================= 脚本 ========================= */
+
+.script-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px 18px;
+}
+
+.script-input {
+  min-height: clamp(180px, 26vh, 280px);
+  padding: 16px 18px;
+  font-size: 15px;
+  line-height: 1.9;
+  letter-spacing: 0.01em;
+}
+
+.script-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.script-tips {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  color: var(--studio-text-hint);
+  font-size: 11.5px;
+}
+
+.script-tips code {
+  padding: 2px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 205, 165, 0.9);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+
+.script-tips kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-right: 2px;
+  padding: 0 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--studio-text-soft);
+  font-family: inherit;
+  font-size: 10.5px;
+}
+
+.tag-panel {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.022);
+}
+
+.tag-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 13px;
+}
+
+.tag-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.tag-panel-title em {
+  color: var(--studio-text-hint);
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.tag-panel-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fb923c;
+  box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.16);
+}
+
+.tag-panel-hint {
+  flex: 0 0 auto;
+  color: var(--studio-text-hint);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+.tag-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 11px 13px 13px;
+  border-top: 1px solid rgba(255, 255, 255, 0.055);
+}
+
+.tag-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.tag-group-label {
+  flex: 0 0 40px;
+  padding-top: 4px;
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.tag-chips {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(255, 255, 255, 0.72);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: border-color var(--transition-base), background var(--transition-base), color var(--transition-base);
+}
+
+.tag-chip:hover {
+  border-color: rgba(251, 146, 60, 0.45);
+  background: rgba(251, 146, 60, 0.1);
+  color: #ffd6b2;
+}
+
+.tag-chip em {
+  color: rgba(255, 255, 255, 0.28);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.tag-chip--pause {
+  border-color: rgba(251, 146, 60, 0.22);
+  color: #ffcda4;
+  font-variant-numeric: tabular-nums;
+}
+
+.tag-custom {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 3px;
+}
+
+.tag-custom input {
+  width: 58px;
+  padding: 4px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.tag-custom input:focus {
+  border-color: rgba(251, 146, 60, 0.5);
+}
+
+.script-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.translate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* 有文案时给一个轻量的可翻译提示，不抢「生成配音」的主操作层级 */
+.translate-btn:not(:disabled) {
+  border-color: rgba(251, 146, 60, 0.34);
+  background: rgba(251, 146, 60, 0.09);
+  color: rgba(255, 205, 164, 0.92);
+}
+
+.translate-btn:hover:not(:disabled) {
+  border-color: rgba(251, 146, 60, 0.54);
+  background: rgba(251, 146, 60, 0.15);
+  color: #fff3e6;
+}
+
+.translate-btn:not(:disabled) svg {
+  color: #fdba74;
+}
+
+.translate-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.script-translate-status {
+  color: rgba(145, 213, 170, 0.82);
+  font-size: 11.5px;
+}
+
+.script-translate-error {
+  margin-top: 8px;
+}
+
+.script-warn {
+  color: rgba(255, 196, 140, 0.75);
+  font-size: 11.5px;
+}
+
+.preset-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.preset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 11px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.028);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-base), border-color var(--transition-base), transform var(--transition-base);
+}
+
+.preset-card:hover {
+  border-color: rgba(251, 146, 60, 0.4);
+  background: rgba(251, 146, 60, 0.08);
+  transform: translateY(-1px);
+}
+
+.preset-card strong {
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.preset-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.preset-voice {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(251, 146, 60, 0.12);
+  color: rgba(255, 205, 165, 0.85);
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.preset-card span {
+  color: var(--studio-text-hint);
+  font-size: 11px;
+}
+
+/* ========================= 结果 ========================= */
+
+.result-body {
+  padding: 16px 18px 18px;
+}
+
+.result-loading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  border: 1px dashed rgba(251, 146, 60, 0.32);
+  border-radius: 16px;
+  background: rgba(251, 146, 60, 0.05);
+}
+
+.result-loading strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.result-loading p {
+  margin-top: 4px;
+  color: var(--studio-text-hint);
+  font-size: 11.5px;
+}
+
+.loading-ring {
+  width: 26px;
+  height: 26px;
+  border: 2px solid rgba(251, 146, 60, 0.24);
+  border-top-color: #fb923c;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.result-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.meta-pill {
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--studio-text-soft);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.result-text {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-left: 2px solid rgba(251, 146, 60, 0.5);
+  border-radius: 0 12px 12px 0;
+  background: rgba(255, 255, 255, 0.022);
+  color: rgba(220, 226, 240, 0.6);
+  font-size: 12.5px;
+  line-height: 1.75;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  white-space: pre-line;
+}
+
+.result-empty {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 18px;
+  border: 1px dashed rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  color: var(--studio-text-hint);
+  font-size: 12px;
+  text-align: left;
+}
+
+.empty-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 200, 150, 0.22);
+  border-radius: 10px;
+  background: rgba(251, 146, 60, 0.08);
+  color: #ffd0a4;
+}
+
+.empty-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* ========================= 记录 ========================= */
+
+.history-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 14px 16px 16px;
+  list-style: none;
+}
+
+.history-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.history-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.history-voice {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.history-time {
+  color: var(--studio-text-hint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.history-text {
+  max-width: 100%;
+  min-width: 0;
+  color: rgba(214, 224, 245, 0.48);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.history-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.history-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 16px 16px;
+}
+
+.pager-btn {
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.7);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--transition-base), background var(--transition-base), color var(--transition-base);
+}
+
+.pager-btn:hover:not(:disabled) {
+  border-color: rgba(251, 146, 60, 0.42);
+  background: rgba(251, 146, 60, 0.1);
+  color: #ffd6b2;
+}
+
+.pager-btn:disabled {
+  opacity: 0.32;
+  cursor: not-allowed;
+}
+
+.pager-pages {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.pager-dot {
+  width: 24px;
+  height: 24px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--studio-text-hint);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.pager-dot:hover {
+  color: #fff;
+}
+
+.pager-dot.active {
+  border-color: rgba(251, 146, 60, 0.45);
+  background: rgba(251, 146, 60, 0.14);
+  color: #ffd6b2;
+}
+
+/* ========================= 参数面板 ========================= */
+
+.control-panel {
+  position: sticky;
+  top: 16px;
+  max-height: calc(100dvh - 200px);
+  overflow: hidden;
+}
+
+.control-body {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(251, 146, 60, 0.34) transparent;
+}
+
+.control-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.control-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.control-body::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(251, 146, 60, 0.34);
+}
+
+.control-body > * {
+  flex: 0 0 auto;
+}
+
+.control-head,
+.control-footer {
+  flex: 0 0 auto;
+}
+
+/* ---------- 右侧分区卡（01 声音 / 02 演绎 / 03 输出） ---------- */
+
+.side-card {
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.022);
+}
+
+.side-card--collapsible {
+  overflow: hidden;
+}
+
+.side-card-summary {
+  padding-bottom: 12px;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition-base);
+}
+
+.side-card-summary::-webkit-details-marker {
+  display: none;
+}
+
+.side-card-summary:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.side-card--collapsible[open] .side-card-summary {
+  padding-bottom: 4px;
+}
+
+.side-card--collapsible[open] .side-card-summary .toggle-chevron {
+  transform: rotate(180deg);
+}
+
+.side-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px 4px;
+}
+
+.side-index {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgba(251, 146, 60, 0.32);
+  border-radius: 7px;
+  background: rgba(251, 146, 60, 0.12);
+  color: #ffcda4;
+  font-size: 10px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.side-card-titles {
+  min-width: 0;
+  flex: 1;
+}
+
+.side-card-titles h3 {
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.side-card-titles p {
+  margin-top: 1px;
+  color: var(--studio-text-hint);
+  font-size: 10.5px;
+}
+
+.side-card-meta {
+  flex: 0 0 auto;
+  color: rgba(255, 205, 165, 0.62);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.side-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 14px 14px;
+}
+
+.side-card-body--params {
+  gap: 0;
+  padding-top: 10px;
+}
+
+.field-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.field-label {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.field-note {
+  color: var(--studio-text-hint);
+  font-size: 10.5px;
+}
+
+.param-value {
+  color: #ffcda4;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.voice-current {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.voice-current-main {
+  min-width: 0;
+}
+
+.voice-current-label {
+  display: block;
+  margin-bottom: 3px;
+  color: rgba(255, 255, 255, 0.36);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
-.voice-hero h1 {
-  font-family: var(--font-family-display);
-  font-size: clamp(34px, 5vw, 60px);
-  font-weight: 800;
-  line-height: 1.04;
-  letter-spacing: -0.055em;
+.voice-current-main strong {
+  display: block;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 650;
 }
 
-.voice-subtitle {
-  width: min(100%, 620px);
-  margin-top: 18px;
-  color: rgba(214, 224, 245, 0.62);
-  font-size: 15px;
-  line-height: 1.75;
+.voice-current-main p {
+  margin-top: 3px;
+  color: var(--studio-text-hint);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
-.voice-status {
-  display: inline-flex;
+.voice-search {
+  padding: 9px 13px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+.voice-change-btn {
+  display: flex;
   align-items: center;
-  gap: 9px;
-  margin-top: 24px;
-  padding: 8px 15px;
-  border: 1px solid rgba(255, 200, 150, 0.24);
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(251, 146, 60, 0.26);
+  border-radius: 11px;
+  background: rgba(251, 146, 60, 0.07);
+  color: #ffcda4;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--transition-base), background var(--transition-base), color var(--transition-base);
+}
+
+.voice-change-btn:hover {
+  border-color: rgba(251, 146, 60, 0.48);
+  background: rgba(251, 146, 60, 0.12);
+  color: #ffe0bf;
+}
+
+.voice-change-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  opacity: 0.85;
+}
+
+.voice-change-btn em {
+  margin-left: auto;
+  color: var(--studio-text-hint);
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.voice-change-arrow {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: var(--studio-text-hint);
+}
+
+.toggle-chevron {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  color: var(--studio-text-hint);
+  transition: transform var(--transition-base);
+}
+
+.toggle-chevron.open {
+  transform: rotate(180deg);
+}
+
+.field-hint--flush {
+  margin-top: 0;
+}
+
+.lang-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.lang-tab {
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
-  background: rgba(255, 170, 110, 0.08);
-  color: rgba(255, 214, 176, 0.9);
+  background: transparent;
+  color: var(--studio-text-hint);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.lang-tab:hover {
+  color: #fff;
+}
+
+.lang-tab.active {
+  border-color: rgba(251, 146, 60, 0.45);
+  background: rgba(251, 146, 60, 0.14);
+  color: #ffd6b2;
+}
+
+.voice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 176px;
+  padding-right: 4px;
+  overflow-y: auto;
+  mask-image: linear-gradient(180deg, #000 calc(100% - 18px), transparent 100%);
+}
+
+.voice-group-label {
+  padding: 7px 2px 3px;
+  color: rgba(255, 255, 255, 0.32);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.voice-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 11px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-base), border-color var(--transition-base);
+}
+
+.voice-item:hover {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.voice-item.active {
+  border-color: rgba(251, 146, 60, 0.4);
+  background: rgba(251, 146, 60, 0.1);
+}
+
+.voice-item-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.8);
   font-size: 12.5px;
   font-weight: 600;
 }
 
-.status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #ffb46b;
-  box-shadow: 0 0 0 4px rgba(255, 180, 107, 0.16);
-  animation: status-pulse 2s ease-in-out infinite;
+.voice-item.active .voice-item-name {
+  color: #fff;
 }
 
-@keyframes status-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
+.voice-item-desc {
+  color: var(--studio-text-hint);
+  font-size: 10.5px;
+  line-height: 1.5;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.voice-lang-tag {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1.55;
+  white-space: nowrap;
+}
+
+.voice-option.active .voice-lang-tag {
+  border-color: rgba(251, 146, 60, 0.28);
+  background: rgba(251, 146, 60, 0.1);
+  color: rgba(255, 214, 173, 0.82);
+}
+
+.voice-lang-tag.is-clone {
+  border-color: rgba(251, 146, 60, 0.2);
+  background: rgba(251, 146, 60, 0.13);
+  color: #ffcf9f;
+}
+
+.voice-empty {
+  padding: 18px 6px;
+  color: var(--studio-text-hint);
+  font-size: 12px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+/* ========================= 音色选择大面板 ========================= */
+
+:global(body.voice-modal-open) {
+  overflow: hidden;
+}
+
+.voice-modal-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(4, 4, 8, 0.76);
+  backdrop-filter: blur(14px);
+  animation: voice-modal-fade 0.18s ease both;
+}
+
+.voice-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(900px, 100%);
+  height: min(760px, calc(100dvh - 48px));
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 22px;
+  outline: none;
+  background:
+    linear-gradient(180deg, rgba(32, 22, 18, 0.98), rgba(12, 12, 17, 0.995) 34%),
+    #0c0c11;
+  box-shadow:
+    0 40px 120px rgba(0, 0, 0, 0.62),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  animation: voice-modal-rise 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.voice-modal-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.voice-modal-headings {
+  min-width: 0;
+}
+
+.voice-modal-headings h2 {
+  margin-top: 4px;
+  font-family: var(--font-family-display);
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+
+.voice-modal-headings p {
+  margin-top: 5px;
+  color: var(--studio-text-hint);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.voice-modal-head-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.voice-modal-count {
+  color: rgba(255, 205, 165, 0.62);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.voice-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--studio-text-soft);
+  cursor: pointer;
+  transition: background var(--transition-base), color var(--transition-base), border-color var(--transition-base);
+}
+
+.voice-modal-close:hover {
+  border-color: rgba(251, 146, 60, 0.4);
+  background: rgba(251, 146, 60, 0.1);
+  color: #ffd6b2;
+}
+
+.voice-modal-close svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* ---------- 翻译语言选择 ---------- */
+
+.translate-layer {
+  z-index: 130;
+}
+
+.translate-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(680px, 100%);
+  max-height: min(760px, calc(100dvh - 48px));
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 22px;
+  outline: none;
+  background:
+    linear-gradient(180deg, rgba(32, 22, 18, 0.98), rgba(12, 12, 17, 0.995) 38%),
+    #0c0c11;
+  box-shadow:
+    0 40px 120px rgba(0, 0, 0, 0.62),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  animation: voice-modal-rise 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.translate-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.translate-headings {
+  min-width: 0;
+}
+
+.translate-headings h2 {
+  margin-top: 4px;
+  font-family: var(--font-family-display);
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+
+.translate-headings p {
+  margin-top: 5px;
+  color: var(--studio-text-hint);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.translate-body {
+  overflow-y: auto;
+  padding: 18px 22px 20px;
+}
+
+.translate-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.translate-option {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 11px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.025);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-base),
+    background var(--transition-base),
+    transform var(--transition-base);
+}
+
+.translate-option:hover {
+  border-color: rgba(251, 146, 60, 0.36);
+  background: rgba(251, 146, 60, 0.075);
+  transform: translateY(-1px);
+}
+
+.translate-option:focus-visible {
+  outline: 2px solid rgba(251, 146, 60, 0.55);
+  outline-offset: 2px;
+}
+
+.translate-option strong {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12.5px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.translate-option span {
+  overflow: hidden;
+  color: var(--studio-text-hint);
+  font-size: 10.5px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.translate-model {
+  margin-top: 14px;
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+.voice-modal-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 22px 0;
+}
+
+.voice-modal-search {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+}
+
+.voice-modal-search svg {
+  position: absolute;
+  left: 13px;
+  width: 16px;
+  height: 16px;
+  color: var(--studio-text-hint);
+  pointer-events: none;
+}
+
+.voice-modal-search input {
+  width: 100%;
+  padding: 11px 62px 11px 38px;
+  border: 1px solid var(--studio-field-border);
+  border-radius: 12px;
+  outline: none;
+  background: var(--studio-field-bg);
+  color: #fff;
+  font: inherit;
+  font-size: 12.5px;
+  transition: border-color var(--transition-base), background var(--transition-base);
+}
+
+.voice-modal-search input:focus {
+  border-color: rgba(251, 146, 60, 0.45);
+  background: rgba(251, 146, 60, 0.05);
+}
+
+.voice-modal-search input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.voice-search-clear {
+  position: absolute;
+  right: 10px;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--studio-text-hint);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.voice-search-clear:hover {
+  color: #ffcda4;
+}
+
+.voice-refresh {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.voice-modal-filters {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 22px;
+}
+
+.voice-modal-result {
+  flex: 0 0 auto;
+  color: var(--studio-text-hint);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.voice-modal-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 22px 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(251, 146, 60, 0.34) transparent;
+}
+
+.voice-modal-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.voice-modal-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(251, 146, 60, 0.34);
 }
 
 .voice-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-  margin-top: 48px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 14px;
 }
 
-.feature-card {
-  position: relative;
+.voice-option {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-height: 196px;
-  padding: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 22px;
-  background: linear-gradient(165deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--transition-base), background var(--transition-base);
 }
 
-.feature-icon {
+.voice-option:hover {
+  border-color: rgba(251, 146, 60, 0.32);
+  background: rgba(251, 146, 60, 0.06);
+}
+
+.voice-option.active {
+  border-color: rgba(251, 146, 60, 0.5);
+  background: rgba(251, 146, 60, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(251, 146, 60, 0.12);
+}
+
+.voice-option-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.voice-option-top strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.voice-option-meta {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.voice-option.active .voice-option-top strong {
+  color: #fff;
+}
+
+.voice-option-check {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin-left: 0;
+  color: #ffb877;
+}
+
+.voice-option-desc {
+  overflow: hidden;
+  color: var(--studio-text-hint);
+  font-size: 10.5px;
+  line-height: 1.5;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.voice-group-label em {
+  margin-left: 4px;
+  color: rgba(255, 255, 255, 0.22);
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.voice-modal-preview {
+  flex: 0 0 auto;
+  padding: 0 22px 10px;
+}
+
+.voice-modal-foot {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 22px 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.voice-modal-current {
+  min-width: 0;
+  flex: 1;
+}
+
+.voice-modal-current strong {
+  display: block;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.voice-modal-current p {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--studio-text-hint);
+  font-size: 10.5px;
+  line-height: 1.5;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.voice-modal-current .voice-modal-hint {
+  color: rgba(255, 205, 165, 0.72);
+}
+
+.voice-modal-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.voice-modal-actions .mini-btn {
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+}
+
+.voice-modal-actions .studio-btn {
+  min-height: 38px;
+  padding: 0 18px;
+}
+
+@keyframes voice-modal-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes voice-modal-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- 滑杆 ---------- */
+
+.voice-range {
+  width: 100%;
+  height: 20px;
+  margin: 2px 0 0;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.voice-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(251, 146, 60, 0.9) 0 var(--fill, 50%),
+    rgba(255, 255, 255, 0.12) var(--fill, 50%) 100%
+  );
+}
+
+.voice-range::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border: 2px solid #1a0e06;
+  border-radius: 50%;
+  background: #ffd2a8;
+  box-shadow: 0 0 0 4px rgba(251, 146, 60, 0.16);
+  appearance: none;
+  -webkit-appearance: none;
+  transition: transform var(--transition-base);
+}
+
+.voice-range:hover::-webkit-slider-thumb {
+  transform: scale(1.1);
+}
+
+.voice-range::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.voice-range::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(251, 146, 60, 0.9);
+}
+
+.voice-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #1a0e06;
+  border-radius: 50%;
+  background: #ffd2a8;
+}
+
+/* ---------- 参数行 ---------- */
+
+.param-row {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 11px 0;
+}
+
+.param-row:first-child {
+  padding-top: 0;
+}
+
+.param-row:last-child {
+  padding-bottom: 0;
+}
+
+.param-row + .param-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.055);
+}
+
+.param-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* ---------- 情绪 ---------- */
+
+.emotion-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.emotion-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
-  border: 1px solid rgba(255, 200, 150, 0.28);
-  border-radius: 12px;
-  background: rgba(255, 180, 120, 0.10);
-  color: #ffd9b0;
-  font-size: 17px;
-}
-
-.feature-card h2 {
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-.feature-card p {
-  color: rgba(214, 224, 245, 0.55);
-  font-size: 12.5px;
-  line-height: 1.7;
-}
-
-.feature-state {
-  margin-top: auto;
-  color: rgba(255, 196, 150, 0.62);
+  gap: 4px;
+  padding: 6px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--studio-text-hint);
+  font: inherit;
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-}
-
-.model-panel {
-  margin-top: 28px;
-  padding: 24px 26px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 24px;
-  background: linear-gradient(180deg, rgba(20, 20, 32, 0.72), rgba(10, 10, 18, 0.72));
-}
-
-.panel-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.panel-kicker {
-  margin-bottom: 6px;
-  color: rgba(190, 200, 230, 0.42);
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-}
-
-.panel-head h2 {
-  color: rgba(255, 255, 255, 0.88);
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-}
-
-.panel-count {
-  color: rgba(214, 224, 245, 0.42);
-  font-size: 12px;
   font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all var(--transition-base);
 }
 
-.model-list {
+.emotion-chip:hover {
+  color: #fff;
+}
+
+.emotion-chip.active {
+  border-color: rgba(251, 146, 60, 0.45);
+  background: rgba(251, 146, 60, 0.14);
+  color: #ffd6b2;
+}
+
+/* ---------- 输出 ---------- */
+
+.output-grid {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.adv-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--studio-text-hint);
+  font-size: 10.5px;
+}
+
+.voice-select {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--studio-field-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.82);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.voice-select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.voice-select option {
+  background: #14141c;
+  color: #fff;
+}
+
+.switch-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--studio-text-soft);
+  font-size: 11.5px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.switch-row input {
+  margin-top: 1px;
+  width: 14px;
+  height: 14px;
+  accent-color: #fb923c;
+  cursor: pointer;
+}
+
+.control-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  background: linear-gradient(180deg, rgba(251, 146, 60, 0.035), transparent 70%);
+}
+
+.cost-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--studio-text-hint);
+  font-size: 11.5px;
+}
+
+.cost-voice {
+  max-width: 60%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dot {
+  opacity: 0.5;
+}
+
+.generate-btn {
+  width: 100%;
+  min-height: 44px;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.generate-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.control-error {
+  color: #ffb4a8;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+/* ========================= 声音克隆 ========================= */
+
+.clone-layout {
+  grid-template-columns: minmax(0, 1fr) 400px;
+}
+
+.sample-body,
+.clone-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px 18px;
+}
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 26px 20px;
+  border: 1.5px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.022);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color var(--transition-base), background var(--transition-base);
+}
+
+.dropzone:hover,
+.dropzone.is-over {
+  border-color: rgba(251, 146, 60, 0.55);
+  background: rgba(251, 146, 60, 0.06);
+}
+
+.dropzone-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(255, 200, 150, 0.24);
+  border-radius: 13px;
+  background: rgba(251, 146, 60, 0.1);
+  color: #ffd0a4;
+}
+
+.dropzone-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.dropzone strong {
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.dropzone p {
+  max-width: 420px;
+  color: var(--studio-text-hint);
+  font-size: 11.5px;
+  line-height: 1.65;
+}
+
+.file-input {
+  display: none;
+}
+
+.record-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.record-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.record-head strong {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.record-head p {
+  margin-top: 3px;
+  color: var(--studio-text-hint);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.record-timer {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.record-timer.is-live {
+  color: #ff9b7a;
+}
+
+.record-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.record-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  padding: 0 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.86);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.record-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.record-btn.is-recording {
+  border-color: rgba(255, 110, 110, 0.5);
+  background: rgba(255, 80, 80, 0.14);
+  color: #ffc2bd;
+}
+
+.record-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.record-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff7a68;
+}
+
+.record-btn.is-recording .record-dot {
+  animation: rec-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes rec-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.82); }
+}
+
+.level-meter {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 3px;
+  height: 30px;
+}
+
+.level-meter span {
+  flex: 1;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #ffd2a8, rgba(251, 146, 60, 0.6));
+  transition: opacity 90ms linear;
+}
+
+.sample-card {
+  display: flex;
+  flex-direction: column;
   gap: 10px;
+  padding: 13px 15px;
+  border: 1px solid rgba(251, 146, 60, 0.24);
+  border-radius: 16px;
+  background: rgba(251, 146, 60, 0.05);
+}
+
+.sample-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sample-card-head strong {
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 12.5px;
+  font-weight: 650;
+  word-break: break-all;
+}
+
+.sample-card-head p {
+  margin-top: 3px;
+  color: var(--studio-text-hint);
+  font-size: 11px;
+}
+
+.sample-card-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.sample-tips {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 12px 14px 12px 28px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.022);
+  color: var(--studio-text-hint);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.sample-tips li::marker {
+  color: rgba(251, 146, 60, 0.65);
+}
+
+.clone-input {
+  padding: 9px 12px;
+  border-radius: 12px;
+  font-size: 12.5px;
+}
+
+.clone-textarea {
+  min-height: 70px;
+  line-height: 1.7;
+  resize: vertical;
+}
+
+.switch-group {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.clone-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 14px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.022);
+  list-style: none;
+}
+
+.clone-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  opacity: 0.5;
+  transition: opacity var(--transition-base);
+}
+
+.clone-steps li.is-active,
+.clone-steps li.is-done {
+  opacity: 1;
+}
+
+.step-index {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 50%;
+  color: var(--studio-text-hint);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.clone-steps li.is-active .step-index {
+  border-color: rgba(251, 146, 60, 0.6);
+  background: rgba(251, 146, 60, 0.16);
+  color: #ffd6b2;
+}
+
+.clone-steps li.is-done .step-index {
+  border-color: rgba(126, 226, 168, 0.5);
+  background: rgba(126, 226, 168, 0.14);
+  color: #9be8be;
+}
+
+.clone-steps strong {
+  display: block;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.clone-steps p {
+  margin-top: 2px;
+  color: var(--studio-text-hint);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.clone-submit {
+  width: 100%;
+  min-height: 42px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.clone-result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 13px 15px;
+  border: 1px solid rgba(126, 226, 168, 0.3);
+  border-radius: 16px;
+  background: rgba(126, 226, 168, 0.06);
+}
+
+.clone-result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.clone-result-head strong {
+  color: #b6f0ce;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.clone-id {
+  color: rgba(255, 255, 255, 0.38);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clone-result-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* ---------- 我的音色 ---------- */
+
+.my-voices-panel {
+  grid-column: 1 / -1;
+}
+
+.my-voices-panel .studio-panel-head {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+.my-voices-panel .studio-panel-meta {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  text-align: right;
+  white-space: normal;
+}
+
+.my-voices-body {
+  padding: 16px 18px 18px;
+}
+
+.my-voices-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: 12px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.model-item {
+.my-voice-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 13px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.028);
+}
+
+.my-voice-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 16px 18px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
+  gap: 10px;
 }
 
-.model-main strong {
-  display: block;
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 14px;
-  font-weight: 700;
+.my-voice-head strong {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.model-main p {
-  margin-top: 4px;
-  color: rgba(214, 224, 245, 0.5);
-  font-size: 12.5px;
-  line-height: 1.6;
+.my-voice-date {
+  flex: 0 0 auto;
+  color: var(--studio-text-hint);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.model-tag {
-  flex-shrink: 0;
-  padding: 5px 11px;
-  border: 1px solid rgba(160, 200, 255, 0.22);
-  border-radius: 999px;
-  background: rgba(120, 170, 255, 0.10);
-  color: rgba(190, 220, 255, 0.82);
-  font-size: 11px;
-  font-weight: 700;
+.my-voice-id {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-@media (max-width: 960px) {
-  .voice-page {
-    padding-left: 72px;
+.my-voice-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: auto;
+}
+
+/* ========================= 响应式 ========================= */
+
+@media (max-width: 1180px) {
+  .speech-layout,
+  .clone-layout {
+    grid-template-columns: minmax(0, 1fr) 360px;
+  }
+}
+
+@media (max-width: 980px) {
+  .speech-layout,
+  .clone-layout {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .voice-grid {
+  .control-panel {
+    position: static;
+    max-height: none;
+  }
+
+  .control-body {
+    overflow: visible;
+  }
+
+  .voice-list {
+    max-height: 300px;
+  }
+}
+
+@media (max-width: 720px) {
+  .voice-main {
+    width: min(100% - 26px, var(--studio-max-width));
+    padding-top: 8px;
+  }
+
+  .voice-tabs {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .tabs-meta {
+    display: none;
+  }
+
+  .preset-row {
+    grid-template-columns: 1fr;
+  }
+
+  .tag-group {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .tag-group-label {
+    flex: none;
+    padding-top: 0;
+  }
+
+  .script-input {
+    min-height: 200px;
+  }
+
+  .record-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .level-meter {
+    height: 22px;
+  }
+
+  .my-voices-list {
+    grid-template-columns: 1fr;
+  }
+
+  .voice-modal-layer {
+    padding: 0;
+  }
+
+  .translate-layer {
+    padding: 12px;
+  }
+
+  .translate-dialog {
+    width: 100%;
+    max-height: calc(100dvh - 24px);
+    border-radius: 18px;
+  }
+
+  .translate-head {
+    padding: 16px 16px 14px;
+  }
+
+  .translate-body {
+    padding: 14px 16px 16px;
+  }
+
+  .translate-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .nav-actions {
+  .voice-modal {
+    width: 100%;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .voice-modal-head {
+    padding: 16px 16px 14px;
+  }
+
+  .voice-modal-headings p,
+  .voice-modal-count {
     display: none;
   }
-}
 
-@media (max-width: 640px) {
-  .voice-page {
-    padding-left: 62px;
-  }
-
-  .voice-main {
-    width: min(100% - 28px, 1080px);
-    padding-top: 32px;
+  .voice-modal-toolbar,
+  .voice-modal-filters,
+  .voice-modal-list,
+  .voice-modal-preview,
+  .voice-modal-foot {
+    padding-left: 16px;
+    padding-right: 16px;
   }
 
   .voice-grid {
     grid-template-columns: 1fr;
   }
 
-  .model-panel {
-    padding: 20px;
+  .voice-modal-foot {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .voice-modal-actions {
+    width: 100%;
+  }
+
+  .voice-modal-actions .studio-btn {
+    flex: 1;
   }
 }
 </style>

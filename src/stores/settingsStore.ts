@@ -7,6 +7,9 @@ import {
   type MediaType,
 } from '@/types/model'
 
+/** 配音页「翻译」默认使用的文本模型。 */
+export const DEFAULT_TRANSLATION_MODEL = 'DeepSeek-V4.1-Flash-1017'
+
 export const DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT = `你是一名专业的 AI 图像与视频提示词优化助手。
 请在保留用户原意的前提下，补全主体、场景、构图、镜头、光线、风格、材质、色彩、细节和质量描述。
 只输出润色后的提示词，不要解释，不要添加标题，不要使用 Markdown。`
@@ -55,6 +58,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const promptPolishModel = ref('')
   const promptPolishSystemPrompt = ref('')
   const textSystemPrompt = ref('')
+  const translationModel = ref(DEFAULT_TRANSLATION_MODEL)
 
   function loadFromStorage() {
     const saved = localStorage.getItem('settings')
@@ -72,6 +76,7 @@ export const useSettingsStore = defineStore('settings', () => {
       promptPolishModel.value = settings.promptPolishModel || ''
       promptPolishSystemPrompt.value = settings.promptPolishSystemPrompt || ''
       textSystemPrompt.value = settings.textSystemPrompt || ''
+      translationModel.value = settings.translationModel || DEFAULT_TRANSLATION_MODEL
     }
   }
 
@@ -88,6 +93,7 @@ export const useSettingsStore = defineStore('settings', () => {
         promptPolishModel: promptPolishModel.value,
         promptPolishSystemPrompt: promptPolishSystemPrompt.value,
         textSystemPrompt: textSystemPrompt.value,
+        translationModel: translationModel.value,
       })
     )
   }
@@ -122,6 +128,7 @@ export const useSettingsStore = defineStore('settings', () => {
     promptPolishModel,
     promptPolishSystemPrompt,
     textSystemPrompt,
+    translationModel,
     loadFromStorage,
     saveToStorage,
     setMediaType,
