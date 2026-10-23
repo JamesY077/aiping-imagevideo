@@ -101,6 +101,34 @@
         <div v-if="polishStatus" class="status-msg success">{{ polishStatus }}</div>
       </section>
 
+      <section class="card">
+        <div class="section-head">
+          <span class="kicker">文案工具</span>
+          <h3>翻译设置</h3>
+        </div>
+        <div class="input-group">
+          <label for="translation-model">翻译模型 ID</label>
+          <input
+            id="translation-model"
+            v-model.trim="settingsStore.translationModel"
+            class="text-input"
+            :placeholder="defaultTranslationModel"
+            @blur="handleTranslationModelBlur"
+          />
+          <p class="field-hint">
+            配音页点击「翻译」时使用此模型；留空会回落到 {{ defaultTranslationModel }}。
+          </p>
+          <a href="https://www.aiping.cn/modelList" target="_blank" rel="noopener" class="helper-link">
+            查看官方模型列表
+          </a>
+        </div>
+        <div class="btn-row">
+          <button class="ghost-btn" @click="resetTranslationModel">恢复默认</button>
+          <button class="primary-btn" @click="saveTranslationSettings">保存翻译设置</button>
+        </div>
+        <div v-if="translationStatus" class="status-msg success">{{ translationStatus }}</div>
+      </section>
+
       <section class="card about-card">
         <div class="section-head">
           <span class="kicker">关于</span>
@@ -171,6 +199,7 @@ import { useApiStore } from '@/stores/apiStore'
 import { useChatStore } from '@/stores/chatStore'
 import {
   DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT,
+  DEFAULT_TRANSLATION_MODEL,
   useSettingsStore,
 } from '@/stores/settingsStore'
 import { useSkillStore } from '@/stores/skillStore'
@@ -197,6 +226,8 @@ const testStatus = ref('')
 const testStatusType = ref<'success' | 'error'>('success')
 const polishStatus = ref('')
 const defaultPolishSystemPrompt = DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT
+const translationStatus = ref('')
+const defaultTranslationModel = DEFAULT_TRANSLATION_MODEL
 
 const maskedKeyText = computed(() => (apiStore.apiKey ? maskApiKey(apiStore.apiKey) : '未设置'))
 
@@ -273,6 +304,34 @@ function savePolishSettings() {
 function resetPolishPrompt() {
   settingsStore.promptPolishSystemPrompt = ''
   savePolishSettings()
+}
+
+function handleTranslationModelBlur() {
+  if (!settingsStore.translationModel.trim()) {
+    settingsStore.translationModel = DEFAULT_TRANSLATION_MODEL
+  }
+  settingsStore.saveToStorage()
+}
+
+function flashTranslationStatus(message: string) {
+  translationStatus.value = message
+  window.setTimeout(() => {
+    translationStatus.value = ''
+  }, 1200)
+}
+
+function saveTranslationSettings() {
+  if (!settingsStore.translationModel.trim()) {
+    settingsStore.translationModel = DEFAULT_TRANSLATION_MODEL
+  }
+  settingsStore.saveToStorage()
+  flashTranslationStatus('翻译设置已保存。')
+}
+
+function resetTranslationModel() {
+  settingsStore.translationModel = DEFAULT_TRANSLATION_MODEL
+  settingsStore.saveToStorage()
+  flashTranslationStatus('已恢复默认翻译模型。')
 }
 </script>
 

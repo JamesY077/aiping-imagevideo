@@ -377,7 +377,7 @@ onBeforeUnmount(() => {
   position: relative;
   z-index: 1;
   flex: 1 1 0;
-  min-width: 1px;
+  min-width: 0;
   border-radius: 999px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.09) 100%);
   transition:

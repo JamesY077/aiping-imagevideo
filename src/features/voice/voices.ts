@@ -38,6 +38,70 @@ export function getVoiceLanguageLabel(key: string): string {
   return VOICE_LANGUAGES.find((item) => item.key === key)?.label || '其他语言'
 }
 
+/** 音色卡片右上角的短标签；复刻音色没有可推断的语言，直接标「复刻」。 */
+const VOICE_LANGUAGE_TAGS: Record<string, string> = {
+  zh: '普通话',
+  yue: '粤语',
+  en: '英语',
+  ja: '日语',
+  ko: '韩语',
+  other: '其他',
+  clone: '复刻',
+}
+
+/** 上游把大量非中英日韩音色统一归到 other，卡片标签再按 voice_id 前缀细分。 */
+const VOICE_PREFIX_LANGUAGE_TAGS: Record<string, string> = {
+  portuguese: '葡萄牙语',
+  spanish: '西班牙语',
+  indonesian: '印尼语',
+  russian: '俄语',
+  french: '法语',
+  italian: '意大利语',
+  german: '德语',
+  dutch: '荷兰语',
+  arabic: '阿拉伯语',
+  turkish: '土耳其语',
+  ukrainian: '乌克兰语',
+  vietnamese: '越南语',
+  thai: '泰语',
+  malay: '马来语',
+  hindi: '印地语',
+  polish: '波兰语',
+  swedish: '瑞典语',
+  romanian: '罗马尼亚语',
+  czech: '捷克语',
+  greek: '希腊语',
+  filipino: '菲律宾语',
+}
+
+const VOICE_DESCRIPTION_LANGUAGE_TAGS: Array<[RegExp, string]> = [
+  [/标准普通话|普通话/, '普通话'],
+  [/粤语/, '粤语'],
+  [/英语/, '英语'],
+  [/日语/, '日语'],
+  [/韩语/, '韩语'],
+  ...Object.values(VOICE_PREFIX_LANGUAGE_TAGS).map(
+    (label) => [new RegExp(label), label] as [RegExp, string],
+  ),
+]
+
+export function getVoiceLanguageTag(
+  voice: Pick<SystemVoice, 'language' | 'voiceId' | 'description'>,
+): string {
+  if (voice.language === 'clone') return '复刻'
+
+  const baseTag = VOICE_LANGUAGE_TAGS[voice.language]
+  if (baseTag && voice.language !== 'other') return baseTag
+
+  const prefix = voice.voiceId.split('_')[0]?.toLowerCase()
+  const prefixTag = prefix ? VOICE_PREFIX_LANGUAGE_TAGS[prefix] : ''
+  if (prefixTag) return prefixTag
+
+  const description = voice.description || ''
+  const matched = VOICE_DESCRIPTION_LANGUAGE_TAGS.find(([pattern]) => pattern.test(description))
+  return matched?.[1] || '其他'
+}
+
 /** 兜底系统音色：接口不可用时页面仍可操作。 */
 export const FALLBACK_SYSTEM_VOICES: SystemVoice[] = [
   {

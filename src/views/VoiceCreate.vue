@@ -45,10 +45,9 @@
           <span v-if="myVoices.length" class="tab-badge">{{ myVoices.length }}</span>
         </button>
 
-        <div class="tabs-meta">
+        <div v-if="catalogState === 'loading' || catalogState === 'error'" class="tabs-meta">
           <span v-if="catalogState === 'loading'">音色加载中…</span>
-          <span v-else-if="catalogState === 'error'" class="tabs-meta-warn">音色列表加载失败，已用内置音色</span>
-          <span v-else>{{ systemVoices.length }} 个系统音色 · {{ myVoices.length }} 个我的音色</span>
+          <span v-else class="tabs-meta-warn">音色列表加载失败，已用内置音色</span>
         </div>
       </div>
 
@@ -88,14 +87,31 @@
               <div class="script-foot">
                 <div class="script-tips">
                   <span><kbd>⌘</kbd><kbd>↵</kbd> 快速生成</span>
+                  <span v-if="translateStatus" class="script-translate-status">{{ translateStatus }}</span>
                 </div>
                 <div class="script-actions">
                   <span v-if="charCount > model.capability.streamSuggestChars" class="script-warn">
                     超过 {{ model.capability.streamSuggestChars }} 字，合成会慢一些
                   </span>
+                  <button
+                    ref="translateBtnRef"
+                    class="ghost-btn translate-btn"
+                    type="button"
+                    title="翻译当前文案（可选）"
+                    :disabled="!text.trim() || translating"
+                    :aria-busy="translating"
+                    @click="openTranslatePicker"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M4 5h9M8.5 5v2c0 3.2-2 6-5 7.5M6.2 9.5c1.3 2.2 3.1 3.8 5.4 4.8M14 20l4-10 4 10M15.7 16h4.6" />
+                    </svg>
+                    {{ translating ? '翻译中…' : '翻译' }}
+                  </button>
                   <button class="ghost-btn" type="button" :disabled="!text" @click="clearScript">清空</button>
                 </div>
               </div>
+
+              <p v-if="translateError" class="inline-error script-translate-error">{{ translateError }}</p>
 
               <!-- 停顿 / 语气词快捷插入 -->
               <div class="tag-panel">
@@ -792,7 +808,7 @@
               <span class="studio-kicker">My Voices</span>
               <h2 class="studio-panel-title">我的音色</h2>
             </div>
-            <span class="studio-panel-meta">{{ myVoices.length }} 个 · 保存在本机与 AIPing 账号</span>
+            <span class="studio-panel-meta">{{ myVoices.length }} 个</span>
           </header>
 
           <div class="my-voices-body">
@@ -835,6 +851,50 @@
         </section>
       </div>
     </main>
+
+    <!-- ================= 翻译语言选择 ================= -->
+    <Teleport to="body">
+      <div v-if="translateOpen" class="voice-modal-layer translate-layer" @click.self="closeTranslatePicker">
+        <section
+          ref="translateDialogRef"
+          class="translate-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="translate-dialog-title"
+          tabindex="-1"
+        >
+          <header class="translate-head">
+            <div class="translate-headings">
+              <span class="studio-kicker">Translate</span>
+              <h2 id="translate-dialog-title">翻译配音文案</h2>
+              <p>选择目标语言，换一种语言继续配音。停顿和语气词标记会保留。</p>
+            </div>
+            <button class="voice-modal-close" type="button" aria-label="关闭翻译语言选择" @click="closeTranslatePicker">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+                <path d="M6 6l12 12M18 6 6 18" />
+              </svg>
+            </button>
+          </header>
+
+          <div class="translate-body studio-scroll">
+            <div class="translate-grid">
+              <button
+                v-for="language in TRANSLATION_LANGUAGES"
+                :key="language.code"
+                class="translate-option"
+                type="button"
+                @click="handleTranslate(language)"
+              >
+                <strong>{{ language.label }}</strong>
+                <span>{{ language.nativeLabel }}</span>
+              </button>
+            </div>
+
+            <p class="translate-model">翻译模型 · {{ translationModelLabel }}</p>
+          </div>
+        </section>
+      </div>
+    </Teleport>
 
     <!-- ================= 音色选择（大面板） ================= -->
     <Teleport to="body">
@@ -924,20 +984,27 @@
                 >
                   <span class="voice-option-top">
                     <strong>{{ voice.name }}</strong>
-                    <em class="voice-tag">复刻</em>
-                    <svg
-                      v-if="voice.voiceId === selectedVoiceId"
-                      class="voice-option-check"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2.2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="m5 12 4 4L19 6" />
-                    </svg>
+                    <span class="voice-option-meta">
+                      <svg
+                        v-if="voice.voiceId === selectedVoiceId"
+                        class="voice-option-check"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="m5 12 4 4L19 6" />
+                      </svg>
+                      <em
+                        class="voice-lang-tag is-clone"
+                        title="复刻音色"
+                      >
+                        {{ getVoiceLanguageTag(voice) }}
+                      </em>
+                    </span>
                   </span>
                   <span class="voice-option-desc">{{ voice.voiceId }}</span>
                 </button>
@@ -960,19 +1027,27 @@
                 >
                   <span class="voice-option-top">
                     <strong>{{ voice.name }}</strong>
-                    <svg
-                      v-if="voice.voiceId === selectedVoiceId"
-                      class="voice-option-check"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2.2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="m5 12 4 4L19 6" />
-                    </svg>
+                    <span class="voice-option-meta">
+                      <svg
+                        v-if="voice.voiceId === selectedVoiceId"
+                        class="voice-option-check"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="m5 12 4 4L19 6" />
+                      </svg>
+                      <em
+                        class="voice-lang-tag"
+                        :title="getVoiceLanguageTag(voice)"
+                      >
+                        {{ getVoiceLanguageTag(voice) }}
+                      </em>
+                    </span>
                   </span>
                   <span class="voice-option-desc">{{ voice.description || voice.voiceId }}</span>
                 </button>
@@ -1022,6 +1097,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import StudioHeader from '@/components/StudioHeader.vue'
 import StudioIsland from '@/components/StudioIsland.vue'
 import VoicePlayer from '@/components/VoicePlayer.vue'
+import { chatCompletion } from '@/api/aiping'
 import { cloneVoice, deleteClonedVoice, fetchVoiceCatalog, synthesizeSpeech, uploadCloneAudio } from '@/api/voice'
 import {
   CLONE_SAMPLE_MAX_BYTES,
@@ -1056,12 +1132,20 @@ import {
 } from '@/features/voice/storage'
 import { INTERJECTION_TAGS, PAUSE_PRESETS, formatPauseTag } from '@/features/voice/tags'
 import {
+  TRANSLATION_LANGUAGES,
+  buildTranslationMessages,
+  cleanTranslationOutput,
+} from '@/features/voice/translation'
+import type { TranslationLanguage } from '@/features/voice/translation'
+import { DEFAULT_TRANSLATION_MODEL, useSettingsStore } from '@/stores/settingsStore'
+import {
   CLONE_DEMO_TEXT,
   DEFAULT_VOICE_ID,
   FALLBACK_SYSTEM_VOICES,
   TEXT_PRESETS,
   VOICE_LANGUAGES,
   buildPreviewText,
+  getVoiceLanguageTag,
   groupVoicesByLanguage,
   matchesVoiceQuery,
 } from '@/features/voice/voices'
@@ -1083,6 +1167,7 @@ import type {
 const accent = 'var(--studio-accent-voice)'
 const model = VOICE_MODELS[0]
 const maxChars = model.capability.maxChars
+const settingsStore = useSettingsStore()
 
 const speedRange = VOICE_PARAM_LIMITS.speed
 const pitchRange = VOICE_PARAM_LIMITS.pitch
@@ -1124,6 +1209,19 @@ const voiceSearchRef = ref<HTMLInputElement | null>(null)
 const voiceChangeBtnRef = ref<HTMLButtonElement | null>(null)
 
 const charCount = computed(() => text.value.length)
+
+/* ---------------- 文案翻译 ---------------- */
+
+const translateBtnRef = ref<HTMLButtonElement | null>(null)
+const translateDialogRef = ref<HTMLElement | null>(null)
+const translateOpen = ref(false)
+const translating = ref(false)
+const translateError = ref('')
+const translateStatus = ref('')
+
+const translationModelLabel = computed(
+  () => settingsStore.translationModel.trim() || DEFAULT_TRANSLATION_MODEL,
+)
 
 /* ---------------- 脚本快捷插入 ---------------- */
 
@@ -1180,6 +1278,75 @@ function insertPause(seconds: number) {
 
 function insertInterjection(code: string) {
   insertSnippet(`(${code})`)
+}
+
+/* ---------------- 文案翻译 ---------------- */
+
+watch(translateOpen, (open) => {
+  document.body.classList.toggle('voice-modal-open', open)
+  if (open) {
+    window.addEventListener('keydown', handleTranslateKeydown)
+    void nextTick(() => translateDialogRef.value?.focus())
+  } else {
+    window.removeEventListener('keydown', handleTranslateKeydown)
+  }
+})
+
+function handleTranslateKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeTranslatePicker()
+  }
+}
+
+function openTranslatePicker() {
+  if (!text.value.trim() || translating.value) return
+  translateError.value = ''
+  translateStatus.value = ''
+  translateOpen.value = true
+}
+
+function closeTranslatePicker() {
+  translateOpen.value = false
+  void nextTick(() => translateBtnRef.value?.focus())
+}
+
+async function handleTranslate(language: TranslationLanguage) {
+  const source = text.value.trim()
+  if (!source || translating.value) return
+
+  closeTranslatePicker()
+  translating.value = true
+  translateError.value = ''
+  translateStatus.value = ''
+
+  try {
+    const raw = await chatCompletion({
+      model: translationModelLabel.value,
+      messages: buildTranslationMessages(source, language),
+      temperature: 0.2,
+    })
+    const translated = cleanTranslationOutput(raw)
+    if (!translated) {
+      throw new Error('翻译模型没有返回有效内容，请更换模型或稍后重试。')
+    }
+
+    const truncated = translated.length > maxChars
+    const nextText = truncated ? translated.slice(0, maxChars) : translated
+    text.value = nextText
+    scriptSelection.value = { start: nextText.length, end: nextText.length }
+    translateStatus.value = truncated
+      ? `已翻译为${language.label}，超出 ${maxChars} 字已截断`
+      : `已翻译为${language.label}`
+
+    await nextTick()
+    scriptRef.value?.focus()
+    scriptRef.value?.setSelectionRange(nextText.length, nextText.length)
+  } catch (error) {
+    translateError.value = error instanceof Error ? error.message : '翻译失败，请稍后重试。'
+  } finally {
+    translating.value = false
+  }
 }
 
 /* ---------------- 音色目录 ---------------- */
@@ -1403,6 +1570,8 @@ function applyPreset(preset: (typeof TEXT_PRESETS)[number]) {
 function clearScript() {
   text.value = ''
   scriptSelection.value = { start: 0, end: 0 }
+  translateStatus.value = ''
+  translateError.value = ''
 }
 
 async function handleGenerate() {
@@ -1759,11 +1928,13 @@ function formatDate(timestamp: number): string {
 /* ---------------- 生命周期 ---------------- */
 
 onMounted(() => {
+  settingsStore.loadFromStorage()
   void loadCatalog()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleVoiceModalKeydown)
+  window.removeEventListener('keydown', handleTranslateKeydown)
   document.body.classList.remove('voice-modal-open')
   revokeUrl(result.value?.url)
   revokeUrl(preview.value?.url)
@@ -2175,6 +2346,45 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.translate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* 有文案时给一个轻量的可翻译提示，不抢「生成配音」的主操作层级 */
+.translate-btn:not(:disabled) {
+  border-color: rgba(251, 146, 60, 0.34);
+  background: rgba(251, 146, 60, 0.09);
+  color: rgba(255, 205, 164, 0.92);
+}
+
+.translate-btn:hover:not(:disabled) {
+  border-color: rgba(251, 146, 60, 0.54);
+  background: rgba(251, 146, 60, 0.15);
+  color: #fff3e6;
+}
+
+.translate-btn:not(:disabled) svg {
+  color: #fdba74;
+}
+
+.translate-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.script-translate-status {
+  color: rgba(145, 213, 170, 0.82);
+  font-size: 11.5px;
+}
+
+.script-translate-error {
+  margin-top: 8px;
 }
 
 .script-warn {
@@ -2352,7 +2562,9 @@ onBeforeUnmount(() => {
 
 .history-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
+  min-width: 0;
   margin: 0;
   padding: 14px 16px 16px;
   list-style: none;
@@ -2362,6 +2574,8 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
   padding: 12px 14px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 16px;
@@ -2388,6 +2602,8 @@ onBeforeUnmount(() => {
 }
 
 .history-text {
+  max-width: 100%;
+  min-width: 0;
   color: rgba(214, 224, 245, 0.48);
   font-size: 12px;
   line-height: 1.6;
@@ -2845,14 +3061,30 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
 }
 
-.voice-tag {
+.voice-lang-tag {
+  flex: 0 0 auto;
   padding: 1px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
   border-radius: 999px;
-  background: rgba(251, 146, 60, 0.18);
-  color: #ffcf9f;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.42);
   font-size: 9.5px;
   font-style: normal;
-  font-weight: 700;
+  font-weight: 600;
+  line-height: 1.55;
+  white-space: nowrap;
+}
+
+.voice-option.active .voice-lang-tag {
+  border-color: rgba(251, 146, 60, 0.28);
+  background: rgba(251, 146, 60, 0.1);
+  color: rgba(255, 214, 173, 0.82);
+}
+
+.voice-lang-tag.is-clone {
+  border-color: rgba(251, 146, 60, 0.2);
+  background: rgba(251, 146, 60, 0.13);
+  color: #ffcf9f;
 }
 
 .voice-empty {
@@ -2969,6 +3201,126 @@ onBeforeUnmount(() => {
 .voice-modal-close svg {
   width: 15px;
   height: 15px;
+}
+
+/* ---------- 翻译语言选择 ---------- */
+
+.translate-layer {
+  z-index: 130;
+}
+
+.translate-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(680px, 100%);
+  max-height: min(760px, calc(100dvh - 48px));
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 22px;
+  outline: none;
+  background:
+    linear-gradient(180deg, rgba(32, 22, 18, 0.98), rgba(12, 12, 17, 0.995) 38%),
+    #0c0c11;
+  box-shadow:
+    0 40px 120px rgba(0, 0, 0, 0.62),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  animation: voice-modal-rise 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.translate-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.translate-headings {
+  min-width: 0;
+}
+
+.translate-headings h2 {
+  margin-top: 4px;
+  font-family: var(--font-family-display);
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+
+.translate-headings p {
+  margin-top: 5px;
+  color: var(--studio-text-hint);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.translate-body {
+  overflow-y: auto;
+  padding: 18px 22px 20px;
+}
+
+.translate-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.translate-option {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 11px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.025);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-base),
+    background var(--transition-base),
+    transform var(--transition-base);
+}
+
+.translate-option:hover {
+  border-color: rgba(251, 146, 60, 0.36);
+  background: rgba(251, 146, 60, 0.075);
+  transform: translateY(-1px);
+}
+
+.translate-option:focus-visible {
+  outline: 2px solid rgba(251, 146, 60, 0.55);
+  outline-offset: 2px;
+}
+
+.translate-option strong {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12.5px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.translate-option span {
+  overflow: hidden;
+  color: var(--studio-text-hint);
+  font-size: 10.5px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.translate-model {
+  margin-top: 14px;
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 10.5px;
+  line-height: 1.6;
 }
 
 .voice-modal-toolbar {
@@ -3120,12 +3472,22 @@ onBeforeUnmount(() => {
 }
 
 .voice-option-top strong {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   color: rgba(255, 255, 255, 0.86);
   font-size: 12.5px;
   font-weight: 650;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+.voice-option-meta {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
 }
 
 .voice-option.active .voice-option-top strong {
@@ -3136,7 +3498,7 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   width: 14px;
   height: 14px;
-  margin-left: auto;
+  margin-left: 0;
   color: #ffb877;
 }
 
@@ -3987,6 +4349,28 @@ onBeforeUnmount(() => {
 
   .voice-modal-layer {
     padding: 0;
+  }
+
+  .translate-layer {
+    padding: 12px;
+  }
+
+  .translate-dialog {
+    width: 100%;
+    max-height: calc(100dvh - 24px);
+    border-radius: 18px;
+  }
+
+  .translate-head {
+    padding: 16px 16px 14px;
+  }
+
+  .translate-body {
+    padding: 14px 16px 16px;
+  }
+
+  .translate-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .voice-modal {
