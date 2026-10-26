@@ -102,36 +102,54 @@ async function assertSeedanceImageValid(dataUri: string): Promise<void> {
   }
 }
 
-function resolveUploadServiceError(status: number, detail: string): AppError {
+type UploadAssetKind = 'image' | 'audio'
+
+const UPLOAD_ASSET_LABEL: Record<UploadAssetKind, string> = {
+  image: '图片',
+  audio: '音频',
+}
+
+/** 参考音频体积上限，避免超大文件把上传服务和上游请求拖垮。 */
+const AUDIO_MAX_BYTES = 30 * 1024 * 1024
+
+function resolveUploadServiceError(
+  status: number,
+  detail: string,
+  kind: UploadAssetKind = 'image',
+): AppError {
+  const label = UPLOAD_ASSET_LABEL[kind]
+
   if (status === 401 || status === 403) {
-    return new AppError('图片上传服务鉴权失败，请检查上传服务的 token 配置。', {
+    return new AppError(`${label}上传服务鉴权失败，请检查上传服务的 token 配置。`, {
       code: 'UPLOAD_SERVICE_AUTH',
     })
   }
 
   if (status === 413) {
-    return new AppError('图片文件太大，请压缩后重试。', { code: 'UPLOAD_SERVICE_TOO_LARGE' })
+    return new AppError(`${label}文件太大，请压缩后重试。`, { code: 'UPLOAD_SERVICE_TOO_LARGE' })
   }
 
   if (status === 404 || status === 405) {
     return new AppError(
-      '图片上传接口返回 404/405：线上服务器还没有正确配置 /upload 反向代理。' +
+      `${label}上传接口返回 404/405：线上服务器还没有正确配置 /upload 反向代理。` +
         '请按 DEPLOYMENT.md 给 Nginx 加上 /upload 反代，并确认上传服务已在服务器运行。',
       { code: 'UPLOAD_SERVICE_UNAVAILABLE' },
     )
   }
 
   if (status >= 500) {
-    return new AppError('图片上传服务暂时不可用，请稍后重试。', { code: 'UPLOAD_SERVICE_UNAVAILABLE' })
+    return new AppError(`${label}上传服务暂时不可用，请稍后重试。`, { code: 'UPLOAD_SERVICE_UNAVAILABLE' })
   }
 
-  return new AppError(`图片上传失败：${detail || '请稍后重试'}`, { code: 'UPLOAD_SERVICE_FAILED' })
+  return new AppError(`${label}上传失败：${detail || '请稍后重试'}`, { code: 'UPLOAD_SERVICE_FAILED' })
 }
 
 /** 把 base64 dataURI POST 到 COS 代理服务，返回公网 HTTPS URL。 */
-async function postImageToUploadService(dataUri: string): Promise<string> {
+async function postAssetToUploadService(kind: UploadAssetKind, dataUri: string): Promise<string> {
+  const label = UPLOAD_ASSET_LABEL[kind]
+
   if (!UPLOAD_SERVICE_URL) {
-    throw new AppError('当前未配置图片上传服务，无法把本地图片转换为公网 URL。', {
+    throw new AppError(`当前未配置${label}上传服务，无法把本地${label}转换为公网 URL。`, {
       code: 'UPLOAD_SERVICE_UNAVAILABLE',
     })
   }
@@ -144,10 +162,10 @@ async function postImageToUploadService(dataUri: string): Promise<string> {
     resp = await fetch(UPLOAD_SERVICE_URL, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ image: dataUri }),
+      body: JSON.stringify({ [kind]: dataUri }),
     })
   } catch {
-    throw new AppError('图片上传服务连接失败，请确认上传服务已启动且网络可达。', {
+    throw new AppError(`${label}上传服务连接失败，请确认上传服务已启动且网络可达。`, {
       code: 'UPLOAD_SERVICE_UNAVAILABLE',
     })
   }
@@ -160,14 +178,20 @@ async function postImageToUploadService(dataUri: string): Promise<string> {
     } catch {
       detail = await resp.text().catch(() => '')
     }
-    throw resolveUploadServiceError(resp.status, detail)
+    throw resolveUploadServiceError(resp.status, detail, kind)
   }
 
   const data = await resp.json()
   if (!data?.url || typeof data.url !== 'string') {
-    throw new AppError('图片上传成功，但没有拿到图片地址，请稍后重试。', { code: 'UPLOAD_SERVICE_FAILED' })
+    throw new AppError(`${label}上传成功，但没有拿到${label}地址，请稍后重试。`, {
+      code: 'UPLOAD_SERVICE_FAILED',
+    })
   }
   return data.url
+}
+
+function postImageToUploadService(dataUri: string): Promise<string> {
+  return postAssetToUploadService('image', dataUri)
 }
 
 /** 严格上传：任何失败都抛出，用于必须拿到公网 URL 的场景（Seedance 2.0）。 */
@@ -201,6 +225,39 @@ export async function uploadDataUriToPublicUrl(dataUri: string): Promise<string>
 
   await assertSeedanceImageValid(dataUri)
   return uploadImageToPublicUrl(dataUri)
+}
+
+/**
+ * Seedance 2.0 / MiniMax-H3 专用：本地音频必须换成公网 URL。
+ *
+ * 这两个模型的 reference_audio.audio_url 不接受 base64 dataURI；
+ * 配音音频库的 Blob、本地上传的音频都会先经过这里上传。
+ */
+export async function ensurePublicAudioUrlForModel(value: string): Promise<string> {
+  if (!isDataUri(value)) return value
+
+  if (!/^data:audio\//i.test(value)) {
+    throw new AppError('参考音频格式不正确，请重新选择音频文件后重试。', {
+      code: 'AUDIO_INVALID',
+    })
+  }
+
+  if (estimateDataUriBytes(value) > AUDIO_MAX_BYTES) {
+    throw new AppError('这段参考音频文件太大，请选择 30MB 以内的音频后重试。', {
+      code: 'AUDIO_TOO_LARGE',
+    })
+  }
+
+  if (!UPLOAD_SERVICE_URL) {
+    throw new AppError(
+      'Seedance 2.0 / MiniMax-H3 的参考音频需要公网 URL，但当前未配置文件上传服务。' +
+        '请在前端 .env 配置 VITE_UPLOAD_SERVICE_URL（并部署 server/upload-service），' +
+        '或改用公网可访问的音频地址。',
+      { code: 'UPLOAD_SERVICE_UNAVAILABLE' },
+    )
+  }
+
+  return postAssetToUploadService('audio', value)
 }
 
 /**

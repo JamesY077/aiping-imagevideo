@@ -5,11 +5,12 @@ import cors from 'cors'
 import COS from 'cos-nodejs-sdk-v5'
 
 /**
- * 图片上传代理服务
+ * 参考文件上传代理服务（图片 / 音频）
  * ------------------------------------------------------------------
- * 作用：前端把本地图片（base64）POST 到本服务，本服务用腾讯云 COS 密钥
- *       上传，返回一个公网 HTTPS URL（abc.nextmak.cn/...）。
- *       这个 URL 交给火山 Seedance 2.0 的 CreateAsset 接口即可正常抓取。
+ * 作用：前端把本地图片或音频（base64）POST 到本服务，本服务用腾讯云 COS
+ *       密钥上传，返回一个公网 HTTPS URL（abc.nextmak.cn/...）。
+ *       这个 URL 交给 Seedance 2.0 / MiniMax-H3 的参考素材接口即可正常抓取。
+ *       图片走 { image }，音频走 { audio }。
  *
  * 为什么需要它：COS 的 SecretId/SecretKey 绝不能放到纯前端里（会被所有用户
  *       看到并盗用）。所以密钥只保存在本服务的 .env 中，由服务端代理上传。
@@ -34,8 +35,9 @@ const {
   // - '*'：显式允许所有来源（不推荐）；
   // - 具体列表：仅允许列出的来源，例如 https://artrealm.nextmak.cn
   ALLOW_ORIGINS = '',
-  // 单张图片体积上限（MB）
+  // 单个文件体积上限（MB）：图片 / 音频
   MAX_FILE_MB = '15',
+  MAX_AUDIO_MB = '30',
   // 每个 IP 每分钟最多上传次数（防刷）
   UPLOAD_RATE_LIMIT_PER_MIN = '20',
   // 每个 IP 每天最多上传字节数（MB，防 COS 额度盗刷）
@@ -56,8 +58,9 @@ const cos = new COS({ SecretId: COS_SECRET_ID, SecretKey: COS_SECRET_KEY })
 
 const app = express()
 app.disable('x-powered-by')
-// base64 图片体积较大，放宽 JSON body 上限。
-app.use(express.json({ limit: `${Number(MAX_FILE_MB) + 5}mb` }))
+// base64 文件体积较大，放宽 JSON body 上限（取图片/音频上限中较大者）。
+const jsonLimitMb = Math.max(Number(MAX_FILE_MB) || 15, Number(MAX_AUDIO_MB) || 30) + 5
+app.use(express.json({ limit: `${jsonLimitMb}mb` }))
 
 const allowList = ALLOW_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean)
 /** 判断来源是否是本机或局域网私有网段（开发环境默认放行）。 */
@@ -185,21 +188,52 @@ const cleanupIntervalMs = 60 * 60 * 1000
 setTimeout(() => cleanupExpiredObjects(), cleanupStartDelayMs).unref()
 setInterval(() => cleanupExpiredObjects(), cleanupIntervalMs).unref()
 
+const IMAGE_EXT_MAP = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/bmp': 'bmp',
+}
+
+const AUDIO_EXT_MAP = {
+  'audio/mpeg': 'mp3',
+  'audio/mp3': 'mp3',
+  'audio/wav': 'wav',
+  'audio/x-wav': 'wav',
+  'audio/wave': 'wav',
+  'audio/mp4': 'm4a',
+  'audio/m4a': 'm4a',
+  'audio/x-m4a': 'm4a',
+  'audio/aac': 'aac',
+  'audio/ogg': 'ogg',
+  'audio/webm': 'webm',
+  'audio/flac': 'flac',
+  'audio/x-flac': 'flac',
+  'audio/pcm': 'pcm',
+  'audio/x-pcm': 'pcm',
+  'audio/l16': 'pcm',
+}
+
 /** 解析 dataURI，返回 { buffer, mime, ext }；非法则抛错。 */
-function parseDataUri(dataUri) {
+function parseDataUri(dataUri, kind) {
+  const label = kind === 'audio' ? '音频' : '图片'
   const match = /^data:([^;]+);base64,(.*)$/s.exec(dataUri || '')
-  if (!match) throw new Error('image 字段必须是 data:<mime>;base64,<data> 形式的 dataURI')
-  const mime = match[1]
-  const buffer = Buffer.from(match[2], 'base64')
-  const extMap = {
-    'image/png': 'png',
-    'image/jpeg': 'jpg',
-    'image/jpg': 'jpg',
-    'image/webp': 'webp',
-    'image/gif': 'gif',
-    'image/bmp': 'bmp',
+  if (!match) {
+    throw new Error(`${kind === 'audio' ? 'audio' : 'image'} 字段必须是 data:<mime>;base64,<data> 形式的 dataURI`)
   }
-  const ext = extMap[mime] || 'png'
+
+  const mime = match[1].toLowerCase()
+  const expectedPrefix = kind === 'audio' ? 'audio/' : 'image/'
+  if (!mime.startsWith(expectedPrefix)) {
+    throw new Error(`${label}格式不受支持：${mime}`)
+  }
+
+  const buffer = Buffer.from(match[2], 'base64')
+  const extMap = kind === 'audio' ? AUDIO_EXT_MAP : IMAGE_EXT_MAP
+  const fallbackExt = mime.split('/')[1]?.replace(/[^a-z0-9]/g, '') || (kind === 'audio' ? 'mp3' : 'png')
+  const ext = extMap[mime] || fallbackExt
   return { buffer, mime, ext }
 }
 
@@ -210,9 +244,9 @@ app.get('/health', (_req, res) => {
 
 /**
  * POST /upload
- * body: { image: "data:image/png;base64,...." }
+ * body: { image: "data:image/png;base64,...." } 或 { audio: "data:audio/wav;base64,...." }
  * headers: Authorization: Bearer <UPLOAD_TOKEN>  （若配置了 UPLOAD_TOKEN）
- * resp: { url: "https://abc.nextmak.cn/seedance-uploads/xxxx.png" }
+ * resp: { url: "https://abc.nextmak.cn/seedance-uploads/image/xxxx.png" }
  */
 app.post('/upload', uploadRateLimit, async (req, res) => {
   try {
@@ -229,12 +263,15 @@ app.post('/upload', uploadRateLimit, async (req, res) => {
       }
     }
 
-    const { image } = req.body || {}
-    if (!image || typeof image !== 'string') {
-      return res.status(400).json({ error: '缺少 image 字段（base64 dataURI）' })
+    const { image, audio } = req.body || {}
+    const isAudio = typeof audio === 'string' && !!audio
+    const kind = isAudio ? 'audio' : 'image'
+    const dataUri = isAudio ? audio : image
+    if (!dataUri || typeof dataUri !== 'string') {
+      return res.status(400).json({ error: '缺少 image 或 audio 字段（base64 dataURI）' })
     }
 
-    const { buffer, mime, ext } = parseDataUri(image)
+    const { buffer, mime, ext } = parseDataUri(dataUri, kind)
 
     const ip = clientIp(req)
     const dayKey = new Date().toISOString().slice(0, 10)
@@ -245,13 +282,15 @@ app.post('/upload', uploadRateLimit, async (req, res) => {
       return res.status(429).json({ error: `今日上传配额已用完，请明天再试（每天最多 ${UPLOAD_DAILY_QUOTA_MB}MB）。` })
     }
 
-    const maxBytes = Number(MAX_FILE_MB) * 1024 * 1024
+    const label = kind === 'audio' ? '音频' : '图片'
+    const maxMb = Number(kind === 'audio' ? MAX_AUDIO_MB : MAX_FILE_MB)
+    const maxBytes = maxMb * 1024 * 1024
     if (buffer.length > maxBytes) {
-      return res.status(413).json({ error: `图片过大，超过 ${MAX_FILE_MB}MB 限制` })
+      return res.status(413).json({ error: `${label}过大，超过 ${maxMb}MB 限制` })
     }
 
     // 128 位随机 key，公开读场景下不可枚举。
-    const key = `${COS_PREFIX}/${Date.now()}-${crypto.randomBytes(16).toString('hex')}.${ext}`
+    const key = `${COS_PREFIX}/${kind}/${Date.now()}-${crypto.randomBytes(16).toString('hex')}.${ext}`
 
     await new Promise((resolve, reject) => {
       cos.putObject(
@@ -270,7 +309,7 @@ app.post('/upload', uploadRateLimit, async (req, res) => {
     quotaMap.set(ip, { dayKey, bytes: usedToday + buffer.length })
 
     const url = `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/${key}`
-    console.log(`[upload-service] uploaded ${buffer.length} bytes -> ${url}`)
+    console.log(`[upload-service] uploaded ${kind} ${buffer.length} bytes -> ${url}`)
     return res.json({ url, key })
   } catch (err) {
     console.error('[upload-service] upload failed:', err?.message || err)

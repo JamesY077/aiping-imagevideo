@@ -38,6 +38,7 @@ import { AppError } from '@/utils/errors'
 import {
   uploadDataUriToPublicUrl,
   ensurePublicImageUrlForModel,
+  ensurePublicAudioUrlForModel,
   ensureMinimaxH3ImageForModel,
 } from '@/features/generate/upload'
 
@@ -436,11 +437,11 @@ function isDataUri(value: string): boolean {
   return /^data:[^;]+;base64,/.test(value)
 }
 
-/** 图片类素材允许上传本地 base64（会先转成公网 URL）；视频/音频暂不支持本地上传。 */
+/** 图片/音频类素材允许上传本地 base64（会先转成公网 URL）；参考视频暂不支持本地上传。 */
 function assertRemoteAssetUrl(url: string, assetType: SeedanceAssetType): void {
   if (isDataUri(url)) {
     throw new AppError(
-      `Seedance 2.0 的参考${assetType === 'Video' ? '视频' : '音频'}目前需要公网 URL，暂不支持本地上传。请改用公网可访问的地址。`,
+      `Seedance 2.0 的参考${assetType === 'Video' ? '视频' : '素材'}目前需要公网 URL，暂不支持本地上传。请改用公网可访问的地址。`,
     )
   }
 }
@@ -448,7 +449,8 @@ function assertRemoteAssetUrl(url: string, assetType: SeedanceAssetType): void {
 /**
  * 把某一类参考素材整理成任务接口可直接使用的公网 URL：
  * - 图片 base64：先上传到图片服务换成公网 URL。
- * - 视频/音频 base64：暂不支持，直接给出中文提示。
+ * - 音频 base64：先上传到同一文件服务换成公网 URL（配音音频库/本地上传都走这里）。
+ * - 视频 base64：暂不支持，直接给出中文提示。
  * - 其他 http/https 地址：原样返回。
  */
 async function prepareSeedanceReferenceUrls(urls: string[], assetType: SeedanceAssetType): Promise<string[]> {
@@ -457,6 +459,8 @@ async function prepareSeedanceReferenceUrls(urls: string[], assetType: SeedanceA
     if (isDataUri(rawUrl)) {
       if (assetType === 'Image') {
         preparedUrls.push(await uploadDataUriToPublicUrl(rawUrl))
+      } else if (assetType === 'Audio') {
+        preparedUrls.push(await ensurePublicAudioUrlForModel(rawUrl))
       } else {
         assertRemoteAssetUrl(rawUrl, assetType)
         preparedUrls.push(rawUrl)
@@ -515,7 +519,8 @@ async function generateSeedanceVideo(params: VideoGenerateRequest, canonicalMode
 
 /**
  * MiniMax-H3 专用生成流程：
- * 1. 首/尾帧与参考图已由通用上传流程处理为公网 URL（或压缩后的 dataURI）；视频/音频参考必须已是公网 URL。
+ * 1. 首/尾帧与参考图已由通用上传流程处理为公网 URL（或压缩后的 dataURI）；
+ *    参考音频的 base64 会在这里上传为公网 URL；参考视频仍必须已是公网 URL。
  * 2. 组装 content 数组后调用 /multimodal/minimax/videos/video_generation 创建任务。
  */
 async function generateMinimaxH3Video(params: VideoGenerateRequest, canonicalModel: string): Promise<VideoGenerateResponse> {
@@ -527,17 +532,16 @@ async function generateMinimaxH3Video(params: VideoGenerateRequest, canonicalMod
 
   const hasFrames = !!(firstFrame || lastFrame)
 
+  let preparedReferenceAudios = referenceAudios
   if (!hasFrames) {
     for (const url of referenceVideos) {
       if (isDataUri(url)) {
         throw new AppError('MiniMax-H3 的参考视频目前需要公网 URL，暂不支持本地上传。请改用公网可访问的地址。')
       }
     }
-    for (const url of referenceAudios) {
-      if (isDataUri(url)) {
-        throw new AppError('MiniMax-H3 的参考音频目前需要公网 URL，暂不支持本地上传。请改用公网可访问的地址。')
-      }
-    }
+    preparedReferenceAudios = await Promise.all(
+      referenceAudios.map((url) => ensurePublicAudioUrlForModel(url)),
+    )
   }
 
   const body: Record<string, unknown> = {
@@ -550,7 +554,7 @@ async function generateMinimaxH3Video(params: VideoGenerateRequest, canonicalMod
       : buildMinimaxH3Content(params.prompt, {
           referenceImages,
           referenceVideos,
-          referenceAudios,
+          referenceAudios: preparedReferenceAudios,
         }),
     resolution: params.resolution === '2K' ? '2K' : '768P',
     duration: Math.min(15, Math.max(4, Math.round(Number(params.duration || params.seconds || 5)))),

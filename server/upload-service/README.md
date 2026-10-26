@@ -1,15 +1,17 @@
-# 图片上传代理服务（本地图片统一上传）
+# 参考文件上传代理服务（本地图片 / 音频统一上传）
 
 ## 为什么需要它
 
-火山 **Seedance 2.0** 系列生成视频时，参考图必须先经过火山 `CreateAsset` 接口换成 `asset://{id}`。
-而 `CreateAsset` **只接受公网 http/https 图片 URL，不接受本地 base64**（会报
-`InvalidParameter.URL: URL must be a valid HTTP or HTTPS URL`）。
+火山 **Seedance 2.0** 与 **MiniMax-H3** 的参考素材接口要求公网 http/https URL，
+不接受本地 base64：
+- Seedance 2.0 的参考图必须先经过火山 `CreateAsset` 接口换成 `asset://{id}`；
+- 参考音频的 `audio_url` 也必须是公网可访问地址；
+- 参考视频同样要求公网 URL（本服务目前不处理视频上传）。
 
-本服务负责：前端把本地图片（base64）POST 过来 → 用腾讯云 COS 密钥上传 → 返回公网 HTTPS URL。
+本服务负责：前端把本地图片或音频（base64）POST 过来 → 用腾讯云 COS 密钥上传 → 返回公网 HTTPS URL。
 COS 密钥只存在服务端 `.env`，不会暴露给前端用户。
 
-> 说明：Seedance 2.0 必须使用公网 URL；其他模型在配置上传服务后也会统一走本服务，
+> 说明：参考图/参考音频必须使用公网 URL；其他模型在配置上传服务后也会统一走本服务，
 > 从而避免多张本地原图直接 base64 上传导致请求体过大、上游返回 503。
 
 ## 目录
@@ -64,7 +66,7 @@ location /upload {
     proxy_pass http://127.0.0.1:3100/upload;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
-    client_max_body_size 20m;   # 允许较大图片
+    client_max_body_size 50m;   # 允许较大图片 / 音频（base64 会膨胀约 1/3）
 }
 location = /upload/health {
     proxy_pass http://127.0.0.1:3100/health;
@@ -89,7 +91,11 @@ VITE_UPLOAD_SERVICE_URL=https://artrealm.nextmak.cn/upload
 VITE_UPLOAD_SERVICE_TOKEN=与服务端 UPLOAD_TOKEN 相同的值
 ```
 
-前端在调用 Seedance 2.0 且检测到本地 base64 参考图时，会自动先 POST 到该地址换取公网 URL，再交给火山。
+前端在调用 Seedance 2.0 / MiniMax-H3 且检测到本地 base64 参考图或参考音频时，会自动先 POST 到该地址换取公网 URL，再交给上游。
+
+请求体约定：
+- 图片：`{ "image": "data:image/png;base64,..." }`
+- 音频：`{ "audio": "data:audio/wav;base64,..." }`
 
 ## 安全加固（已内置）
 

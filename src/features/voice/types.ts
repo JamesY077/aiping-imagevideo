@@ -113,7 +113,7 @@ export interface VoicePreview {
   voiceId?: string
 }
 
-/** 本次会话内的生成记录。 */
+/** 配音生成记录。 */
 export interface VoiceHistoryItem {
   id: string
   text: string
@@ -126,6 +126,24 @@ export interface VoiceHistoryItem {
   audioUrl: string
   format: SpeechAudioFormat
   size: number
+}
+
+/**
+ * 配音音频库条目：只保存用户真正生成完成的音频。
+ * 音频 Blob 存在 IndexedDB 中，因此离开配音页、刷新浏览器后仍可被视频生成选择。
+ */
+export interface VoiceLibraryItem {
+  id: string
+  text: string
+  voiceId: string
+  voiceName: string
+  model: string
+  createdAt: number
+  durationMs: number
+  usageCharacters: number
+  format: SpeechAudioFormat
+  size: number
+  blob: Blob
 }
 
 /** 复刻流程阶段。 */

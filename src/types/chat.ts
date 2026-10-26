@@ -75,6 +75,8 @@ export interface UploadedFile {
   purpose?: UploadedFilePurpose
   /** 多模态参考模式下用于 @ 引用的稳定标识（如 图片1 / 视频1 / 音频1）。 */
   refLabel?: string
+  /** 来自配音音频库时记录原条目 id，用于避免重复添加。 */
+  libraryId?: string
   motionControlOptions?: MotionControlOptions
   dimensions?: {
     width: number

@@ -1,7 +1,7 @@
 {
   "name": "aiping-upload-service",
   "version": "1.0.0",
-  "description": "图片上传代理服务：接收前端 base64/文件，用腾讯云 COS 密钥上传，返回公网 HTTPS URL，供 Seedance 2.0 CreateAsset 使用。SecretKey 只存服务端 .env。",
+  "description": "参考文件上传代理服务：接收前端 base64 图片/音频，用腾讯云 COS 密钥上传并返回公网 HTTPS URL，供 Seedance 2.0 / MiniMax-H3 使用。SecretKey 只存服务端 .env。",
   "type": "module",
   "main": "index.js",
   "scripts": {

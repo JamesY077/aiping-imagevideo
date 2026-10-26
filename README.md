@@ -81,7 +81,7 @@ npm run preview  # 本地预览 dist/
 | `VITE_APP_VERSION` | 应用版本 | `1.0.0` |
 | `VITE_API_BASE_URL` | API 基础路径，开发环境由 Vite 代理到 `https://aiping.cn` | `/api/v1` |
 | `VITE_API_DOCS_URL` | API 文档地址 | `https://aiping.cn/docs` |
-| `VITE_UPLOAD_SERVICE_URL` | 参考图上传服务地址（Seedance 2.0 本地参考图必需，可选） | 空 |
+| `VITE_UPLOAD_SERVICE_URL` | 参考图/参考音频上传服务地址（Seedance 2.0、MiniMax-H3 本地素材可选） | 空 |
 | `VITE_UPLOAD_SERVICE_TOKEN` | 与上传服务端 `UPLOAD_TOKEN` 一致的令牌 | 空 |
 | `VITE_CDN_ASSET_BASE` | 静态资源 CDN/COS 前缀，本地开发留空走 `public/` | 空 |
 
@@ -98,9 +98,11 @@ npm run preview  # 本地预览 dist/
 
 API Base URL 与 API Key 保存在浏览器本地，配置完成后即可进入工作台，未配置时受限页面会自动跳转回首页。
 
-## 图片上传服务（可选）
+## 参考文件上传服务（可选）
 
-火山 Seedance 2.0 的参考图接口只接受公网 HTTP(S) URL。启用本地上传参考图时，需要部署 `server/upload-service`（Express + 腾讯云 COS），前端会把本地图片先上传换取公网 URL。部署与配置方法见 `server/upload-service/README.md`，并在前端配置 `VITE_UPLOAD_SERVICE_URL` 与 `VITE_UPLOAD_SERVICE_TOKEN`。
+火山 Seedance 2.0 的参考图、Seedance 2.0 / MiniMax-H3 的参考音频都要求公网 HTTP(S) URL。启用本地上传参考图/音频时，需要部署 `server/upload-service`（Express + 腾讯云 COS），前端会把本地文件先上传换取公网 URL。部署与配置方法见 `server/upload-service/README.md`，并在前端配置 `VITE_UPLOAD_SERVICE_URL` 与 `VITE_UPLOAD_SERVICE_TOKEN`。
+
+> 当前 `.env.production` 默认未启用该服务，因此线上从配音音频库选择音频后生成视频时，会提示先配置上传服务；配置后即可自动上传。
 
 ## 部署
 

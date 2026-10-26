@@ -258,12 +258,12 @@
             </div>
           </section>
 
-          <!-- 本次会话记录 -->
+          <!-- 配音音频库（持久化，可被视频多模态引用） -->
           <section v-if="history.length" class="studio-panel history-panel">
             <header class="studio-panel-head">
               <div class="studio-panel-headings">
-                <span class="studio-kicker">Session · 03</span>
-                <h2 class="studio-panel-title">本次生成记录</h2>
+                <span class="studio-kicker">Voice Library</span>
+                <h2 class="studio-panel-title">配音音频库</h2>
               </div>
               <div class="history-head-actions">
                 <span class="studio-panel-meta">共 {{ history.length }} 条</span>
@@ -1130,6 +1130,12 @@ import {
   syncClonedVoicesFromRemote,
   upsertClonedVoice,
 } from '@/features/voice/storage'
+import {
+  clearVoiceLibrary,
+  loadVoiceLibrary,
+  saveVoiceLibraryItem,
+  VOICE_LIBRARY_LIMIT,
+} from '@/features/voice/library'
 import { INTERJECTION_TAGS, PAUSE_PRESETS, formatPauseTag } from '@/features/voice/tags'
 import {
   TRANSLATION_LANGUAGES,
@@ -1539,6 +1545,27 @@ watch(historyPageCount, (count) => {
   if (historyPage.value > count) historyPage.value = count
 })
 
+/** 进入页面时从 IndexedDB 恢复音频库；已在内存里的新结果不会被覆盖。 */
+async function loadHistoryFromLibrary() {
+  const items = await loadVoiceLibrary()
+  if (!items.length) return
+
+  const existingIds = new Set(history.value.map((item) => item.id))
+  const restored = items
+    .filter((item) => !existingIds.has(item.id))
+    .map((item) => ({
+      ...item,
+      audioUrl: URL.createObjectURL(item.blob),
+    }))
+
+  if (!restored.length) return
+
+  const merged = [...history.value, ...restored].sort((a, b) => b.createdAt - a.createdAt)
+  merged.slice(VOICE_LIBRARY_LIMIT).forEach((item) => revokeUrl(item.audioUrl))
+  history.value = merged.slice(0, VOICE_LIBRARY_LIMIT)
+  historyPage.value = 1
+}
+
 const generatingHint = computed(() =>
   charCount.value > model.capability.streamSuggestChars ? '长文本需要多等一会儿' : '通常几秒内完成',
 )
@@ -1611,7 +1638,7 @@ async function handleGenerate() {
     resultVoiceName.value = voice.name
     resultText.value = sourceText
 
-    pushHistory(generated, voice.name, sourceText)
+    await pushHistory(generated, voice.name, sourceText)
 
     await nextTick()
     resultPanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -1622,7 +1649,7 @@ async function handleGenerate() {
   }
 }
 
-function pushHistory(generated: SpeechResult, voiceName: string, sourceText: string) {
+async function pushHistory(generated: SpeechResult, voiceName: string, sourceText: string): Promise<boolean> {
   const item: VoiceHistoryItem & { blob: Blob } = {
     id: `${generated.createdAt}-${Math.random().toString(36).slice(2, 6)}`,
     text: sourceText,
@@ -1639,17 +1666,37 @@ function pushHistory(generated: SpeechResult, voiceName: string, sourceText: str
   }
 
   const next = [item, ...history.value]
-  next.slice(10).forEach((dropped) => revokeUrl(dropped.audioUrl))
-  history.value = next.slice(0, 10)
+  next.slice(VOICE_LIBRARY_LIMIT).forEach((dropped) => revokeUrl(dropped.audioUrl))
+  history.value = next.slice(0, VOICE_LIBRARY_LIMIT)
+
+  // 写入共享音频库，供「图片视频生成」的多模态参考选择。
+  const saved = await saveVoiceLibraryItem({
+    id: item.id,
+    text: item.text,
+    voiceId: item.voiceId,
+    voiceName: item.voiceName,
+    model: item.model,
+    createdAt: item.createdAt,
+    durationMs: item.durationMs,
+    usageCharacters: item.usageCharacters,
+    format: item.format,
+    size: item.size,
+    blob: item.blob,
+  })
 
   // 新生成的内容在第 1 页最前面。
   historyPage.value = 1
+  return saved
 }
 
 function clearHistory() {
+  if (!history.value.length) return
+  if (!window.confirm('确定清空配音音频库吗？清空后，视频多模态参考里也不能再选择这些音频。')) return
+
   history.value.forEach((item) => revokeUrl(item.audioUrl))
   history.value = []
   historyPage.value = 1
+  void clearVoiceLibrary()
 }
 
 function downloadBlob(blob: Blob, extension: string) {
@@ -1930,6 +1977,7 @@ function formatDate(timestamp: number): string {
 onMounted(() => {
   settingsStore.loadFromStorage()
   void loadCatalog()
+  void loadHistoryFromLibrary()
 })
 
 onBeforeUnmount(() => {

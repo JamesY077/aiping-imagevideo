@@ -563,7 +563,7 @@
                           class="multimodal-add-btn"
                           type="button"
                           aria-label="添加音频"
-                          @click="multimodalAudioInput?.click()"
+                          @click="openAudioPicker"
                         >+</button>
                       </div>
                       <input ref="multimodalAudioInput" type="file" accept="audio/*" multiple class="file-input" @change="handleMultimodalFileChange($event, 'audio')" />
@@ -810,6 +810,18 @@
         </div>
       </div>
     </Teleport>
+
+    <AudioLibraryPicker
+      :open="audioPickerOpen"
+      :items="audioLibraryItems"
+      :loading="audioLibraryLoading"
+      :error="audioLibraryError"
+      :selected-ids="selectedAudioLibraryIds"
+      @close="closeAudioPicker"
+      @refresh="loadAudioLibrary"
+      @upload="chooseLocalAudio"
+      @select="addAudioFromLibrary"
+    />
   </div>
 </template>
 
@@ -819,6 +831,7 @@ import { useRoute } from 'vue-router'
 import ChatBubble from '@/components/ChatBubble.vue'
 import ModelSelector from '@/components/ModelSelector.vue'
 import CameraMovementGuide from '@/components/CameraMovementGuide.vue'
+import AudioLibraryPicker from '@/components/AudioLibraryPicker.vue'
 import StudioHeader from '@/components/StudioHeader.vue'
 import StudioIsland from '@/components/StudioIsland.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -855,6 +868,8 @@ import {
   classifySupportedFile,
   validateUploadFileKind,
 } from '@/features/generate/fileFormats'
+import { loadVoiceLibrary } from '@/features/voice/library'
+import type { VoiceLibraryItem } from '@/features/voice/types'
 
 const route = useRoute()
 const settingsStore = useSettingsStore()
@@ -984,6 +999,17 @@ const multimodalAudios = ref<UploadedFile[]>([])
 const multimodalImageInput = ref<HTMLInputElement | null>(null)
 const multimodalVideoInput = ref<HTMLInputElement | null>(null)
 const multimodalAudioInput = ref<HTMLInputElement | null>(null)
+
+// 音频添加入口：先在「音频库 / 本地上传」之间选择来源。
+const audioPickerOpen = ref(false)
+const audioLibraryItems = ref<VoiceLibraryItem[]>([])
+const audioLibraryLoading = ref(false)
+const audioLibraryError = ref('')
+const selectedAudioLibraryIds = computed(() =>
+  multimodalAudios.value
+    .map((item) => item.libraryId)
+    .filter((id): id is string => !!id),
+)
 // 编辑视频（Seedance 2.0）：固定「1 个待修改视频 + 1 张替换图片」
 const editVideoFile = ref<UploadedFile | null>(null)
 const editImageFile = ref<UploadedFile | null>(null)
@@ -1815,6 +1841,71 @@ function relabelMultimodal(type: 'image' | 'video' | 'audio') {
     item.refLabel = `${prefix}${index + 1}`
   })
 }
+
+async function loadAudioLibrary() {
+  audioLibraryLoading.value = true
+  audioLibraryError.value = ''
+
+  if (typeof indexedDB === 'undefined') {
+    audioLibraryItems.value = []
+    audioLibraryError.value = '当前浏览器不支持本地音频库，请改用本地上传。'
+    audioLibraryLoading.value = false
+    return
+  }
+
+  try {
+    audioLibraryItems.value = await loadVoiceLibrary()
+  } catch {
+    audioLibraryItems.value = []
+    audioLibraryError.value = '音频库读取失败，请刷新后重试或改用本地上传。'
+  } finally {
+    audioLibraryLoading.value = false
+  }
+}
+
+function openAudioPicker() {
+  if (multimodalAudios.value.length >= MULTIMODAL_LIMITS.audio) {
+    showErrorMessage(`音频最多添加 ${MULTIMODAL_LIMITS.audio} 个。`)
+    return
+  }
+  audioPickerOpen.value = true
+  void loadAudioLibrary()
+}
+
+function closeAudioPicker() {
+  audioPickerOpen.value = false
+}
+
+function chooseLocalAudio() {
+  closeAudioPicker()
+  multimodalAudioInput.value?.click()
+}
+
+function addAudioFromLibrary(item: VoiceLibraryItem) {
+  if (multimodalAudios.value.length >= MULTIMODAL_LIMITS.audio) {
+    showErrorMessage(`音频最多添加 ${MULTIMODAL_LIMITS.audio} 个。`)
+    return
+  }
+  if (multimodalAudios.value.some((entry) => entry.libraryId === item.id)) {
+    showErrorMessage('这段配音已经在参考音频里了。')
+    return
+  }
+
+  const extension = item.format === 'pcm' ? 'pcm' : item.format
+  const file = new File([item.blob], `voice-${item.id}.${extension}`, {
+    type: item.blob.type || 'audio/mpeg',
+  })
+  const uploaded = createUploadedFile(file, 'audio')
+  uploaded.purpose = 'multimodal-audio'
+  uploaded.libraryId = item.id
+  multimodalAudios.value.push(uploaded)
+  relabelMultimodal('audio')
+  closeAudioPicker()
+}
+
+watch(videoMode, () => {
+  closeAudioPicker()
+})
 
 function handleMultimodalFileChange(e: Event, type: 'image' | 'video' | 'audio') {
   const target = e.target as HTMLInputElement
