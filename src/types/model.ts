@@ -316,17 +316,17 @@ export function getModelsByMediaType(mediaType: MediaType, ids: string[]): strin
   return ids.filter((id) => !isHiddenModelAlias(id) && MODEL_CAPABILITIES[id]?.mediaType === mediaType)
 }
 
-/** seedance2.0 系列分组名称（三款 Doubao-Seedance-2.0 模型同属该组）。 */
-export const SEEDANCE_2_GROUP_LABEL = 'seedance2.0 系列'
+/** Seedance 2 系列分组名称（2.0 / -fast / -mini / 2.5 同属该组）。 */
+export const SEEDANCE_2_GROUP_LABEL = 'seedance 2 系列'
 
 /**
- * 白名单提示文案：seedance2.0 系列仅支持 AI Ping 白名单用户调用。
+ * 白名单提示文案：Seedance 2 系列仅支持 AI Ping 白名单用户调用。
  * 用户在简易模式 / 无限画布中选中该系列模型时弹窗提示。
  */
 export const SEEDANCE_2_WHITELIST_NOTICE =
   '该系列模型仅支持 AI Ping 白名单用户使用，若您已经是白名单用户则可以正常完成调用，反之则无法正常调用。尽请谅解。'
 
-/** 判断某个模型是否属于 seedance2.0 系列（基于 videoRequestMode）。 */
+/** 判断某个模型是否属于 Seedance 2 系列（基于 videoRequestMode）。 */
 export function isSeedance2Model(modelId: string | null | undefined): boolean {
   return getModelCapability(modelId)?.videoRequestMode === 'seedance-2'
 }
@@ -343,9 +343,9 @@ export function isKlingVideoModel(modelId: string | null | undefined): boolean {
 
 
 /**
- * 各媒体类型的「首选默认模型」优先级列表（均为非 seedance2.0 系列）。
+ * 各媒体类型的「首选默认模型」优先级列表（均为非 Seedance 2 系列）。
  * 简易模式 / 无限画布在没有已选模型时，会按此顺序挑选默认模型，
- * 确保默认永远不落到白名单专属的 seedance2.0 系列上。
+ * 确保默认永远不落到白名单专属的 Seedance 2 系列上。
  */
 export const PREFERRED_DEFAULT_MODEL_IDS: Record<MediaType, string[]> = {
   image: ['Qwen-Image-2.0-Pro', 'Doubao-Seedream-5.0-lite'],

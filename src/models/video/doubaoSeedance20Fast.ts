@@ -3,7 +3,7 @@ import type { VideoModelModule } from '../types'
 import { createModelExample } from '../types'
 
 /**
- * Doubao-Seedance-2.0-fast：seedance2.0 系列的快速版本。
+ * Doubao-Seedance-2.0-fast：Seedance 2 系列的快速版本。
  * 仅 AI Ping 白名单账号生成的 API Key 才能成功调用，非白名单用户会被上游拒绝。
  */
 export const doubaoSeedance20FastModel: VideoModelModule = {

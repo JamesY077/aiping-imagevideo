@@ -10,6 +10,7 @@ import { viduQ3ProFastModel } from './viduQ3ProFast'
 import { doubaoSeedance20Model } from './doubaoSeedance20'
 import { doubaoSeedance20FastModel } from './doubaoSeedance20Fast'
 import { doubaoSeedance20MiniModel } from './doubaoSeedance20Mini'
+import { doubaoSeedance25Model } from './doubaoSeedance25'
 
 export { klingVideoO1Model } from './klingVideoO1'
 export { klingV26Model } from './klingV26'
@@ -22,11 +23,13 @@ export { viduQ3ProFastAliases, viduQ3ProFastModel } from './viduQ3ProFast'
 export { doubaoSeedance20Model } from './doubaoSeedance20'
 export { doubaoSeedance20FastModel } from './doubaoSeedance20Fast'
 export { doubaoSeedance20MiniModel } from './doubaoSeedance20Mini'
+export { doubaoSeedance25Model } from './doubaoSeedance25'
 
 export const videoModelModules: VideoModelModule[] = [
   doubaoSeedance20Model,
   doubaoSeedance20FastModel,
   doubaoSeedance20MiniModel,
+  doubaoSeedance25Model,
   viduQ3ProFastModel,
   viduQ3ProModel,
   minimaxHailuo23Model,

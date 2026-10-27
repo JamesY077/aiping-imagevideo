@@ -2,7 +2,7 @@ import type { VideoGenerateRequest, VideoGenerateResponse } from '@/types/api'
 import type { VideoProviderAdapter } from './types'
 
 /**
- * Seedance 2.0 系列（Doubao-Seedance-2.0 / -fast / -mini）与平台其余视频模型不同：
+ * Seedance 2 系列（Doubao-Seedance-2.0 / -fast / -mini / -2.5）与平台其余视频模型不同：
  * - 走火山「素材 + contents/generations/tasks」接口，而非通用 /videos/* 接口。
  * - 请求体使用 content 数组（text + reference_image），并单独查询任务。
  * - 仅 AI Ping 白名单账号生成的 API Key 才能成功调用，否则上游返回鉴权类报错。
@@ -14,11 +14,12 @@ export const SEEDANCE_TASKS_ENDPOINT = '/multimodal/sd/videos/contents/generatio
 // 素材接口：保留用于排查/对接历史版本；当前主流程直接使用公网 URL，避免网关素材查询异常。
 export const SEEDANCE_ASSETS_ENDPOINT = '/multimodal/sd/assets?Action=CreateAsset&Version=2024-01-01'
 
-// 三款 Seedance 2.0 模型名称（同属「seedance2.0 系列」分组）。
+// Seedance 2 系列模型名称（同属「seedance 2 系列」分组）。
 export const SEEDANCE_2_MODEL_IDS = [
   'Doubao-Seedance-2.0',
   'Doubao-Seedance-2.0-fast',
   'Doubao-Seedance-2.0-mini',
+  'Doubao-Seedance-2.5',
 ] as const
 
 export type Seedance2ModelId = (typeof SEEDANCE_2_MODEL_IDS)[number]

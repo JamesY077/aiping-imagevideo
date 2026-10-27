@@ -10,7 +10,7 @@
       <option v-for="model in normalModels" :key="model.id" :value="model.id">
         {{ formatModelLabel(model.id) }}
       </option>
-      <!-- seedance2.0 系列分组：三款模型同属一组 -->
+      <!-- seedance 2 系列分组：2.0 / -fast / -mini / 2.5 同属一组 -->
       <optgroup v-if="seedanceModels.length" :label="SEEDANCE_2_GROUP_LABEL">
         <option v-for="model in seedanceModels" :key="model.id" :value="model.id">
           {{ formatModelLabel(model.id) }}
@@ -23,11 +23,11 @@
       </svg>
     </span>
 
-    <!-- seedance2.0 系列白名单提示弹窗 -->
+    <!-- seedance 2 系列白名单提示弹窗 -->
     <teleport to="body">
       <div v-if="showSeedanceNotice" class="seedance-modal-mask" @click.self="closeSeedanceNotice">
         <div class="seedance-modal" role="dialog" aria-modal="true">
-          <div class="seedance-modal-title">seedance2.0 系列使用提示</div>
+          <div class="seedance-modal-title">seedance 2 系列使用提示</div>
           <p class="seedance-modal-text">{{ SEEDANCE_2_WHITELIST_NOTICE }}</p>
           <div class="seedance-modal-actions">
             <button type="button" class="seedance-modal-btn" @click="closeSeedanceNotice">我已知晓</button>
@@ -68,7 +68,7 @@ const models = ref<Model[]>([])
 const allModels = ref<Model[]>([])
 const showSeedanceNotice = ref(false)
 
-// 普通模型与 seedance2.0 系列模型分组展示。
+// 普通模型与 Seedance 2 系列模型分组展示。
 const seedanceModels = computed(() => models.value.filter((m) => isSeedance2Model(m.id)))
 const normalModels = computed(() => models.value.filter((m) => !isSeedance2Model(m.id)))
 
@@ -76,7 +76,7 @@ watch(() => props.modelValue, (v) => {
   selectedModel.value = v
 })
 
-// 选择默认模型：按媒体类型的首选默认模型优先级挑选（均为非 seedance2.0 系列，
+// 选择默认模型：按媒体类型的首选默认模型优先级挑选（均为非 Seedance 2 系列，
 // seedance 为白名单专属，不应作为简易模式 / 节点新建时的默认模型）；
 // 命中不到首选时退回第一个非 seedance 模型，仍无则退回列表第一个。
 function pickDefaultModelId(): string | null {
@@ -109,8 +109,8 @@ function filterModels() {
   const allowedIds = new Set(getModelsByMediaType(props.mediaType, allModels.value.map((m) => m.id)))
   const filtered = allModels.value.filter((m) => allowedIds.has(m.id))
 
-  // seedance2.0 系列为白名单专属模型，/models 接口通常不会返回，
-  // 这里始终把内置的三款 Seedance 模型补进列表，保证前端可见（点击时再弹白名单提示）。
+  // Seedance 2 系列为白名单专属模型，/models 接口通常不会返回，
+  // 这里始终把内置的 Seedance 2 系列模型补进列表，保证前端可见（点击时再弹白名单提示）。
   const existingIds = new Set(filtered.map((m) => m.id.toLowerCase()))
   const seedanceModels = BUILT_IN_MODELS
     .filter((model) => model.mediaType === props.mediaType && isSeedance2Model(model.id))
@@ -160,7 +160,7 @@ onMounted(async () => {
 
 function onChange() {
   emit('update:modelValue', selectedModel.value)
-  // 选中 seedance2.0 系列时弹出白名单提示。
+  // 选中 Seedance 2 系列时弹出白名单提示。
   if (isSeedance2Model(selectedModel.value)) {
     showSeedanceNotice.value = true
   }
@@ -256,7 +256,7 @@ select:focus {
   display: block;
 }
 
-/* seedance2.0 系列白名单提示弹窗 */
+/* Seedance 2 系列白名单提示弹窗 */
 .seedance-modal-mask {
   position: fixed;
   inset: 0;
