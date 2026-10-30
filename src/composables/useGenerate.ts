@@ -554,6 +554,11 @@ export function useGenerate() {
         videoResolution
       )
 
+      // 多模态参考素材会显著拉长创建与生成耗时，用于放宽轮询预算。
+      const hasReferenceMedia = Array.isArray(uploadedFile)
+        ? uploadedFile.length > 0
+        : !!uploadedFile
+
       if (requestedBatchSize === 1) {
         const task = await generateVideo(videoParams)
         if (!task.id) {
@@ -566,10 +571,13 @@ export function useGenerate() {
           (progress) => {
             chatStore.updateMessage(assistantId, { progress })
           },
-          3000,
-          100,
-          task.provider,
-          task.providerCreateEndpoint,
+          {
+            provider: task.provider,
+            providerCreateEndpoint: task.providerCreateEndpoint,
+            duration,
+            resolution: videoResolution,
+            hasReferenceMedia,
+          },
         )
 
         const videoResult = buildVideoResult(finalStatus, model, aspectRatio)
@@ -649,10 +657,13 @@ export function useGenerate() {
               videoTaskProgress[index] = progress
               updateVideoBatchProgress()
             },
-            3000,
-            100,
-            task.provider,
-            task.providerCreateEndpoint,
+            {
+              provider: task.provider,
+              providerCreateEndpoint: task.providerCreateEndpoint,
+              duration,
+              resolution: videoResolution,
+              hasReferenceMedia,
+            },
           )
           const videoResult = buildVideoResult(finalStatus, model, aspectRatio)
           orderedVideoResults[index] = videoResult
@@ -684,7 +695,11 @@ export function useGenerate() {
       })
     } catch (e: unknown) {
       const isTimeout = e instanceof Error && (e.message.includes('timeout') || e.message.includes('超时'))
-      const errorMessage = isTimeout ? '生成超时，请更换模型或重试' : normalizeErrorMessage(e, '生成失败，请重试')
+      const errorMessage = isTimeout
+        ? (e instanceof Error && e.message.startsWith('视频生成超时')
+            ? e.message
+            : '生成超时，请更换模型或重试')
+        : normalizeErrorMessage(e, '生成失败，请重试')
       chatStore.updateMessage(assistantId, {
         generateStatus: 'failed',
         error: errorMessage,

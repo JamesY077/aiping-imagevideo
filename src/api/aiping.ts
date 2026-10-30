@@ -49,6 +49,15 @@ const client = axios.create({
   timeout: 100000,
 })
 
+/**
+ * 视频任务创建是长耗时接口：
+ * - Seedance 2 系列在受理阶段会先做降噪 / 推理准备，复杂多模态任务可能数分钟才返回 task_id；
+ * - MiniMax-H3 大分辨率 + 多参考素材的创建请求也可能明显超过 100s。
+ * 沿用全局 100s 会让仍在受理的任务被误判为超时，因此单独放宽到 240s。
+ * 线上 Nginx /api 的 proxy_read_timeout 为 300s，需保持低于该值。
+ */
+const VIDEO_CREATE_TIMEOUT_MS = 240000
+
 export interface ConnectionTestResult {
   ok: boolean
   message?: string
@@ -376,7 +385,7 @@ async function postVideoCreateWithRetry(endpoint: string, body: Record<string, u
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await client.post(endpoint, body)
+      return await client.post(endpoint, body, { timeout: VIDEO_CREATE_TIMEOUT_MS })
     } catch (error: any) {
       lastError = error
       const status = error?.response?.status
@@ -504,7 +513,9 @@ async function generateSeedanceVideo(params: VideoGenerateRequest, canonicalMode
 
   debugLog('generateVideo provider=seedance body:', sanitizeDebugBody(body))
   try {
-    const response = await client.post(SEEDANCE_TASKS_ENDPOINT, body)
+    const response = await client.post(SEEDANCE_TASKS_ENDPOINT, body, {
+      timeout: VIDEO_CREATE_TIMEOUT_MS,
+    })
     return normalizeSeedanceResponse(response.data)
   } catch (error: any) {
     debugLog('generateSeedanceVideo error:', {

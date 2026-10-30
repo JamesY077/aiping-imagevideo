@@ -142,6 +142,7 @@ server {
         proxy_request_buffering off;
         proxy_connect_timeout 120s;
         proxy_send_timeout 300s;
+        # 前端视频任务创建请求超时为 240s（含 Seedance 复杂多模态受理），此处不得低于 240s。
         proxy_read_timeout 300s;
     }
 
