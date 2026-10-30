@@ -758,7 +758,9 @@ function normalizeVideoStatus(data: any, taskId: string, provider?: string): Vid
     status: normalized?.status || normalized?.state || 'pending',
     video_url: normalized?.video_url || normalized?.url || normalizedData?.[0]?.url,
     data: normalizedData,
-    error: normalized?.error || normalized?.task_status_msg || normalized?.err_msg || normalized?.message || normalized?.err_code,
+    error: formatVideoTaskError(
+      normalized?.error || normalized?.task_status_msg || normalized?.err_msg || normalized?.message || normalized?.err_code,
+    ),
     provider: normalized?.provider || provider,
     model: normalized?.model || data?.model || '',
   }
@@ -774,6 +776,50 @@ function normalizeVideoStatus(data: any, taskId: string, provider?: string): Vid
  * 归一化 MiniMax-H3 任务查询结果。
  * 查询接口返回：{ task: { id, status, content: { url }, ... }, aiping_id }。
  */
+/**
+ * 把上游视频任务失败原因转换成用户能看懂的中文提示。
+ * MiniMax 常见内容风控错误：
+ * - 1026 input new_sensitive：输入（提示词 / 参考图）未通过审核，几秒内返回；
+ * - 1027 output new_sensitive：视频已经渲染完成，但结果未通过输出审核，通常在完整生成耗时后返回；
+ * - 1040 input audio sensitive：参考音频未通过审核；
+ * - 1042 invisible character ratio limit：提示词含不可见 / 异常字符。
+ */
+function formatVideoTaskError(error: unknown): string | undefined {
+  if (error === null || error === undefined || error === '') return undefined
+
+  const raw = typeof error === 'string'
+    ? error
+    : typeof error === 'object'
+      ? String(
+          (error as any).message
+          || (error as any).msg
+          || (error as any).error
+          || (error as any).code
+          || JSON.stringify(error),
+        )
+      : String(error)
+
+  const message = raw.trim()
+  if (!message) return undefined
+
+  const normalized = message.toLowerCase()
+
+  if (normalized.includes('output new_sensitive') || /\b1027\b/.test(normalized)) {
+    return '视频已生成，但结果未通过上游内容安全审核（output new_sensitive / 1027）。通常是画面或音频中出现了敏感元素；请调整剧情、参考素材或提示词后重试，原样重试大概率仍会失败。'
+  }
+  if (normalized.includes('input audio sensitive') || /\b1040\b/.test(normalized)) {
+    return '参考音频未通过上游内容安全审核（input audio sensitive / 1040）。请更换一段干净、无敏感语音或版权音乐的人声后重试。'
+  }
+  if (normalized.includes('input new_sensitive') || /\b1026\b/.test(normalized)) {
+    return '输入内容未通过上游内容安全审核（input new_sensitive / 1026）。请检查提示词、参考图片 / 视频 / 音频，移除真实人物、知名 IP、血腥暴力、色情或其他敏感内容后重试。'
+  }
+  if (normalized.includes('invisible character') || /\b1042\b/.test(normalized)) {
+    return '提示词包含不可见字符或异常字符（invisible character ratio limit / 1042）。请先粘贴到纯文本编辑器清理后再试。'
+  }
+
+  return message
+}
+
 function normalizeMinimaxH3Status(data: any, taskId: string): VideoStatusResponse {
   const task = data?.task || data?.data?.task || data?.data || data
   const videoUrl = task?.content?.url || task?.content?.video_url || task?.video_url || task?.url
@@ -786,7 +832,7 @@ function normalizeMinimaxH3Status(data: any, taskId: string): VideoStatusRespons
     state: task?.state || task?.status,
     video_url: videoUrl,
     data: videoUrl ? [{ url: videoUrl, duration: task?.duration || 0 }] : undefined,
-    error: task?.error?.message || task?.error || task?.err_msg,
+    error: formatVideoTaskError(task?.error || task?.err_msg || task?.message),
     provider: 'minimax',
     model: task?.model || data?.model,
   }
