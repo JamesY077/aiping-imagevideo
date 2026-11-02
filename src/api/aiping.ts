@@ -97,8 +97,8 @@ function getApiErrorMessage(error: any, fallback = '请求失败，请稍后重�
 
   if (!message) return fallback
 
-  if (message.includes('No provider is currently available')) {
-    return '当前模型的上游供应商暂不可用，前端已尝试多种参数格式仍失败。请稍后重试，或先切换到 Qwen-Image-2.0-Pro、Doubao-Seedream-5.0-lite 等其他图片模型。'
+  if (message.includes('No provider is currently available') || message.includes('暂无可用服务商')) {
+    return '当前模型的上游供应商暂时不可用（已自动重试多次）。请稍后重试，或先切换到 Doubao-Seedream-5.0-lite 等其他图片模型。'
   }
 
   const normalizedMessage = message.toLowerCase()
@@ -311,6 +311,39 @@ async function prepareVideoGenerationParams(
   return next
 }
 
+/**
+ * 图片创建的瞬时故障重试。
+ * 只重试「请求未被受理」类的状态码：
+ * - 429：限流，短退避即可恢复；
+ * - 502/503/504：网关或上游服务商暂时不可用（如「暂无可用服务商」）。
+ * 500 不重试：可能已在服务商侧完成生成，重试会造成重复计费。
+ */
+async function postImageWithRetry(endpoint: string, body: Record<string, unknown>): Promise<any> {
+  // 实测 Qwen-Image-2.0-Pro 的「暂无可用服务商」会连续出现数秒到十几秒，
+  // 4 次退避（约 2/4/8/15s，合计约 30s）能覆盖绝大多数瞬时不可用窗口。
+  const maxRetries = 4
+  const retryableStatuses = new Set([429, 502, 503, 504])
+  let lastError: any
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await client.post(endpoint, body)
+    } catch (error: any) {
+      lastError = error
+      const status = error?.response?.status
+      if (!retryableStatuses.has(status) || attempt === maxRetries) throw error
+
+      const wait = Math.min(15000, 2000 * 2 ** attempt) + Math.floor(Math.random() * 500)
+      debugLog(
+        `image create retry after ${status} attempt=${attempt + 1} wait=${wait}ms msg=${getUpstreamErrorMessage(error)}`
+      )
+      await sleep(wait)
+    }
+  }
+
+  throw lastError
+}
+
 export async function generateImage(params: ImageGenerateRequest): Promise<ImageGenerateResponse> {
   const preparedParams = await prepareImageGenerationParams(params)
   const provider = getImageProvider(preparedParams)
@@ -318,7 +351,7 @@ export async function generateImage(params: ImageGenerateRequest): Promise<Image
 
   debugLog(`generateImage provider=${provider.provider} trying full body:`, sanitizeDebugBody(fullBody))
   try {
-    const response = await client.post(provider.endpoint, fullBody)
+    const response = await postImageWithRetry(provider.endpoint, fullBody)
     return response.data
   } catch (error: any) {
     const detail = JSON.stringify(error.response?.data)
@@ -334,7 +367,7 @@ export async function generateImage(params: ImageGenerateRequest): Promise<Image
           alternateBody.height = size.height
           debugLog('generateImage retry with width/height:', sanitizeDebugBody(alternateBody))
           try {
-            const response = await client.post(provider.endpoint, alternateBody)
+            const response = await postImageWithRetry(provider.endpoint, alternateBody)
             return response.data
           } catch (retryError: any) {
             throw new AppError(getApiErrorMessage(retryError, '图片尺寸参数未被当前模型接受，请切换模型或比例后重试。'))
@@ -348,7 +381,7 @@ export async function generateImage(params: ImageGenerateRequest): Promise<Image
         delete alternateBody.height
         debugLog('generateImage retry with size:', sanitizeDebugBody(alternateBody))
         try {
-          const response = await client.post(provider.endpoint, alternateBody)
+          const response = await postImageWithRetry(provider.endpoint, alternateBody)
           return response.data
         } catch (retryError: any) {
           throw new AppError(getApiErrorMessage(retryError, '图片尺寸参数未被当前模型接受，请切换模型或比例后重试。'))
@@ -357,7 +390,10 @@ export async function generateImage(params: ImageGenerateRequest): Promise<Image
 
       throw new AppError(getApiErrorMessage(error, '图片尺寸参数未被当前模型接受，请切换模型或比例后重试。'))
     }
-    throw error
+    // 非 400 的失败（429 / 5xx / 网络）统一转成可读中文提示，避免把 Axios 原文抛给用户。
+    throw new AppError(getApiErrorMessage(error, '图片生成失败，请稍后重试。'), {
+      code: error?.response?.status ? `http_${error.response.status}` : 'network',
+    })
   }
 }
 
@@ -513,9 +549,8 @@ async function generateSeedanceVideo(params: VideoGenerateRequest, canonicalMode
 
   debugLog('generateVideo provider=seedance body:', sanitizeDebugBody(body))
   try {
-    const response = await client.post(SEEDANCE_TASKS_ENDPOINT, body, {
-      timeout: VIDEO_CREATE_TIMEOUT_MS,
-    })
+    // 429「当前模型并发已满」在 Seedance 上很常见，与其它 provider 共用退避重试。
+    const response = await postVideoCreateWithRetry(SEEDANCE_TASKS_ENDPOINT, body)
     return normalizeSeedanceResponse(response.data)
   } catch (error: any) {
     debugLog('generateSeedanceVideo error:', {

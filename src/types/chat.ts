@@ -1,3 +1,5 @@
+import type { VideoGenerationMode } from '@/types/model'
+
 export type MessageType = 'system' | 'user' | 'assistant'
 
 export type GenerateStatus = 'idle' | 'pending' | 'processing' | 'completed' | 'failed'
@@ -47,6 +49,8 @@ export interface Message {
   model?: string
   /** 用户发起本轮生成时选择的图片生成方式；扩图消息用于重新生成。 */
   imageMode?: ImageGenerationMode
+  /** 用户发起本轮生成时选择的视频生成方式；重新生成时沿用（如 Seedance 编辑视频）。 */
+  videoMode?: VideoGenerationMode
 }
 
 export interface MotionControlOptions {

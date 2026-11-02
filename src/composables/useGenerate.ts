@@ -4,14 +4,13 @@ import { useChatStore } from '@/stores/chatStore'
 import type { GenerateResult, GenerateType, ImageGenerationMode, UploadedFile } from '@/types/chat'
 import { EXPAND_IMAGE_INSTRUCTION } from '@/stores/settingsStore'
 import { getModelCapability } from '@/types/model'
-import type { ModelCapability, ModelIOType } from '@/types/model'
-import type { ImageGenerateResponse, VideoGenerateRequest, VideoStatusResponse } from '@/types/api'
+import type { ModelCapability, ModelIOType, VideoGenerationMode } from '@/types/model'
+import type { ImageGenerateResponse, VideoStatusResponse } from '@/types/api'
 import { validatePromptOrThrow } from '@/utils/errorHandling'
 import { normalizeErrorMessage, showErrorMessage } from '@/utils/errors'
-import { buildImageParams } from '@/features/generate/buildParams'
+import { buildImageParams, buildVideoParams } from '@/features/generate/buildParams'
 import { aspectRatioToDimensions } from '@/features/generate/aspectRatio'
-import { fileToBase64, toRawBase64 } from '@/features/generate/files'
-import { pollVideoStatus, setVideoRatio, deleteVideoRatio } from '@/features/generate/video'
+import { pollVideoStatus } from '@/features/generate/video'
 import { resolveRealCost } from '@/utils/format'
 import { buildEffectivePrompt } from '@/features/skill/apply'
 
@@ -24,286 +23,13 @@ export interface GenerateOptions {
   generationFile?: UploadInput
   /** 覆盖图片请求的 size（扩图使用 2K 目标尺寸）。 */
   imageSize?: string
+  /** 视频生成方式；部分模型（如 Seedance 编辑视频）需要据此改写比例与时长。 */
+  videoGenerationMode?: VideoGenerationMode | null
 }
 
 function ioTypeToGenerateType(ioType: ModelIOType): GenerateType {
   return ioType === 'text2image' || ioType === 'image2image' ? 'image' : 'video'
 }
-
-function getKlingAspectRatio(aspectRatio: string): string {
-  if (['16:9', '9:16', '1:1'].includes(aspectRatio)) return aspectRatio
-  throw new Error('当前可灵视频模型仅支持 16:9、9:16、1:1，请切换比例或模型后重试。')
-}
-
-async function buildVideoParams(
-  prompt: string,
-  model: string | null,
-  uploadedFile: UploadInput,
-  aspectRatio: string,
-  duration: number,
-  videoRequestMode: ModelCapability['videoRequestMode'],
-  // 可灵声音开关：新协议使用 sound=on/off。
-  klingSound: 'on' | 'off' = 'off',
-  // 视频分辨率档位（当前仅 MiniMax-H3 使用：768P / 2K）。
-  videoResolution: string | null = null
-): Promise<VideoGenerateRequest> {
-
-  const uploadedFiles = (Array.isArray(uploadedFile) ? uploadedFile : uploadedFile ? [uploadedFile] : [])
-  const uploadValues = await Promise.all(
-    uploadedFiles.map(async (file) => (file.file ? fileToBase64(file.file) : file.url))
-  )
-  const primaryFile = uploadedFiles[0]
-  const uploadValue = uploadValues[0]
-
-  const videoParams: VideoGenerateRequest = {
-    prompt,
-    model: model || undefined,
-    duration,
-    resolution: '1080p',
-  }
-  setVideoRatio(videoParams, aspectRatio)
-
-  switch (videoRequestMode) {
-    case 'kling-v26':
-    case 'kling-v3':
-      if (uploadedFiles.some((file) => file.purpose?.startsWith('motion-control'))) {
-        const referenceImageIndex = uploadedFiles.findIndex((file) => file.purpose === 'motion-control-image' || file.type === 'image')
-        const referenceVideoIndex = uploadedFiles.findIndex((file) => file.purpose === 'motion-control-video' || file.type === 'video')
-        const referenceImage = referenceImageIndex >= 0 ? uploadValues[referenceImageIndex] : undefined
-        const referenceVideo = referenceVideoIndex >= 0 ? uploadValues[referenceVideoIndex] : undefined
-        const motionControlOptions = uploadedFiles.find((file) => file.motionControlOptions)?.motionControlOptions
-
-        if (!referenceImage || !referenceVideo) {
-          throw new Error('动作控制需要同时上传参考图像和参考视频。')
-        }
-
-        videoParams.motion_control = true
-        videoParams.image_url = referenceImage
-        videoParams.video_url = referenceVideo
-        videoParams.keep_original_sound = motionControlOptions?.keep_original_sound || 'yes'
-        videoParams.character_orientation = motionControlOptions?.character_orientation || 'image'
-        videoParams.mode = 'pro'
-        videoParams.model_name = model || undefined
-        delete videoParams.image
-        delete videoParams.img_url
-        deleteVideoRatio(videoParams)
-        delete videoParams.resolution
-        delete videoParams.duration
-        break
-      }
-
-      if (uploadValue) {
-        videoParams.image = uploadValue
-        // 声音字段跟随开关：可灵新协议为 on/off。
-        videoParams.sound = klingSound
-        deleteVideoRatio(videoParams)
-      } else {
-        // 声音字段跟随开关：可灵新协议为 on/off。
-        videoParams.sound = klingSound
-        setVideoRatio(videoParams, getKlingAspectRatio(aspectRatio))
-      }
-      videoParams.model_name = model || undefined
-      break
-    case 'kling-omni':
-      videoParams.model_name = model || undefined
-      videoParams.mode = 'pro'
-      videoParams.sound = klingSound
-      setVideoRatio(videoParams, getKlingAspectRatio(aspectRatio))
-      if (uploadValues.length >= 2) {
-        videoParams.image_list = [
-          { image_url: uploadValues[0], type: 'first_frame' },
-          { image_url: uploadValues[1], type: 'end_frame' },
-        ]
-      } else if (uploadValues.length) {
-        videoParams.images = uploadValues
-      }
-      delete videoParams.resolution
-      break
-
-    case 'kling-o1':
-      if (primaryFile?.type === 'image' && uploadValue) {
-        videoParams.first_frame_url = primaryFile.file ? toRawBase64(uploadValue) : uploadValue
-        deleteVideoRatio(videoParams)
-      } else if (primaryFile?.type === 'video' && primaryFile.url) {
-        videoParams.video_list = [primaryFile.url]
-        deleteVideoRatio(videoParams)
-      } else {
-        setVideoRatio(videoParams, getKlingAspectRatio(aspectRatio))
-      }
-      break
-    case 'viduq3-fast':
-      if (uploadValues.length) {
-        videoParams.images = uploadValues.slice(0, 2)
-        videoParams.resolution = '1080p'
-        videoParams.movement_amplitude = 'auto'
-      } else {
-        videoParams.aspect_ratio = aspectRatio || '4:3'
-        videoParams.resolution = '1080p'
-        videoParams.style = 'general'
-        videoParams.movement_amplitude = 'auto'
-      }
-      delete videoParams.image
-      delete videoParams.img_url
-      delete videoParams.first_frame_url
-      delete videoParams.last_frame_url
-      delete videoParams.reference_images
-      delete videoParams.video_list
-      delete videoParams.ratio
-      delete videoParams.size
-      delete videoParams.audio
-      delete videoParams.off_peak
-      delete videoParams.watermark
-      delete videoParams.extra_body
-      break
-    case 'minimax-hailuo':
-      if (uploadValues.length >= 2) {
-        videoParams.first_frame_image = uploadValues[0]
-        videoParams.last_frame_image = uploadValues[1]
-      } else if (uploadValue) {
-        if (primaryFile?.type === 'image' && primaryFile?.name === 'Subject Reference') {
-          videoParams.subject_reference = [
-            {
-              type: 'character',
-              image: [uploadValue],
-            },
-          ]
-        } else {
-          videoParams.first_frame_image = uploadValue
-        }
-      }
-      if (!videoParams.subject_reference) {
-        videoParams.duration = duration || 6
-        videoParams.resolution = '1080P'
-      }
-      deleteVideoRatio(videoParams)
-      delete videoParams.seconds
-      delete videoParams.size
-      delete videoParams.image
-      delete videoParams.images
-      delete videoParams.img_url
-      delete videoParams.first_frame_url
-      delete videoParams.last_frame_url
-      delete videoParams.reference_images
-      delete videoParams.video_list
-      delete videoParams.audio
-      delete videoParams.movement_amplitude
-      delete videoParams.off_peak
-      delete videoParams.watermark
-      delete videoParams.seed
-      delete videoParams.style
-      delete videoParams.payload
-      delete videoParams.extra_body
-      break
-    case 'minimax-h3': {
-      // MiniMax-H3 走 /multimodal/minimax/videos/video_generation，content 数组协议。
-      // 首尾帧：start-frame / end-frame；图生视频：单张首帧；多模态参考：multimodal-* 素材归类。
-      const startFrameIndex = uploadedFiles.findIndex((file) => file.purpose === 'start-frame')
-      const endFrameIndex = uploadedFiles.findIndex((file) => file.purpose === 'end-frame')
-      const hasFrameUploads = startFrameIndex >= 0 || endFrameIndex >= 0
-
-      if (hasFrameUploads) {
-        if (startFrameIndex >= 0 && uploadValues[startFrameIndex]) {
-          videoParams.first_frame_image = uploadValues[startFrameIndex]
-        }
-        if (endFrameIndex >= 0 && uploadValues[endFrameIndex]) {
-          videoParams.last_frame_image = uploadValues[endFrameIndex]
-        }
-        // 纯尾帧生视频：只传尾帧（role=last_frame），不当作首帧。
-        if (endFrameIndex >= 0 && startFrameIndex < 0 && uploadValues[endFrameIndex]) {
-          delete videoParams.first_frame_image
-        }
-      } else if (uploadedFiles.some((file) => file.purpose?.startsWith('multimodal-'))) {
-        const referenceImages: string[] = []
-        const referenceVideos: string[] = []
-        const referenceAudios: string[] = []
-        uploadedFiles.forEach((file, index) => {
-          const value = uploadValues[index]
-          if (!value) return
-          if (file.purpose === 'multimodal-video' || file.type === 'video') {
-            referenceVideos.push(value)
-          } else if (file.purpose === 'multimodal-audio' || file.type === 'audio') {
-            referenceAudios.push(value)
-          } else {
-            referenceImages.push(value)
-          }
-        })
-        if (referenceImages.length) videoParams.reference_images = referenceImages
-        if (referenceVideos.length) videoParams.reference_videos = referenceVideos
-        if (referenceAudios.length) videoParams.reference_audios = referenceAudios
-      } else if (uploadValue) {
-        videoParams.first_frame_image = uploadValue
-      }
-
-      videoParams.duration = duration || 5
-      videoParams.resolution = videoResolution === '2K' ? '2K' : '768P'
-      delete videoParams.seconds
-      delete videoParams.size
-      delete videoParams.image
-      delete videoParams.images
-      delete videoParams.img_url
-      delete videoParams.image_url
-      delete videoParams.image_list
-      delete videoParams.video_url
-      delete videoParams.video_list
-      delete videoParams.subject_reference
-      delete videoParams.audio
-      delete videoParams.movement_amplitude
-      delete videoParams.off_peak
-      delete videoParams.seed
-      delete videoParams.style
-      delete videoParams.payload
-      delete videoParams.extra_body
-      break
-    }
-    case 'seedance-2': {
-      // Seedance 2.0 走「素材 + contents/generations/tasks」接口。
-      // 参考素材按类型分别放入 reference_images / reference_videos / reference_audios，
-      // 由 aiping.ts 逐类生成素材（asset://）后组装 content 数组。
-      const referenceImages: string[] = []
-      const referenceVideos: string[] = []
-      const referenceAudios: string[] = []
-      uploadedFiles.forEach((file, index) => {
-        const value = uploadValues[index]
-        if (!value) return
-        if (file.purpose === 'multimodal-video' || file.type === 'video') {
-          referenceVideos.push(value)
-        } else if (file.purpose === 'multimodal-audio' || file.type === 'audio') {
-          referenceAudios.push(value)
-        } else {
-          referenceImages.push(value)
-        }
-      })
-      if (referenceImages.length) videoParams.reference_images = referenceImages
-      if (referenceVideos.length) videoParams.reference_videos = referenceVideos
-      if (referenceAudios.length) videoParams.reference_audios = referenceAudios
-      videoParams.duration = duration || 5
-      videoParams.audio = true
-      videoParams.watermark = false
-      deleteVideoRatio(videoParams)
-      videoParams.aspect_ratio = aspectRatio || '16:9'
-      delete videoParams.image
-      delete videoParams.img_url
-      delete videoParams.images
-      delete videoParams.first_frame_url
-      delete videoParams.last_frame_url
-      delete videoParams.resolution
-      delete videoParams.movement_amplitude
-      delete videoParams.off_peak
-      delete videoParams.seed
-      delete videoParams.style
-      delete videoParams.payload
-      delete videoParams.extra_body
-      break
-    }
-
-    default:
-      if (uploadValue) videoParams.img_url = uploadValue
-      break
-  }
-
-  return videoParams
-}
-
 
 const MAX_BATCH_SIZE = 5
 
@@ -429,6 +155,7 @@ export function useGenerate() {
       duration,
       batchSize: requestedBatchSize,
       imageMode: options.imageMode,
+      videoMode: options.videoGenerationMode ?? undefined,
     })
 
     const assistantId = chatStore.addMessage({
@@ -551,7 +278,8 @@ export function useGenerate() {
         capability?.videoRequestMode,
         // Kling 系列「是否生成声音」：开启则 audio=native，否则 off（默认）。
         klingSound ? 'on' : 'off',
-        videoResolution
+        videoResolution,
+        options.videoGenerationMode ?? null
       )
 
       // 多模态参考素材会显著拉长创建与生成耗时，用于放宽轮询预算。

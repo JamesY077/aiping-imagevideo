@@ -173,12 +173,12 @@
                 <div class="duration-selector">
                   <div class="duration-select-wrap">
                     <select
-                      v-if="isFrameRatioLocked"
+                      v-if="isFrameRatioLocked || isEditVideoMode"
                       class="duration-select"
                       disabled
-                      aria-label="比例由上传图片决定"
+                      :aria-label="isEditVideoMode ? '比例由被编辑的原视频决定' : '比例由上传图片决定'"
                     >
-                      <option>跟随图片</option>
+                      <option>{{ isEditVideoMode ? '跟随原视频' : '跟随图片' }}</option>
                     </select>
                     <select
                       v-else
@@ -219,6 +219,16 @@
                 <div class="duration-selector">
                   <div class="duration-select-wrap">
                     <select
+                      v-if="isEditVideoMode"
+                      id="video-duration"
+                      class="duration-select"
+                      disabled
+                      aria-label="时长由被编辑的原视频决定"
+                    >
+                      <option>跟随原视频</option>
+                    </select>
+                    <select
+                      v-else
                       id="video-duration"
                       v-model="settingsStore.videoDuration"
                       class="duration-select"
@@ -254,6 +264,9 @@
 
             <p v-if="isFrameRatioLocked" class="ratio-lock-note">
               图生 / 尾帧 / 首尾帧模式下，视频比例由上传图片决定，不支持手动调整
+            </p>
+            <p v-if="isEditVideoMode" class="ratio-lock-note">
+              编辑视频模式下，输出比例与时长跟随被编辑的原视频（原视频需 4-30 秒）
             </p>
             <p v-if="videoMode === 'startEnd2video'" class="ratio-lock-note">
               首尾帧上传图片比例需要一致
@@ -2399,7 +2412,9 @@ async function handleSend() {
 
   await nextTick()
   scrollChatToBottom()
-  await generate(prompt, ioType, settingsStore.selectedModel, file, settingsStore.aspectRatio, settingsStore.videoDuration, false, skillStore.activeSkill?.content || null, settingsStore.videoResolution, settingsStore.batchSize)
+  await generate(prompt, ioType, settingsStore.selectedModel, file, settingsStore.aspectRatio, settingsStore.videoDuration, false, skillStore.activeSkill?.content || null, settingsStore.videoResolution, settingsStore.batchSize, {
+    videoGenerationMode: videoMode.value,
+  })
 
 
 
@@ -2436,6 +2451,10 @@ async function handleRegenerate(message: Message) {
       skillStore.activeSkill?.content || null,
       settingsStore.videoResolution,
       batchSize,
+      {
+        // 沿用发起时的视频方式，避免编辑视频重新生成时被当成普通生成。
+        videoGenerationMode: userMsg.videoMode ?? null,
+      },
     )
     await nextTick()
     scrollChatToBottom()

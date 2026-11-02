@@ -13,15 +13,19 @@ function buildMinimaxVideoRequestBody(params: Parameters<typeof buildOpenAiVideo
   delete body.ratio
   body.duration = Number(body.duration || body.seconds || 6)
   body.resolution = String(body.resolution || body.size || '1080P').toUpperCase()
+  // Hailuo 2.3：10s 仅支持 768P，避免上游参数校验失败。
+  if ((body.duration as number) >= 10 && body.resolution === '1080P') {
+    body.resolution = '768P'
+  }
   delete body.seconds
   delete body.size
   if (body.last_frame_image) {
     body.model = 'MiniMax-Hailuo-02'
   }
   if (body.subject_reference) {
-    body.model = 'S2V-01'
-    delete body.duration
-    delete body.resolution
+    // 平台只暴露了 MiniMax-Hailuo-02 / MiniMax-Hailuo-2.3，官方文档里的 S2V-01
+    // 并未上架（实测 422: S2V-01 not in [...]）。主体参考应使用 MiniMax-Hailuo-02。
+    body.model = 'MiniMax-Hailuo-02'
   }
 
   return body
@@ -41,7 +45,8 @@ export const minimaxHailuo23Model: VideoModelModule = {
     provider: 'minimax',
     models: [...minimaxHailuo23Aliases, ...minimaxHailuoStartEndAliases, ...minimaxS2VAliases],
     buildRequestBody: buildMinimaxVideoRequestBody,
-    getEndpoint: () => '/video_generation',
+    // 海螺视频创建任务为 POST /videos（与查询 GET /videos/{task_id} 同族）。
+    getEndpoint: () => '/videos',
     normalizeResponse: normalizeOpenAiVideoGenerateResponse,
   },
   example: createModelExample({

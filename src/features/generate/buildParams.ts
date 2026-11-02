@@ -1,5 +1,5 @@
 import type { UploadedFile } from '@/types/chat'
-import type { ModelCapability } from '@/types/model'
+import type { ModelCapability, VideoGenerationMode } from '@/types/model'
 import type { ImageGenerateRequest, VideoGenerateRequest } from '@/types/api'
 import { aspectRatioToDimensions, aspectRatioToImageSize } from '@/features/generate/aspectRatio'
 import { fileToBase64, toRawBase64 } from '@/features/generate/files'
@@ -69,7 +69,9 @@ export async function buildVideoParams(
   // 可灵声音开关：新协议使用 sound=on/off。
   klingSound: 'on' | 'off' = 'off',
   // 视频分辨率档位（当前仅 MiniMax-H3 使用：768P / 2K）。
-  videoResolution: string | null = null
+  videoResolution: string | null = null,
+  // 视频生成方式（文生 / 图生 / 首尾帧 / 参考 / 编辑等），部分模型需要据此改写参数。
+  videoGenerationMode: VideoGenerationMode | null = null
 ): Promise<VideoGenerateRequest> {
 
   const uploadedFiles = (Array.isArray(uploadedFile) ? uploadedFile : uploadedFile ? [uploadedFile] : [])
@@ -221,9 +223,17 @@ export async function buildVideoParams(
           videoParams.first_frame_image = uploadValue
         }
       }
-      if (!videoParams.subject_reference) {
+      if (videoParams.subject_reference) {
+        // S2V-01 主体参考只接受 subject_reference，不接受比例 / 时长 / 分辨率，
+        // 多传会被上游判为参数非法（实测 400）。
+        delete videoParams.duration
+        delete videoParams.resolution
+        delete videoParams.seconds
+        delete videoParams.size
+      } else {
         videoParams.duration = duration || 6
-        videoParams.resolution = '1080P'
+        // Hailuo 2.3：10s 仅支持 768P，6s 才可选 1080P。
+        videoParams.resolution = videoParams.duration >= 10 ? '768P' : '1080P'
       }
       deleteVideoRatio(videoParams)
       delete videoParams.seconds
@@ -336,6 +346,12 @@ export async function buildVideoParams(
       videoParams.watermark = false
       deleteVideoRatio(videoParams)
       videoParams.aspect_ratio = aspectRatio || '16:9'
+      if (videoGenerationMode === 'editVideo') {
+        // Seedance 编辑视频：输出比例与时长必须跟随被编辑的输入视频，
+        // 上游只接受 ratio=adaptive、duration=-1（输入视频需 4-30s）。
+        videoParams.aspect_ratio = 'adaptive'
+        videoParams.duration = -1
+      }
       delete videoParams.image
       delete videoParams.img_url
       delete videoParams.images
