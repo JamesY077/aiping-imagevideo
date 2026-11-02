@@ -71,6 +71,20 @@ npm run build    # 产物输出到 dist/
 npm run preview  # 本地预览 dist/
 ```
 
+### 全模型生成自测（可选，会真实消耗额度）
+
+`scripts/` 下的自测工具通过 Vite SSR 加载项目真实模块（请求构造、轮询、模型注册），因此测的是线上同一套逻辑，而不是另写一份请求。
+
+```bash
+AIPING_API_KEY='QC-...' node scripts/smoke.mjs                       # 单条冒烟：出图 / 文生视频 / 多模态
+AIPING_API_KEY='QC-...' node scripts/run-matrix.mjs --concurrency=3  # 分层矩阵：每模型×每模式 + 比例/时长/分辨率扫描
+node scripts/analyze-matrix.mjs test-results/matrix-*.jsonl          # 汇总为 Markdown 报告
+```
+
+- `--dry-run` 只打印用例；`--only=<模型名>` 过滤模型；`--keys=<file.json>` 复测指定用例；`--limit=` 截断。
+- 上游多模态并发上限约 5，`--concurrency` 建议 ≤ 3。
+- `test-results/` 为本地测试产物（含上游临时签名 URL），已在 `.gitignore` 中忽略。
+
 ## 环境变量
 
 复制 `.env.example` 为 `.env` 后按需修改：
