@@ -24,6 +24,7 @@ echo "==> 2/4 安装依赖并用 PM2 启动"
 ssh -t "$SERVER" "
   cd ~/$REMOTE_DIR &&
   npm install --omit=dev --no-audit --no-fund &&
+  (command -v pm2 >/dev/null || sudo npm i -g pm2) &&
   (pm2 restart aiping-upload --update-env || pm2 start index.js --name aiping-upload) &&
   pm2 save
 "
