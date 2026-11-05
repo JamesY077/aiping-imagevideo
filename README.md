@@ -112,11 +112,16 @@ node scripts/analyze-matrix.mjs test-results/matrix-*.jsonl          # 汇总为
 
 API Base URL 与 API Key 保存在浏览器本地，配置完成后即可进入工作台，未配置时受限页面会自动跳转回首页。
 
-## 参考文件上传服务（可选）
+## 参考文件上传服务（本地参考视频 / 音频必需）
 
-火山 Seedance 2.0 的参考图、Seedance 2.0 / MiniMax-H3 的参考音频都要求公网 HTTP(S) URL。启用本地上传参考图/音频时，需要部署 `server/upload-service`（Express + 腾讯云 COS），前端会把本地文件先上传换取公网 URL。部署与配置方法见 `server/upload-service/README.md`，并在前端配置 `VITE_UPLOAD_SERVICE_URL` 与 `VITE_UPLOAD_SERVICE_TOKEN`。
+火山 Seedance 2.0 / MiniMax-H3 的参考视频与参考音频都要求公网 HTTP(S) URL，本地文件必须先上传换取公网地址：
 
-> 当前 `.env.production` 默认未启用该服务，因此线上从配音音频库选择音频后生成视频时，会提示先配置上传服务；配置后即可自动上传。
+- **图片**：Seedance 与 MiniMax-H3 均支持压缩后以 base64 dataURI 直传；配置上传服务时会优先换公网 URL，服务不可用时自动降级，不影响出图。
+- **视频 / 音频**：上游只接受 web url，必须部署 `server/upload-service`（Express + 腾讯云 COS）并在 Nginx 加 `/upload` 反代。
+
+部署与配置方法见 `server/upload-service/README.md` 与 `DEPLOYMENT.md` 第四 / 七节；前端通过 `VITE_UPLOAD_SERVICE_URL` 与 `VITE_UPLOAD_SERVICE_TOKEN` 配置。
+
+> 一键部署服务（不改 Nginx）：`bash scripts/deploy-upload-service.sh`，随后按 `DEPLOYMENT.md` 给 Nginx 加 `/upload` 反代并 reload。
 
 ## 部署
 

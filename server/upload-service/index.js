@@ -5,12 +5,12 @@ import cors from 'cors'
 import COS from 'cos-nodejs-sdk-v5'
 
 /**
- * 参考文件上传代理服务（图片 / 音频）
+ * 参考文件上传代理服务（图片 / 音频 / 视频）
  * ------------------------------------------------------------------
- * 作用：前端把本地图片或音频（base64）POST 到本服务，本服务用腾讯云 COS
+ * 作用：前端把本地图片、音频或视频（base64）POST 到本服务，本服务用腾讯云 COS
  *       密钥上传，返回一个公网 HTTPS URL（abc.nextmak.cn/...）。
  *       这个 URL 交给 Seedance 2.0 / MiniMax-H3 的参考素材接口即可正常抓取。
- *       图片走 { image }，音频走 { audio }。
+ *       图片走 { image }，音频走 { audio }，视频走 { video }。
  *
  * 为什么需要它：COS 的 SecretId/SecretKey 绝不能放到纯前端里（会被所有用户
  *       看到并盗用）。所以密钥只保存在本服务的 .env 中，由服务端代理上传。
@@ -35,9 +35,10 @@ const {
   // - '*'：显式允许所有来源（不推荐）；
   // - 具体列表：仅允许列出的来源，例如 https://artrealm.nextmak.cn
   ALLOW_ORIGINS = '',
-  // 单个文件体积上限（MB）：图片 / 音频
+  // 单个文件体积上限（MB）：图片 / 音频 / 视频
   MAX_FILE_MB = '15',
   MAX_AUDIO_MB = '30',
+  MAX_VIDEO_MB = '50',
   // 每个 IP 每分钟最多上传次数（防刷）
   UPLOAD_RATE_LIMIT_PER_MIN = '20',
   // 每个 IP 每天最多上传字节数（MB，防 COS 额度盗刷）
@@ -58,8 +59,14 @@ const cos = new COS({ SecretId: COS_SECRET_ID, SecretKey: COS_SECRET_KEY })
 
 const app = express()
 app.disable('x-powered-by')
-// base64 文件体积较大，放宽 JSON body 上限（取图片/音频上限中较大者）。
-const jsonLimitMb = Math.max(Number(MAX_FILE_MB) || 15, Number(MAX_AUDIO_MB) || 30) + 5
+// base64 文件体积较大，放宽 JSON body 上限：
+// base64 编码后约为原始体积的 4/3，再留 5MB 给 JSON 结构和 MIME 前缀。
+const maxAssetMb = Math.max(
+  Number(MAX_FILE_MB) || 15,
+  Number(MAX_AUDIO_MB) || 30,
+  Number(MAX_VIDEO_MB) || 50,
+)
+const jsonLimitMb = Math.ceil((maxAssetMb * 4) / 3) + 5
 app.use(express.json({ limit: `${jsonLimitMb}mb` }))
 
 const allowList = ALLOW_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean)
@@ -216,24 +223,36 @@ const AUDIO_EXT_MAP = {
   'audio/l16': 'pcm',
 }
 
+const VIDEO_EXT_MAP = {
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'video/webm': 'webm',
+  'video/x-m4v': 'm4v',
+  'video/m4v': 'm4v',
+}
+
+const ASSET_KINDS = {
+  image: { label: '图片', prefix: 'image/', extMap: IMAGE_EXT_MAP, fallbackExt: 'png' },
+  audio: { label: '音频', prefix: 'audio/', extMap: AUDIO_EXT_MAP, fallbackExt: 'mp3' },
+  video: { label: '视频', prefix: 'video/', extMap: VIDEO_EXT_MAP, fallbackExt: 'mp4' },
+}
+
 /** 解析 dataURI，返回 { buffer, mime, ext }；非法则抛错。 */
 function parseDataUri(dataUri, kind) {
-  const label = kind === 'audio' ? '音频' : '图片'
+  const spec = ASSET_KINDS[kind] || ASSET_KINDS.image
   const match = /^data:([^;]+);base64,(.*)$/s.exec(dataUri || '')
   if (!match) {
-    throw new Error(`${kind === 'audio' ? 'audio' : 'image'} 字段必须是 data:<mime>;base64,<data> 形式的 dataURI`)
+    throw new Error(`${kind} 字段必须是 data:<mime>;base64,<data> 形式的 dataURI`)
   }
 
   const mime = match[1].toLowerCase()
-  const expectedPrefix = kind === 'audio' ? 'audio/' : 'image/'
-  if (!mime.startsWith(expectedPrefix)) {
-    throw new Error(`${label}格式不受支持：${mime}`)
+  if (!mime.startsWith(spec.prefix)) {
+    throw new Error(`${spec.label}格式不受支持：${mime}`)
   }
 
   const buffer = Buffer.from(match[2], 'base64')
-  const extMap = kind === 'audio' ? AUDIO_EXT_MAP : IMAGE_EXT_MAP
-  const fallbackExt = mime.split('/')[1]?.replace(/[^a-z0-9]/g, '') || (kind === 'audio' ? 'mp3' : 'png')
-  const ext = extMap[mime] || fallbackExt
+  const fallbackExt = mime.split('/')[1]?.replace(/[^a-z0-9]/g, '') || spec.fallbackExt
+  const ext = spec.extMap[mime] || fallbackExt
   return { buffer, mime, ext }
 }
 
@@ -244,7 +263,7 @@ app.get('/health', (_req, res) => {
 
 /**
  * POST /upload
- * body: { image: "data:image/png;base64,...." } 或 { audio: "data:audio/wav;base64,...." }
+ * body: { image: "data:image/png;base64,...." } / { audio: "..." } / { video: "..." }
  * headers: Authorization: Bearer <UPLOAD_TOKEN>  （若配置了 UPLOAD_TOKEN）
  * resp: { url: "https://abc.nextmak.cn/seedance-uploads/image/xxxx.png" }
  */
@@ -263,12 +282,16 @@ app.post('/upload', uploadRateLimit, async (req, res) => {
       }
     }
 
-    const { image, audio } = req.body || {}
-    const isAudio = typeof audio === 'string' && !!audio
-    const kind = isAudio ? 'audio' : 'image'
-    const dataUri = isAudio ? audio : image
+    const { image, audio, video } = req.body || {}
+    const kind =
+      typeof video === 'string' && video
+        ? 'video'
+        : typeof audio === 'string' && audio
+          ? 'audio'
+          : 'image'
+    const dataUri = kind === 'video' ? video : kind === 'audio' ? audio : image
     if (!dataUri || typeof dataUri !== 'string') {
-      return res.status(400).json({ error: '缺少 image 或 audio 字段（base64 dataURI）' })
+      return res.status(400).json({ error: '缺少 image、audio 或 video 字段（base64 dataURI）' })
     }
 
     const { buffer, mime, ext } = parseDataUri(dataUri, kind)
@@ -282,11 +305,13 @@ app.post('/upload', uploadRateLimit, async (req, res) => {
       return res.status(429).json({ error: `今日上传配额已用完，请明天再试（每天最多 ${UPLOAD_DAILY_QUOTA_MB}MB）。` })
     }
 
-    const label = kind === 'audio' ? '音频' : '图片'
-    const maxMb = Number(kind === 'audio' ? MAX_AUDIO_MB : MAX_FILE_MB)
+    const spec = ASSET_KINDS[kind]
+    const maxMb = Number(
+      kind === 'audio' ? MAX_AUDIO_MB : kind === 'video' ? MAX_VIDEO_MB : MAX_FILE_MB,
+    )
     const maxBytes = maxMb * 1024 * 1024
     if (buffer.length > maxBytes) {
-      return res.status(413).json({ error: `${label}过大，超过 ${maxMb}MB 限制` })
+      return res.status(413).json({ error: `${spec.label}过大，超过 ${maxMb}MB 限制` })
     }
 
     // 128 位随机 key，公开读场景下不可枚举。
