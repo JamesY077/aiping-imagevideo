@@ -19,6 +19,8 @@ import COS from 'cos-nodejs-sdk-v5'
 
 const {
   PORT = '3100',
+  // 监听地址：默认只监听本机，由 Nginx 反代 /upload 进来。
+  HOST = '127.0.0.1',
   // 腾讯云 COS 配置
   COS_SECRET_ID,
   COS_SECRET_KEY,
@@ -342,8 +344,8 @@ app.post('/upload', uploadRateLimit, async (req, res) => {
   }
 })
 
-app.listen(Number(PORT), () => {
-  console.log(`[upload-service] listening on :${PORT}`)
+app.listen(Number(PORT), HOST, () => {
+  console.log(`[upload-service] listening on ${HOST}:${PORT}`)
   console.log(`[upload-service] public base url: ${PUBLIC_BASE_URL}`)
   console.log(`[upload-service] COS bucket: ${COS_BUCKET} region: ${COS_REGION} prefix: ${COS_PREFIX}`)
   console.log(`[upload-service] auto cleanup enabled: 超过 ${uploadRetentionDays} 天的对象自动删除`)
