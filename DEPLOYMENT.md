@@ -251,6 +251,9 @@ VITE_CDN_ASSET_BASE=https://artrealm-image-1314455608.cos.ap-beijing.myqcloud.co
 
 ## 七、参考文件上传服务（仅 Seedance 2 本地参考视频需要）
 
+> **前置条件**：服务器需要 Node.js 18+（推荐 20）。`scripts/remote-setup-upload.sh` 在检测不到
+> `node/npm` 时会自动安装 Node 20，无需手动准备。
+
 `server/upload-service` 是一个 Express 服务：接收前端 POST 的 base64 视频，用腾讯云 COS
 密钥上传并返回公网 HTTPS URL。实测只有火山 Seedance 2 的 `reference_video` 强制要求 web url；
 MiniMax-H3 的图/视频/音频、Seedance 的图/音频都能用 dataURI 直传，不需要这个服务。

@@ -23,13 +23,31 @@ if ! command -v npm >/dev/null 2>&1; then
   done
 fi
 
-echo "[remote] node: $(command -v node || echo 未找到) $(node -v 2>/dev/null || true)"
-echo "[remote] npm : $(command -v npm || echo 未找到) $(npm -v 2>/dev/null || true)"
+if ! command -v npm >/dev/null 2>&1; then
+  echo "[remote] 服务器没有 Node.js，自动安装 Node 20（NodeSource）..."
+  if curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - ; then
+    sudo apt-get install -y nodejs
+  else
+    echo "[remote] NodeSource 不可达，改用 npmmirror 二进制包..."
+    NODE_VER="v20.18.0"
+    cd /tmp
+    curl -fsSLO "https://npmmirror.com/mirrors/node/${NODE_VER}/node-${NODE_VER}-linux-x64.tar.xz"
+    sudo rm -rf /usr/local/nodejs
+    sudo tar -xJf "node-${NODE_VER}-linux-x64.tar.xz" -C /usr/local
+    sudo mv "/usr/local/node-${NODE_VER}-linux-x64" /usr/local/nodejs
+    for b in node npm npx; do sudo ln -sf "/usr/local/nodejs/bin/$b" "/usr/local/bin/$b"; done
+    cd "$HOME/aiping-upload"
+  fi
+  hash -r 2>/dev/null || true
+fi
 
 if ! command -v npm >/dev/null 2>&1; then
-  echo "❌ 服务器上找不到 node/npm，请先安装 Node.js（推荐 nvm）后重试。"
+  echo "❌ 服务器上找不到 node/npm，自动安装也失败了，请手动安装 Node 18+ 后重试。"
   exit 1
 fi
+
+echo "[remote] node: $(command -v node) $(node -v 2>/dev/null || true)"
+echo "[remote] npm : $(command -v npm) $(npm -v 2>/dev/null || true)"
 
 echo "[remote] 安装生产依赖..."
 npm install --omit=dev --no-audit --no-fund
@@ -38,6 +56,17 @@ if ! command -v pm2 >/dev/null 2>&1; then
   echo "[remote] 安装 pm2..."
   npm i -g pm2 || sudo env "PATH=$PATH" npm i -g pm2
   hash -r 2>/dev/null || true
+fi
+
+# npmmirror 二进制布局下全局 bin 在 /usr/local/nodejs/bin，补一个软链到 PATH。
+if ! command -v pm2 >/dev/null 2>&1 && [ -x /usr/local/nodejs/bin/pm2 ]; then
+  sudo ln -sf /usr/local/nodejs/bin/pm2 /usr/local/bin/pm2
+  hash -r 2>/dev/null || true
+fi
+
+if ! command -v pm2 >/dev/null 2>&1; then
+  echo "❌ pm2 安装失败，请手动执行：sudo npm i -g pm2"
+  exit 1
 fi
 
 echo "[remote] 启动/重启 aiping-upload ..."
