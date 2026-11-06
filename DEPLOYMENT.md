@@ -112,8 +112,9 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
-    # —— /upload 反代：启用 server/upload-service 后，本地视频 / 音频参考必须走这里。
-    # 没有这段反代时，POST /upload 会落到上面的 location /，被 try_files 转成静态文件并返回 405。
+    # —— /upload 反代：仅当需要「Seedance 2 + 本地参考视频」时才需要。
+    # 没有这段反代时，POST /upload 会落到上面的 location /，被 try_files 转成静态文件并返回 405；
+    # 其余素材（Seedance 图片/音频、MiniMax-H3 图/视频/音频）都走 dataURI，不依赖它。
     location /upload {
         proxy_pass http://127.0.0.1:3100/upload;
         proxy_set_header Host $host;
@@ -201,10 +202,11 @@ VITE_CDN_ASSET_BASE=https://artrealm-image-1314455608.cos.ap-beijing.myqcloud.co
   公有读地址，不占用 Nginx 站点带宽
 - 本地参考图会先尝试经 `/upload` 换公网 URL；上传服务不可用时自动降级为压缩后的 dataURI
   直传（Seedance 2.0 与 MiniMax-H3 均已验证支持），因此**图片生成不依赖上传服务**
-- **本地参考视频 / 参考音频必须使用公网 URL**：上游只接受 web url，必须部署
+- **参考音频**同样以 dataURI 直传（Seedance 与 MiniMax-H3 均实测通过），**不依赖上传服务**
+- **唯一需要公网 URL 的是 Seedance 2 系列的本地参考视频**：上游只接受 web url，需要部署
   `server/upload-service` 并给 Nginx 加 `/upload` 反代（见第四节与第七节）
-- 只发前端、不部署上传服务时：图片、文生视频、图生视频正常；带本地视频/音频的
-  多模态任务会提示“上传接口返回 404/405”，这是预期行为
+- 只发前端、不部署上传服务时：图片、音频、文生视频、图生视频、MiniMax-H3 多模态全部正常；
+  仅「Seedance + 本地视频」会提示改用公网视频地址，这是预期行为
 
 ### 静态资源发布（`public/` → COS）
 
@@ -237,7 +239,7 @@ VITE_CDN_ASSET_BASE=https://artrealm-image-1314455608.cos.ap-beijing.myqcloud.co
   ```bash
   ssh -t ubuntu@49.232.99.62 "sudo nginx -t && sudo systemctl reload nginx"
   ```
-- **上传参考视频/音频时报 `405 (Not Allowed)`**：说明线上 Nginx 还没有 `/upload` 反代，或 `server/upload-service` 没启动。只发前端时图片生成不受影响（会自动降级 dataURI），但视频/音频参考必须补齐这一层：
+- **Seedance 上传本地参考视频时报「文件上传服务未配置 / 405」**：说明线上没有部署 `server/upload-service` 或没有 `/upload` 反代。这是**唯一**依赖它的场景；图片、音频、MiniMax-H3 都不受影响。要么补齐这一层，要么改用公网视频地址：
 
   ```bash
   # 405：反代没配；200 JSON：反代通了；502：反代通了但 3100 服务没起
@@ -247,11 +249,12 @@ VITE_CDN_ASSET_BASE=https://artrealm-image-1314455608.cos.ap-beijing.myqcloud.co
 - **本地正常、线上图片 404 / 裂图**：静态图走 COS。确认对应文件已上传到 `site-assets/` 前缀、文件名一致，且 `.env.production` 的 `VITE_CDN_ASSET_BASE` 指向正确桶；本地正常而线上裂图，大概率是 COS 上没有同步新图。
 - **更换 COS 桶或启用 CDN 域名后，首页/登录页背景图仍是旧地址**：这两张背景图在代码中硬编码（`src/views/LandingPage.vue`、`src/views/ApiKeySetup.vue`），需要改代码后重新发布，只改环境变量不会生效。
 
-## 七、参考文件上传服务（本地参考视频 / 参考音频必需）
+## 七、参考文件上传服务（仅 Seedance 2 本地参考视频需要）
 
-`server/upload-service` 是一个 Express 服务：接收前端 POST 的 base64 图片、音频或视频，用腾讯云 COS
-密钥上传并返回公网 HTTPS URL（Seedance 2.0 / MiniMax-H3 的参考视频与音频只接受公网 URL）。
-密钥只保存在服务端 `.env`。图片在服务不可用时会自动降级为 dataURI，不影响出图。
+`server/upload-service` 是一个 Express 服务：接收前端 POST 的 base64 视频，用腾讯云 COS
+密钥上传并返回公网 HTTPS URL。实测只有火山 Seedance 2 的 `reference_video` 强制要求 web url；
+MiniMax-H3 的图/视频/音频、Seedance 的图/音频都能用 dataURI 直传，不需要这个服务。
+密钥只保存在服务端 `.env`。
 
 ### 1）部署到服务器
 

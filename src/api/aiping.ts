@@ -37,8 +37,9 @@ import {
 import { AppError } from '@/utils/errors'
 import {
   ensurePublicImageUrlForModel,
-  ensurePublicAudioUrlForModel,
+  prepareReferenceAudioForModel,
   ensurePublicVideoUrlForModel,
+  ensureMinimaxH3VideoForModel,
   ensureSeedanceImageForModel,
   ensureMinimaxH3ImageForModel,
 } from '@/features/generate/upload'
@@ -525,8 +526,8 @@ function assertRemoteAssetUrl(url: string, assetType: SeedanceAssetType): void {
  * 把某一类参考素材整理成任务接口可直接使用的地址：
  * - 图片 base64：先压缩并做尺寸校验；配置了上传服务时优先换公网 URL，否则内联 dataURI 直传
  *   （上游实测接受 `data:image/...;base64,...`）。
- * - 视频 base64：上传到文件服务换成公网 URL（`reference_video` 只接受 web url）。
- * - 音频 base64：上传到同一文件服务换成公网 URL（配音音频库/本地上传都走这里）。
+ * - 视频 base64：上传到文件服务换成公网 URL（Seedance 的 `reference_video` 只接受 web url）。
+ * - 音频 base64：内联 dataURI 直传（上游实测接受）。
  * - 其他 http/https 地址：原样返回。
  */
 async function prepareSeedanceReferenceUrls(urls: string[], assetType: SeedanceAssetType): Promise<string[]> {
@@ -538,7 +539,7 @@ async function prepareSeedanceReferenceUrls(urls: string[], assetType: SeedanceA
       } else if (assetType === 'Video') {
         preparedUrls.push(await ensurePublicVideoUrlForModel(rawUrl))
       } else if (assetType === 'Audio') {
-        preparedUrls.push(await ensurePublicAudioUrlForModel(rawUrl))
+        preparedUrls.push(await prepareReferenceAudioForModel(rawUrl))
       } else {
         assertRemoteAssetUrl(rawUrl, assetType)
         preparedUrls.push(rawUrl)
@@ -558,7 +559,7 @@ async function prepareSeedanceReferenceUrls(urls: string[], assetType: SeedanceA
 
 /**
  * Seedance 2.0 系列专用生成流程：
- * 1. 参考图：压缩后内联 dataURI（配置上传服务时换公网 URL）；参考视频/音频先换成公网 URL。
+ * 1. 参考图：压缩后内联 dataURI（配置上传服务时换公网 URL）；参考视频换成公网 URL；参考音频内联 dataURI。
  * 2. 用整理好的素材地址调用 contents/generations/tasks 创建视频任务。
  * 仅 AI Ping 白名单账号生成的 API Key 才能成功，否则上游返回鉴权类报错。
  */
@@ -604,7 +605,7 @@ async function generateSeedanceVideo(params: VideoGenerateRequest, canonicalMode
 /**
  * MiniMax-H3 专用生成流程：
  * 1. 首/尾帧与参考图已由通用上传流程处理为公网 URL（或压缩后的 dataURI）；
- *    参考音频/参考视频的 base64 会在这里上传为公网 URL。
+ *    参考音频/参考视频的 base64 直接内联为 dataURI（上游原生支持）。
  * 2. 组装 content 数组后调用 /multimodal/minimax/videos/video_generation 创建任务。
  */
 async function generateMinimaxH3Video(params: VideoGenerateRequest, canonicalModel: string): Promise<VideoGenerateResponse> {
@@ -619,12 +620,13 @@ async function generateMinimaxH3Video(params: VideoGenerateRequest, canonicalMod
   let preparedReferenceAudios = referenceAudios
   let preparedReferenceVideos = referenceVideos
   if (!hasFrames) {
-    // 参考视频必须是公网 URL：本地上传的视频走文件服务换成公网地址。
+    // MiniMax-H3 原生接受 base64 dataURI 的参考视频/音频（实测均创建成功），
+    // 这里只做格式与体积校验后内联直传，不需要上传服务。
     preparedReferenceVideos = await Promise.all(
-      referenceVideos.map((url) => ensurePublicVideoUrlForModel(url)),
+      referenceVideos.map((url) => ensureMinimaxH3VideoForModel(url)),
     )
     preparedReferenceAudios = await Promise.all(
-      referenceAudios.map((url) => ensurePublicAudioUrlForModel(url)),
+      referenceAudios.map((url) => prepareReferenceAudioForModel(url)),
     )
   }
 

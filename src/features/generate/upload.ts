@@ -6,14 +6,15 @@ import {
 } from '@/features/generate/localImage'
 
 /**
- * 参考素材（图片 / 音频 / 视频）上传工具
+ * 参考素材（图片 / 音频 / 视频）处理工具
  * ------------------------------------------------------------------
- * 各模型对本地素材的接受度不同：
- * - Seedance 2 系列：参考图支持 base64 dataURI 直传；参考视频/参考音频必须是公网 URL。
- * - MiniMax-H3：参考图支持 dataURI（体积大时建议上传）；参考视频/参考音频必须是公网 URL。
- * - 其他模型：在配置了上传服务后，统一把 base64 图片换成公网 URL，避免大请求体导致上游 503。
+ * 各模型对本地素材的接受度不同（下面每条都是实测结论）：
+ * - Seedance 2 系列：参考图、参考音频支持 base64 dataURI 直传；参考视频只接受公网 URL。
+ * - MiniMax-H3：参考图、参考视频、参考音频均支持 dataURI 直传。
+ * - 其他模型：配置了上传服务时，把 base64 图片换成公网 URL，避免大请求体导致上游 503。
  *
- * 需要公网 URL 的视频/音频会先 POST 到 server/upload-service（腾讯云 COS）换取公网地址。
+ * 因此上传服务（server/upload-service → 腾讯云 COS）只服务一个场景：
+ * Seedance 2 系列的**本地参考视频**。未配置时其它素材全部内联直传，不受影响。
  * 上传服务地址与鉴权 token 通过前端环境变量配置：
  *   VITE_UPLOAD_SERVICE_URL   例如 https://artrealm.nextmak.cn/upload
  *   VITE_UPLOAD_SERVICE_TOKEN 与服务端 UPLOAD_TOKEN 一致
@@ -227,12 +228,14 @@ async function tryUploadImageToPublicUrl(dataUri: string): Promise<string | null
 }
 
 /**
- * Seedance 2.0 专用：本地上传图片必须先经尺寸/比例校验，再上传为公网 URL。
+ * 需要公网图片 URL 的场景专用：先做尺寸/比例校验，再上传为公网 URL。
+ * 注意：Seedance 参考图本身支持 dataURI（见 ensureSeedanceImageForModel），
+ * 这个函数只给确实要求公网 URL 的调用方使用。
  */
 export async function uploadDataUriToPublicUrl(dataUri: string): Promise<string> {
   if (!UPLOAD_SERVICE_URL) {
     throw new AppError(
-      'Seedance 2.0 的参考图需要公网图片 URL，但当前未配置图片上传服务。' +
+      '当前未配置文件上传服务，无法把本地图片转换成公网图片 URL。' +
         '请在前端 .env 配置 VITE_UPLOAD_SERVICE_URL（并部署 server/upload-service），' +
         '或改用画布中已生成的图片作为参考。',
     )
@@ -243,12 +246,10 @@ export async function uploadDataUriToPublicUrl(dataUri: string): Promise<string>
 }
 
 /**
- * Seedance 2.0 / MiniMax-H3 专用：本地音频必须换成公网 URL。
- *
- * 这两个模型的 reference_audio.audio_url 不接受 base64 dataURI；
- * 配音音频库的 Blob、本地上传的音频都会先经过这里上传。
+ * 参考音频：MiniMax-H3 与 Seedance 2 系列都接受 base64 dataURI（均实测 200），
+ * 因此这里只做格式/体积校验后原样直传，**不依赖上传服务**。
  */
-export async function ensurePublicAudioUrlForModel(value: string): Promise<string> {
+export async function prepareReferenceAudioForModel(value: string): Promise<string> {
   if (!isDataUri(value)) return value
 
   if (!/^data:audio\//i.test(value)) {
@@ -263,16 +264,7 @@ export async function ensurePublicAudioUrlForModel(value: string): Promise<strin
     })
   }
 
-  if (!UPLOAD_SERVICE_URL) {
-    throw new AppError(
-      'Seedance 2.0 / MiniMax-H3 的参考音频需要公网 URL，但当前未配置文件上传服务。' +
-        '请在前端 .env 配置 VITE_UPLOAD_SERVICE_URL（并部署 server/upload-service），' +
-        '或改用公网可访问的音频地址。',
-      { code: 'UPLOAD_SERVICE_UNAVAILABLE' },
-    )
-  }
-
-  return postAssetToUploadService('audio', value)
+  return value
 }
 
 /**
@@ -297,10 +289,33 @@ export async function ensureSeedanceImageForModel(value: string): Promise<string
 }
 
 /**
- * Seedance 2 / MiniMax-H3 专用：本地视频必须换成公网 URL。
+ * MiniMax-H3 专用：本地参考视频可以直接以 base64 dataURI 直传（实测 200），
+ * 与 MiniMax 的原生使用方式一致，不需要部署上传服务。
+ */
+export async function ensureMinimaxH3VideoForModel(value: string): Promise<string> {
+  if (!isDataUri(value)) return value
+
+  if (!/^data:video\//i.test(value)) {
+    throw new AppError('参考视频格式不正确，请重新选择视频文件后重试。', {
+      code: 'VIDEO_INVALID',
+    })
+  }
+
+  if (estimateDataUriBytes(value) > VIDEO_MAX_BYTES) {
+    throw new AppError('这段参考视频文件太大，请选择 50MB 以内的视频后重试。', {
+      code: 'VIDEO_TOO_LARGE',
+    })
+  }
+
+  return value
+}
+
+/**
+ * Seedance 2 专用：本地参考视频必须换成公网 URL。
  *
  * 实测火山 Seedance 的 `reference_video` 只接受 web url，传 base64 会返回：
  * `reference_video must be provided as a web url`。
+ * （MiniMax-H3 不受此限制，见 ensureMinimaxH3VideoForModel）
  */
 export async function ensurePublicVideoUrlForModel(value: string): Promise<string> {
   if (!isDataUri(value)) return value
@@ -319,9 +334,8 @@ export async function ensurePublicVideoUrlForModel(value: string): Promise<strin
 
   if (!UPLOAD_SERVICE_URL) {
     throw new AppError(
-      '参考视频需要公网 URL，但当前未配置文件上传服务。' +
-        '请部署 server/upload-service 并配置 VITE_UPLOAD_SERVICE_URL，' +
-        '或改用公网可访问的视频地址。',
+      'Seedance 2 系列的本地参考视频需要先转成公网 URL，但当前没有配置文件上传服务。' +
+        '你可以改用公网可访问的视频地址，或部署 server/upload-service 后配置 VITE_UPLOAD_SERVICE_URL。',
       { code: 'UPLOAD_SERVICE_UNAVAILABLE' },
     )
   }

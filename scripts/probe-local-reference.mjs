@@ -1,8 +1,8 @@
 /**
  * 验证 Seedance / MiniMax-H3 的本地素材链路：
- * 1. Seedance 本地图片：压缩后以 dataURI 直传，创建任务成功，且**不调用**上传服务。
+ * 1. Seedance 本地图片：压缩后以 dataURI 直传，创建任务成功，**不调用**上传服务。
  * 2. Seedance 本地视频：先 POST 到上传服务换公网 URL，再创建任务成功。
- * 3. MiniMax-H3 本地视频：同样走上传服务换公网 URL。
+ * 3. MiniMax-H3 本地视频：以 dataURI 直传，创建任务成功，**不调用**上传服务。
  *
  * 上传服务用本地 mock 承接（返回一个真实公网视频地址），不需要真实 COS。
  */
@@ -52,14 +52,20 @@ const env = await startEnv({ apiKey: KEY, proxyPort: PROXY_PORT })
 
 const pngBytes = fs.readFileSync('test-results/landscape-small.png')
 const imageDataUri = `data:image/png;base64,${pngBytes.toString('base64')}`
+// Seedance 走 mock 上传，内容不重要；H3 用真实 mp4，确保 dataURI 能被上游解析。
 const fakeVideo = Buffer.alloc(64 * 1024, 1)
 const videoDataUri = `data:video/mp4;base64,${fakeVideo.toString('base64')}`
+const realVideoPath = '/private/var/folders/0_/qg5tdh2j49x3v_6wfnp8kf3r0000gn/T/opencode/v.mp4'
+const realVideoDataUri = fs.existsSync(realVideoPath)
+  ? `data:video/mp4;base64,${fs.readFileSync(realVideoPath).toString('base64')}`
+  : videoDataUri
 
 async function create(name, params) {
   const before = uploads.length
   try {
     const task = await env.api.generateVideo(params)
-    console.log(`${name}: OK id=${task.id} uploads=${JSON.stringify(uploads.slice(before))}`)
+    const used = uploads.slice(before)
+    console.log(`${name}: OK id=${task.id} uploads=${JSON.stringify(used)}`)
   } catch (error) {
     console.log(`${name}: FAIL`, JSON.stringify(describeError(error)).slice(0, 500))
     process.exitCode = 1
@@ -70,9 +76,11 @@ try {
   console.log(
     'dataURI 大小: image=',
     (imageDataUri.length / 1024 / 1024).toFixed(2),
-    'MB, video=',
+    'MB, sdVideo=',
     (videoDataUri.length / 1024).toFixed(0),
-    'KB',
+    'KB, h3Video=',
+    (realVideoDataUri.length / 1024 / 1024).toFixed(2),
+    'MB',
   )
 
   await create('Seedance 本地图片', {
@@ -94,7 +102,7 @@ try {
   await create('MiniMax-H3 本地视频', {
     prompt: '参考视频中的运动与镜头节奏',
     model: 'MiniMax-H3',
-    reference_videos: [videoDataUri],
+    reference_videos: [realVideoDataUri],
     resolution: '768P',
     duration: 5,
   })
