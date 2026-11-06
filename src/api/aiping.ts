@@ -36,9 +36,11 @@ import {
 
 import { AppError } from '@/utils/errors'
 import {
-  uploadDataUriToPublicUrl,
   ensurePublicImageUrlForModel,
-  ensurePublicAudioUrlForModel,
+  prepareReferenceAudioForModel,
+  ensurePublicVideoUrlForModel,
+  ensureMinimaxH3VideoForModel,
+  ensureSeedanceImageForModel,
   ensureMinimaxH3ImageForModel,
 } from '@/features/generate/upload'
 
@@ -92,7 +94,13 @@ function getApiErrorMessage(error: any, fallback = '请求失败，请稍后重�
   const detail = data?.detail
   const detailMessage = typeof detail === 'string' ? detail : detail?.message || detail?.error
   // AIPing 的错误体是 { code, msg, data }，msg 里才是上游真实原因（如“RPM 超限”“并发已满”）。
-  const rawMessage = detailMessage || data?.message || data?.error || data?.msg || error?.message
+  const rawMessage =
+    detailMessage ||
+    data?.message ||
+    data?.error?.message ||
+    (typeof data?.error === 'string' ? data.error : undefined) ||
+    data?.msg ||
+    error?.message
   const message = typeof rawMessage === 'string' ? rawMessage : ''
 
   if (!message) return fallback
@@ -460,7 +468,11 @@ function isAipingApiConfigured(): boolean {
 function resolveSeedanceCreateError(error: any): AppError | null {
   const status = error?.response?.status
   const data = error?.response?.data
-  const msg = typeof data?.msg === 'string' ? data.msg : ''
+  const msg =
+    (typeof data?.msg === 'string' && data.msg) ||
+    (typeof data?.error?.message === 'string' && data.error.message) ||
+    (typeof data?.error === 'string' && data.error) ||
+    ''
 
   if (status === 401 || status === 403) {
     return new AppError('Seedance 2.0 系列仅支持已开通白名单的账号调用。当前 API Key 未开通白名单权限，请联系服务商开通后重试。')
@@ -474,6 +486,25 @@ function resolveSeedanceCreateError(error: any): AppError | null {
     return new AppError('当前服务地址暂不支持 Seedance 2.0。请到「设置 → 编辑配置」把服务地址改为 https://aiping.cn/api/v1 后重试。')
   }
 
+  // 参考视频仍被当成 base64 提交（通常是上传服务异常时的兜底路径）。
+  if (/reference_video must be provided as a web url/i.test(msg)) {
+    return new AppError('Seedance 2.0 的参考视频需要公网 URL。请确认参考视频上传服务可用后重试。')
+  }
+
+  // 参考视频时长超限：参考生视频与编辑视频的上限不同。
+  const durationMatch = msg.match(/video duration \(seconds\).*?less than or equal to ([\d.]+)/i)
+  if (durationMatch) {
+    const maxSeconds = Math.floor(Number(durationMatch[1]))
+    return new AppError(
+      `参考视频时长超出当前模型限制（最多 ${maxSeconds} 秒）。请换用更短的视频；如果只是想编辑这段视频，请改用「编辑视频」模式（支持 4-30 秒）。`,
+    )
+  }
+
+  // dataURI 图片格式不被上游接受（如 WebP 直传）。
+  if (/invalid image format/i.test(msg)) {
+    return new AppError('参考图格式不受支持。请把图片另存为 PNG / JPG 后重新上传。')
+  }
+
   return null
 }
 
@@ -482,7 +513,7 @@ function isDataUri(value: string): boolean {
   return /^data:[^;]+;base64,/.test(value)
 }
 
-/** 图片/音频类素材允许上传本地 base64（会先转成公网 URL）；参考视频暂不支持本地上传。 */
+/** 图片/音频/视频素材都允许上传本地 base64（会先转成公网 URL 或内联 dataURI）。 */
 function assertRemoteAssetUrl(url: string, assetType: SeedanceAssetType): void {
   if (isDataUri(url)) {
     throw new AppError(
@@ -492,10 +523,11 @@ function assertRemoteAssetUrl(url: string, assetType: SeedanceAssetType): void {
 }
 
 /**
- * 把某一类参考素材整理成任务接口可直接使用的公网 URL：
- * - 图片 base64：先上传到图片服务换成公网 URL。
- * - 音频 base64：先上传到同一文件服务换成公网 URL（配音音频库/本地上传都走这里）。
- * - 视频 base64：暂不支持，直接给出中文提示。
+ * 把某一类参考素材整理成任务接口可直接使用的地址：
+ * - 图片 base64：先压缩并做尺寸校验；配置了上传服务时优先换公网 URL，否则内联 dataURI 直传
+ *   （上游实测接受 `data:image/...;base64,...`）。
+ * - 视频 base64：上传到文件服务换成公网 URL（Seedance 的 `reference_video` 只接受 web url）。
+ * - 音频 base64：内联 dataURI 直传（上游实测接受）。
  * - 其他 http/https 地址：原样返回。
  */
 async function prepareSeedanceReferenceUrls(urls: string[], assetType: SeedanceAssetType): Promise<string[]> {
@@ -503,9 +535,11 @@ async function prepareSeedanceReferenceUrls(urls: string[], assetType: SeedanceA
   for (const rawUrl of urls) {
     if (isDataUri(rawUrl)) {
       if (assetType === 'Image') {
-        preparedUrls.push(await uploadDataUriToPublicUrl(rawUrl))
+        preparedUrls.push(await ensureSeedanceImageForModel(rawUrl))
+      } else if (assetType === 'Video') {
+        preparedUrls.push(await ensurePublicVideoUrlForModel(rawUrl))
       } else if (assetType === 'Audio') {
-        preparedUrls.push(await ensurePublicAudioUrlForModel(rawUrl))
+        preparedUrls.push(await prepareReferenceAudioForModel(rawUrl))
       } else {
         assertRemoteAssetUrl(rawUrl, assetType)
         preparedUrls.push(rawUrl)
@@ -514,14 +548,19 @@ async function prepareSeedanceReferenceUrls(urls: string[], assetType: SeedanceA
       preparedUrls.push(rawUrl)
     }
   }
+  debugLog('seedance reference prepared:', {
+    assetType,
+    count: preparedUrls.length,
+    samples: preparedUrls.map((url) => ({ head: url.slice(0, 40), length: url.length })),
+  })
   return preparedUrls
 }
 
 
 /**
  * Seedance 2.0 系列专用生成流程：
- * 1. 把本地 base64 参考图上传成公网 URL（视频/音频必须已是公网 URL）。
- * 2. 直接用公网 URL 调用 contents/generations/tasks 创建视频任务。
+ * 1. 参考图：压缩后内联 dataURI（配置上传服务时换公网 URL）；参考视频换成公网 URL；参考音频内联 dataURI。
+ * 2. 用整理好的素材地址调用 contents/generations/tasks 创建视频任务。
  * 仅 AI Ping 白名单账号生成的 API Key 才能成功，否则上游返回鉴权类报错。
  */
 async function generateSeedanceVideo(params: VideoGenerateRequest, canonicalModel: string): Promise<VideoGenerateResponse> {
@@ -566,7 +605,7 @@ async function generateSeedanceVideo(params: VideoGenerateRequest, canonicalMode
 /**
  * MiniMax-H3 专用生成流程：
  * 1. 首/尾帧与参考图已由通用上传流程处理为公网 URL（或压缩后的 dataURI）；
- *    参考音频的 base64 会在这里上传为公网 URL；参考视频仍必须已是公网 URL。
+ *    参考音频/参考视频的 base64 直接内联为 dataURI（上游原生支持）。
  * 2. 组装 content 数组后调用 /multimodal/minimax/videos/video_generation 创建任务。
  */
 async function generateMinimaxH3Video(params: VideoGenerateRequest, canonicalModel: string): Promise<VideoGenerateResponse> {
@@ -579,14 +618,15 @@ async function generateMinimaxH3Video(params: VideoGenerateRequest, canonicalMod
   const hasFrames = !!(firstFrame || lastFrame)
 
   let preparedReferenceAudios = referenceAudios
+  let preparedReferenceVideos = referenceVideos
   if (!hasFrames) {
-    for (const url of referenceVideos) {
-      if (isDataUri(url)) {
-        throw new AppError('MiniMax-H3 的参考视频目前需要公网 URL，暂不支持本地上传。请改用公网可访问的地址。')
-      }
-    }
+    // MiniMax-H3 原生接受 base64 dataURI 的参考视频/音频（实测均创建成功），
+    // 这里只做格式与体积校验后内联直传，不需要上传服务。
+    preparedReferenceVideos = await Promise.all(
+      referenceVideos.map((url) => ensureMinimaxH3VideoForModel(url)),
+    )
     preparedReferenceAudios = await Promise.all(
-      referenceAudios.map((url) => ensurePublicAudioUrlForModel(url)),
+      referenceAudios.map((url) => prepareReferenceAudioForModel(url)),
     )
   }
 
@@ -599,7 +639,7 @@ async function generateMinimaxH3Video(params: VideoGenerateRequest, canonicalMod
         })
       : buildMinimaxH3Content(params.prompt, {
           referenceImages,
-          referenceVideos,
+          referenceVideos: preparedReferenceVideos,
           referenceAudios: preparedReferenceAudios,
         }),
     resolution: params.resolution === '2K' ? '2K' : '768P',

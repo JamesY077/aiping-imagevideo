@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 项目绝对路径：脚本可从任意目录执行
-PROJECT_DIR="/Users/yjy/Desktop/aiping-创意项目/aiping-aidraw"
+# 项目根目录 = 本脚本所在目录（脚本可从任意目录执行）
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_DIR"
+
+if [ ! -f package.json ] || [ ! -d src ]; then
+  echo "❌ 当前目录不像项目根目录：$PROJECT_DIR"
+  exit 1
+fi
+
+echo "    项目目录：$PROJECT_DIR"
 
 SERVER="ubuntu@49.232.99.62"
 DOMAIN="artrealm.nextmak.cn"

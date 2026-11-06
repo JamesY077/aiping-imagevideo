@@ -2,14 +2,19 @@ import { AppError } from '@/utils/errors'
 import {
   prepareLocalImageDataUri,
   prepareMinimaxH3ImageDataUri,
+  prepareSeedanceImageDataUri,
 } from '@/features/generate/localImage'
 
 /**
- * 图片上传工具（本地图片统一走 COS 上传代理）
+ * 参考素材（图片 / 音频 / 视频）处理工具
  * ------------------------------------------------------------------
- * 火山 Seedance 2.0 的 CreateAsset 必须使用公网 URL；其他支持本地图片的模型
- * 在配置了上传服务后，也会统一把 base64 图片换成公网 URL，避免大请求体导致上游 503。
+ * 各模型对本地素材的接受度不同（下面每条都是实测结论）：
+ * - Seedance 2 系列：参考图、参考音频支持 base64 dataURI 直传；参考视频只接受公网 URL。
+ * - MiniMax-H3：参考图、参考视频、参考音频均支持 dataURI 直传。
+ * - 其他模型：配置了上传服务时，把 base64 图片换成公网 URL，避免大请求体导致上游 503。
  *
+ * 因此上传服务（server/upload-service → 腾讯云 COS）只服务一个场景：
+ * Seedance 2 系列的**本地参考视频**。未配置时其它素材全部内联直传，不受影响。
  * 上传服务地址与鉴权 token 通过前端环境变量配置：
  *   VITE_UPLOAD_SERVICE_URL   例如 https://artrealm.nextmak.cn/upload
  *   VITE_UPLOAD_SERVICE_TOKEN 与服务端 UPLOAD_TOKEN 一致
@@ -102,15 +107,18 @@ async function assertSeedanceImageValid(dataUri: string): Promise<void> {
   }
 }
 
-type UploadAssetKind = 'image' | 'audio'
+type UploadAssetKind = 'image' | 'audio' | 'video'
 
 const UPLOAD_ASSET_LABEL: Record<UploadAssetKind, string> = {
   image: '图片',
   audio: '音频',
+  video: '视频',
 }
 
 /** 参考音频体积上限，避免超大文件把上传服务和上游请求拖垮。 */
 const AUDIO_MAX_BYTES = 30 * 1024 * 1024
+/** 参考视频体积上限：火山 Seedance 2 系列要求参考视频不超过 50MB。 */
+const VIDEO_MAX_BYTES = 50 * 1024 * 1024
 
 function resolveUploadServiceError(
   status: number,
@@ -181,7 +189,15 @@ async function postAssetToUploadService(kind: UploadAssetKind, dataUri: string):
     throw resolveUploadServiceError(resp.status, detail, kind)
   }
 
-  const data = await resp.json()
+  let data: any
+  try {
+    data = await resp.json()
+  } catch {
+    throw new AppError(
+      `${label}上传服务返回异常响应（不是 JSON），请检查 /upload 反向代理是否指向 server/upload-service。`,
+      { code: 'UPLOAD_SERVICE_UNAVAILABLE' },
+    )
+  }
   if (!data?.url || typeof data.url !== 'string') {
     throw new AppError(`${label}上传成功，但没有拿到${label}地址，请稍后重试。`, {
       code: 'UPLOAD_SERVICE_FAILED',
@@ -212,12 +228,14 @@ async function tryUploadImageToPublicUrl(dataUri: string): Promise<string | null
 }
 
 /**
- * Seedance 2.0 专用：本地上传图片必须先经尺寸/比例校验，再上传为公网 URL。
+ * 需要公网图片 URL 的场景专用：先做尺寸/比例校验，再上传为公网 URL。
+ * 注意：Seedance 参考图本身支持 dataURI（见 ensureSeedanceImageForModel），
+ * 这个函数只给确实要求公网 URL 的调用方使用。
  */
 export async function uploadDataUriToPublicUrl(dataUri: string): Promise<string> {
   if (!UPLOAD_SERVICE_URL) {
     throw new AppError(
-      'Seedance 2.0 的参考图需要公网图片 URL，但当前未配置图片上传服务。' +
+      '当前未配置文件上传服务，无法把本地图片转换成公网图片 URL。' +
         '请在前端 .env 配置 VITE_UPLOAD_SERVICE_URL（并部署 server/upload-service），' +
         '或改用画布中已生成的图片作为参考。',
     )
@@ -228,12 +246,10 @@ export async function uploadDataUriToPublicUrl(dataUri: string): Promise<string>
 }
 
 /**
- * Seedance 2.0 / MiniMax-H3 专用：本地音频必须换成公网 URL。
- *
- * 这两个模型的 reference_audio.audio_url 不接受 base64 dataURI；
- * 配音音频库的 Blob、本地上传的音频都会先经过这里上传。
+ * 参考音频：MiniMax-H3 与 Seedance 2 系列都接受 base64 dataURI（均实测 200），
+ * 因此这里只做格式/体积校验后原样直传，**不依赖上传服务**。
  */
-export async function ensurePublicAudioUrlForModel(value: string): Promise<string> {
+export async function prepareReferenceAudioForModel(value: string): Promise<string> {
   if (!isDataUri(value)) return value
 
   if (!/^data:audio\//i.test(value)) {
@@ -248,16 +264,83 @@ export async function ensurePublicAudioUrlForModel(value: string): Promise<strin
     })
   }
 
+  return value
+}
+
+/**
+ * Seedance 2 专用图片处理：
+ * - 上游实测支持 `data:image/...;base64,...` 内联直传，因此**不强制**上传服务；
+ * - 先压缩大图并做官方尺寸/比例校验，避免请求体过大或参数不合法；
+ * - 配置了上传服务时优先换公网 URL，服务不可用时自动降级为 dataURI，保证生成不被卡住。
+ */
+export async function ensureSeedanceImageForModel(value: string): Promise<string> {
+  if (!isDataUri(value)) return value
+
+  const preparedDataUri = await prepareSeedanceImageDataUri(value)
+  await assertSeedanceImageValid(preparedDataUri)
+
+  if (!UPLOAD_SERVICE_URL) return preparedDataUri
+
+  const publicUrl = await tryUploadImageToPublicUrl(preparedDataUri)
+  if (publicUrl) return publicUrl
+
+  console.warn('[upload] 图片上传服务不可用，Seedance 本次降级为 dataURI 直传。')
+  return preparedDataUri
+}
+
+/**
+ * MiniMax-H3 专用：本地参考视频可以直接以 base64 dataURI 直传（实测 200），
+ * 与 MiniMax 的原生使用方式一致，不需要部署上传服务。
+ */
+export async function ensureMinimaxH3VideoForModel(value: string): Promise<string> {
+  if (!isDataUri(value)) return value
+
+  if (!/^data:video\//i.test(value)) {
+    throw new AppError('参考视频格式不正确，请重新选择视频文件后重试。', {
+      code: 'VIDEO_INVALID',
+    })
+  }
+
+  if (estimateDataUriBytes(value) > VIDEO_MAX_BYTES) {
+    throw new AppError('这段参考视频文件太大，请选择 50MB 以内的视频后重试。', {
+      code: 'VIDEO_TOO_LARGE',
+    })
+  }
+
+  return value
+}
+
+/**
+ * Seedance 2 专用：本地参考视频必须换成公网 URL。
+ *
+ * 实测火山 Seedance 的 `reference_video` 只接受 web url，传 base64 会返回：
+ * `reference_video must be provided as a web url`。
+ * （MiniMax-H3 不受此限制，见 ensureMinimaxH3VideoForModel）
+ */
+export async function ensurePublicVideoUrlForModel(value: string): Promise<string> {
+  if (!isDataUri(value)) return value
+
+  if (!/^data:video\//i.test(value)) {
+    throw new AppError('参考视频格式不正确，请重新选择视频文件后重试。', {
+      code: 'VIDEO_INVALID',
+    })
+  }
+
+  if (estimateDataUriBytes(value) > VIDEO_MAX_BYTES) {
+    throw new AppError('这段参考视频文件太大，请选择 50MB 以内的视频后重试。', {
+      code: 'VIDEO_TOO_LARGE',
+    })
+  }
+
   if (!UPLOAD_SERVICE_URL) {
     throw new AppError(
-      'Seedance 2.0 / MiniMax-H3 的参考音频需要公网 URL，但当前未配置文件上传服务。' +
-        '请在前端 .env 配置 VITE_UPLOAD_SERVICE_URL（并部署 server/upload-service），' +
-        '或改用公网可访问的音频地址。',
+      'Seedance 2 系列的本地参考视频需要先转成公网 URL，但当前没有配置文件上传服务。' +
+        '你可以改用公网可访问的视频地址，或部署 server/upload-service 后配置 VITE_UPLOAD_SERVICE_URL。',
       { code: 'UPLOAD_SERVICE_UNAVAILABLE' },
     )
   }
 
-  return postAssetToUploadService('audio', value)
+  return postAssetToUploadService('video', value)
 }
 
 /**

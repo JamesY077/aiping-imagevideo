@@ -95,7 +95,7 @@ node scripts/analyze-matrix.mjs test-results/matrix-*.jsonl          # 汇总为
 | `VITE_APP_VERSION` | 应用版本 | `1.0.0` |
 | `VITE_API_BASE_URL` | API 基础路径，开发环境由 Vite 代理到 `https://aiping.cn` | `/api/v1` |
 | `VITE_API_DOCS_URL` | API 文档地址 | `https://aiping.cn/docs` |
-| `VITE_UPLOAD_SERVICE_URL` | 参考图/参考音频上传服务地址（Seedance 2.0、MiniMax-H3 本地素材可选） | 空 |
+| `VITE_UPLOAD_SERVICE_URL` | 参考文件上传服务地址（**只有 Seedance 2 本地参考视频必需**，其余素材可内联） | 空 |
 | `VITE_UPLOAD_SERVICE_TOKEN` | 与上传服务端 `UPLOAD_TOKEN` 一致的令牌 | 空 |
 | `VITE_CDN_ASSET_BASE` | 静态资源 CDN/COS 前缀，本地开发留空走 `public/` | 空 |
 
@@ -112,11 +112,21 @@ node scripts/analyze-matrix.mjs test-results/matrix-*.jsonl          # 汇总为
 
 API Base URL 与 API Key 保存在浏览器本地，配置完成后即可进入工作台，未配置时受限页面会自动跳转回首页。
 
-## 参考文件上传服务（可选）
+## 参考文件上传服务（仅 Seedance 2 本地参考视频必需）
 
-火山 Seedance 2.0 的参考图、Seedance 2.0 / MiniMax-H3 的参考音频都要求公网 HTTP(S) URL。启用本地上传参考图/音频时，需要部署 `server/upload-service`（Express + 腾讯云 COS），前端会把本地文件先上传换取公网 URL。部署与配置方法见 `server/upload-service/README.md`，并在前端配置 `VITE_UPLOAD_SERVICE_URL` 与 `VITE_UPLOAD_SERVICE_TOKEN`。
+实测结论（2026-11）：
 
-> 当前 `.env.production` 默认未启用该服务，因此线上从配音音频库选择音频后生成视频时，会提示先配置上传服务；配置后即可自动上传。
+- **Seedance 2 系列**：参考图、参考音频支持 base64 dataURI 直传；**参考视频只接受公网 URL**（传 dataURI 返回 `reference_video must be provided as a web url`）。
+- **MiniMax-H3**：参考图、参考视频、参考音频都支持 dataURI 直传，不需要上传服务。
+
+所以 `server/upload-service`（Express + 腾讯云 COS）只服务一个场景：**Seedance 2 的本地参考视频**。
+
+- 不部署上传服务时：图片、音频、文生视频、图生视频、H3 全链路都正常；只有「Seedance + 本地视频」会给出明确提示，建议改用公网视频地址。
+- 需要支持「Seedance + 本地视频」时：部署 `server/upload-service`，并在 Nginx 加 `/upload` 反代（约 10 行）。
+
+部署与配置方法见 `server/upload-service/README.md` 与 `DEPLOYMENT.md` 第四 / 七节；前端通过 `VITE_UPLOAD_SERVICE_URL` 与 `VITE_UPLOAD_SERVICE_TOKEN` 配置。
+
+> 一键部署服务：`bash scripts/deploy-upload-service.sh`，随后按 `DEPLOYMENT.md` 给 Nginx 加 `/upload` 反代并 reload。
 
 ## 部署
 

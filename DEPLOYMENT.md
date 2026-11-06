@@ -112,16 +112,18 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
-    # —— 以下 /upload 反代为可选：启用 server/upload-service（本地参考图 / 参考音频）时才需要。
-    # 没有这段反代时，POST /upload 会落到上面的 location /，被 try_files 转成静态文件并返回 405。
+    # —— /upload 反代：仅当需要「Seedance 2 + 本地参考视频」时才需要。
+    # 没有这段反代时，POST /upload 会落到上面的 location /，被 try_files 转成静态文件并返回 405；
+    # 其余素材（Seedance 图片/音频、MiniMax-H3 图/视频/音频）都走 dataURI，不依赖它。
     location /upload {
         proxy_pass http://127.0.0.1:3100/upload;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        client_max_body_size 50m;
-        proxy_read_timeout 60s;
+        # 参考视频上限 50MB，base64 膨胀约 1/3，这里放宽到 80m。
+        client_max_body_size 80m;
+        proxy_read_timeout 300s;
     }
 
     location = /upload/health {
@@ -185,8 +187,8 @@ location /assets/ {
 
 ```env
 VITE_API_BASE_URL=/api/v1
-# 默认留空：不启用参考文件上传服务
-VITE_UPLOAD_SERVICE_URL=
+# 参考文件上传服务（同源 /upload，由 Nginx 反代到 server/upload-service）
+VITE_UPLOAD_SERVICE_URL=/upload
 VITE_UPLOAD_SERVICE_TOKEN=
 # 静态图片走 COS 公有读直连
 VITE_CDN_ASSET_BASE=https://artrealm-image-1314455608.cos.ap-beijing.myqcloud.com/site-assets
@@ -198,13 +200,13 @@ VITE_CDN_ASSET_BASE=https://artrealm-image-1314455608.cos.ap-beijing.myqcloud.co
 - 由 Nginx 转发到 `https://aiping.cn/api/v1/*`
 - 静态图片（logo、背景图、模板封面、Skill 封面等）通过 `VITE_CDN_ASSET_BASE` 指向 COS
   公有读地址，不占用 Nginx 站点带宽
-- 本地上传的图片**不经过 `/upload`**：MiniMax-H3 等支持 base64 的模型由前端压缩后以
-  dataURI 直传，线上无需改 Nginx，也不会触发 405
-- Seedance 2.0 的本地上传图、Seedance 2.0 / MiniMax-H3 的参考音频必须使用公网 URL；
-  未配置上传服务时会给出明确提示。如需启用，见第七节（并给 Nginx 加 `/upload` 反代）
-
-> 关键点：线上 405 的根因是旧版前端把本地图 POST 到 `/upload`，而 Nginx 没有该反代。
-> 本版生产配置直接不请求 `/upload`，因此**重新发布前端即可修复，不需要改服务器配置**。
+- 本地参考图会先尝试经 `/upload` 换公网 URL；上传服务不可用时自动降级为压缩后的 dataURI
+  直传（Seedance 2.0 与 MiniMax-H3 均已验证支持），因此**图片生成不依赖上传服务**
+- **参考音频**同样以 dataURI 直传（Seedance 与 MiniMax-H3 均实测通过），**不依赖上传服务**
+- **唯一需要公网 URL 的是 Seedance 2 系列的本地参考视频**：上游只接受 web url，需要部署
+  `server/upload-service` 并给 Nginx 加 `/upload` 反代（见第四节与第七节）
+- 只发前端、不部署上传服务时：图片、音频、文生视频、图生视频、MiniMax-H3 多模态全部正常；
+  仅「Seedance + 本地视频」会提示改用公网视频地址，这是预期行为
 
 ### 静态资源发布（`public/` → COS）
 
@@ -237,20 +239,22 @@ VITE_CDN_ASSET_BASE=https://artrealm-image-1314455608.cos.ap-beijing.myqcloud.co
   ```bash
   ssh -t ubuntu@49.232.99.62 "sudo nginx -t && sudo systemctl reload nginx"
   ```
-- **本地上传图片时控制台报 `405 (Not Allowed)`**：只有旧版前端（或重新启用了上传服务）才会请求 `https://artrealm.nextmak.cn/upload`。当前生产配置（`.env.production` 的 `VITE_UPLOAD_SERVICE_URL` 留空）不请求该地址，重新执行 `./deploy.sh` 发布即可修复，无需改 Nginx。若以后启用上传服务，才需要第四节的 `location /upload` 反代 + 第七节的服务，快速验证：
+- **Seedance 上传本地参考视频时报「文件上传服务未配置 / 405」**：说明线上没有部署 `server/upload-service` 或没有 `/upload` 反代。这是**唯一**依赖它的场景；图片、音频、MiniMax-H3 都不受影响。要么补齐这一层，要么改用公网视频地址：
 
   ```bash
-  # 405 表示还没配好反代；返回 200 JSON 表示反代通了；返回 502 表示反代通了但 3100 服务没起
+  # 405：反代没配；200 JSON：反代通了；502：反代通了但 3100 服务没起
   curl -s -i https://artrealm.nextmak.cn/upload/health
   ```
 
 - **本地正常、线上图片 404 / 裂图**：静态图走 COS。确认对应文件已上传到 `site-assets/` 前缀、文件名一致，且 `.env.production` 的 `VITE_CDN_ASSET_BASE` 指向正确桶；本地正常而线上裂图，大概率是 COS 上没有同步新图。
 - **更换 COS 桶或启用 CDN 域名后，首页/登录页背景图仍是旧地址**：这两张背景图在代码中硬编码（`src/views/LandingPage.vue`、`src/views/ApiKeySetup.vue`），需要改代码后重新发布，只改环境变量不会生效。
 
-## 七、参考文件上传服务（可选，本地参考图 / 参考音频需要）
+## 七、参考文件上传服务（仅 Seedance 2 本地参考视频需要）
 
-`server/upload-service` 是一个 Express 服务：接收前端 POST 的 base64 图片或音频，用腾讯云 COS
-密钥上传并返回公网 HTTPS URL（Seedance 2.0 / MiniMax-H3 的参考素材只接受公网 URL）。密钥只保存在服务端 `.env`。
+`server/upload-service` 是一个 Express 服务：接收前端 POST 的 base64 视频，用腾讯云 COS
+密钥上传并返回公网 HTTPS URL。实测只有火山 Seedance 2 的 `reference_video` 强制要求 web url；
+MiniMax-H3 的图/视频/音频、Seedance 的图/音频都能用 dataURI 直传，不需要这个服务。
+密钥只保存在服务端 `.env`。
 
 ### 1）部署到服务器
 
@@ -284,6 +288,8 @@ COS_PREFIX=seedance-uploads
 UPLOAD_TOKEN=换成一串随机字符串（与前端 VITE_UPLOAD_SERVICE_TOKEN 保持一致）
 # 参考音频体积上限（MB）
 MAX_AUDIO_MB=30
+# 参考视频体积上限（MB）
+MAX_VIDEO_MB=50
 # 部署在 Nginx 后必须置 1，否则所有用户的限流都会算成 127.0.0.1 一个 IP
 TRUST_PROXY=1
 ```

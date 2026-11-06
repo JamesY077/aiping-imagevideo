@@ -1,7 +1,8 @@
 import router from '@/router'
-import { clearApiSessionReady, getMillisecondsUntilNextChinaMidnight, hasActiveApiSession, invalidateExpiredApiSession } from '@/api/config'
+import { clearApiSessionReady, getMillisecondsUntilNextChinaWeekStart, hasActiveApiSession, invalidateExpiredApiSession } from '@/api/config'
 
-let midnightRefreshTimer: number | null = null
+/** 登录态按周轮换：每周一 00:00（中国时区）清一次会话并要求重新登录。 */
+let weekRefreshTimer: number | null = null
 
 function redirectToLandingIfNeeded() {
   const publicPaths = new Set(['/', '/home', '/studio', '/setup'])
@@ -10,18 +11,18 @@ function redirectToLandingIfNeeded() {
   }
 }
 
-function clearMidnightRefreshTimer() {
-  if (midnightRefreshTimer !== null) {
-    window.clearTimeout(midnightRefreshTimer)
-    midnightRefreshTimer = null
+function clearWeekRefreshTimer() {
+  if (weekRefreshTimer !== null) {
+    window.clearTimeout(weekRefreshTimer)
+    weekRefreshTimer = null
   }
 }
 
-function scheduleNextChinaMidnightRefresh() {
-  clearMidnightRefreshTimer()
+function scheduleNextWeekRefresh() {
+  clearWeekRefreshTimer()
 
-  const delay = getMillisecondsUntilNextChinaMidnight(new Date())
-  midnightRefreshTimer = window.setTimeout(() => {
+  const delay = getMillisecondsUntilNextChinaWeekStart(new Date())
+  weekRefreshTimer = window.setTimeout(() => {
     clearApiSessionReady()
     window.location.replace('/')
   }, delay)
@@ -36,9 +37,9 @@ export function enforceApiSessionGuard() {
   }
 
   if (hasActiveApiSession()) {
-    scheduleNextChinaMidnightRefresh()
+    scheduleNextWeekRefresh()
   } else {
-    clearMidnightRefreshTimer()
+    clearWeekRefreshTimer()
   }
 }
 
@@ -47,5 +48,5 @@ export function restartApiSessionGuard() {
 }
 
 export function stopApiSessionGuard() {
-  clearMidnightRefreshTimer()
+  clearWeekRefreshTimer()
 }

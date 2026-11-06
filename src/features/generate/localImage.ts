@@ -152,3 +152,26 @@ export async function prepareMinimaxH3ImageDataUri(value: string): Promise<strin
   const resized = await resizeDataUriToJpeg(prepared, targetWidth, targetHeight)
   return resized || prepared
 }
+
+/**
+ * Seedance 2 图片合规预处理：
+ * - 先执行通用压缩（大图重采样）。
+ * - 上游对 dataURI 的格式检测比较严格，实测 `image/webp` 会返回
+ *   `invalid image format (detected format); received: ""`，因此统一把非 PNG/JPEG
+ *   的图片重编码为 JPEG 后再直传。
+ */
+const SEEDANCE_ACCEPTED_IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/jpg']
+
+export async function prepareSeedanceImageDataUri(value: string): Promise<string> {
+  const prepared = await prepareLocalImageDataUri(value)
+  if (!isDataUri(prepared)) return prepared
+
+  const mime = prepared.slice(5, prepared.indexOf(';')).toLowerCase()
+  if (SEEDANCE_ACCEPTED_IMAGE_MIMES.includes(mime)) return prepared
+
+  const dimensions = await readDataUriDimensions(prepared)
+  if (!dimensions) return prepared
+
+  const jpeg = await resizeDataUriToJpeg(prepared, dimensions.width, dimensions.height)
+  return jpeg || prepared
+}
