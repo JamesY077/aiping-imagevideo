@@ -12,6 +12,10 @@ type StoredApiAuth = {
   apiBaseUrl: string
   sessionId: string
   verifiedAtEpochMs: number
+  /**
+   * 登录时所属的周期键：当周周一的日期（`YYYY-MM-DD`，中国时区）。
+   * 同一个自然周内保持登录，跨周（周一 00:00）后失效。
+   */
   verifiedDateCN: string
 }
 
@@ -45,11 +49,39 @@ export function getCurrentChinaDateKey(date = new Date()): string {
   return `${year}-${month}-${day}`
 }
 
-export function getMillisecondsUntilNextChinaMidnight(date = new Date()): number {
-  const { year, month, day } = getCurrentChinaDateParts(date)
-  const currentChinaDate = new Date(`${year}-${month}-${day}T00:00:00+08:00`)
-  const nextChinaMidnight = new Date(currentChinaDate.getTime() + 24 * 60 * 60 * 1000)
-  return Math.max(nextChinaMidnight.getTime() - date.getTime(), 0)
+/** 把「中国本地 YYYY-MM-DD」当作 UTC 零点解析，用于稳定地取星期与做日期加减。 */
+function chinaDateKeyToUtcMs(dateKey: string): number {
+  return Date.parse(`${dateKey}T00:00:00Z`)
+}
+
+function utcMsToDateKey(ms: number): string {
+  const d = new Date(ms)
+  const year = d.getUTCFullYear()
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+/**
+ * 会话周期键：以中国时区（Asia/Shanghai）**周一 00:00** 为界，返回当周周一的日期。
+ * 登录状态在同一个自然周内保持有效，跨周后自动失效，需要重新登录。
+ */
+export function getCurrentChinaWeekStartDateKey(date = new Date()): string {
+  const todayMs = chinaDateKeyToUtcMs(getCurrentChinaDateKey(date))
+  const weekday = new Date(todayMs).getUTCDay() // 0=周日, 1=周一
+  const daysFromMonday = (weekday + 6) % 7
+  return utcMsToDateKey(todayMs - daysFromMonday * 24 * 60 * 60 * 1000)
+}
+
+/** 距离下一个「中国时区周一 00:00」还有多少毫秒（即当前登录周期的到期时间）。 */
+export function getMillisecondsUntilNextChinaWeekStart(date = new Date()): number {
+  const todayMs = chinaDateKeyToUtcMs(getCurrentChinaDateKey(date))
+  const weekday = new Date(todayMs).getUTCDay()
+  const daysFromMonday = (weekday + 6) % 7
+  const nextWeekStartWallClockMs = todayMs + (7 - daysFromMonday) * 24 * 60 * 60 * 1000
+  // 上面的毫秒数是「中国本地时间」的墙上时间，真正的 UTC 时刻要减 8 小时。
+  const nextWeekStartInstant = nextWeekStartWallClockMs - 8 * 60 * 60 * 1000
+  return Math.max(nextWeekStartInstant - date.getTime(), 0)
 }
 
 function createSessionId(): string {
@@ -186,7 +218,7 @@ export function saveApiAuth(apiKey: string, baseUrl: string): void {
       apiBaseUrl: normalizedBaseUrl,
       sessionId: createSessionId(),
       verifiedAtEpochMs: Date.now(),
-      verifiedDateCN: getCurrentChinaDateKey(),
+      verifiedDateCN: getCurrentChinaWeekStartDateKey(),
     } satisfies StoredApiAuth),
   )
   localStorage.removeItem(API_AUTH_STORAGE_KEY)
@@ -214,7 +246,7 @@ export function hasActiveApiSession(): boolean {
   const auth = parseStoredApiAuth()
   if (!auth?.apiKey || !auth.apiBaseUrl) return false
 
-  if (auth.verifiedDateCN !== getCurrentChinaDateKey()) {
+  if (auth.verifiedDateCN !== getCurrentChinaWeekStartDateKey()) {
     clearApiSessionReady()
     return false
   }
@@ -226,7 +258,7 @@ export function invalidateExpiredApiSession(): boolean {
   const auth = parseStoredApiAuth()
   if (!auth) return false
 
-  if (auth.verifiedDateCN === getCurrentChinaDateKey()) {
+  if (auth.verifiedDateCN === getCurrentChinaWeekStartDateKey()) {
     return false
   }
 
