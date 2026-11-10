@@ -15,6 +15,8 @@ export const doubaoSeedance20FastModel: VideoModelModule = {
     localUploadInputs: ['image'],
     availabilityNote: 'supports-image-upload',
     videoRequestMode: 'seedance-2',
+    // 实测上限：4-15s
+    videoDurations: [4, 5, 6, 8, 10, 12, 15],
   },
   adapter: createSeedanceProvider('Doubao-Seedance-2.0-fast'),
   example: createModelExample({
