@@ -1,20 +1,21 @@
 <template>
   <Teleport to="body">
-    <div class="layer-editor-mask" @click.self="$emit('close')">
+    <div class="layer-editor-mask" @click.self="requestClose">
       <section class="layer-editor" role="dialog" aria-modal="true" aria-label="Moss 图层编辑">
         <header class="editor-head">
           <div class="head-text">
             <h2>图层编辑 · Moss</h2>
             <p>
               拖动框调整元素位置和大小，也可以在右侧用自然语言让 AI 改布局。Moss 是文生图模型，
-              修改后会按新布局重新生成整图。
+              布局改完必须点右下角「按此布局重新生成」才会出图。
             </p>
           </div>
-          <button class="close-btn" type="button" aria-label="关闭图层编辑" @click="$emit('close')">✕</button>
+          <button class="close-btn" type="button" aria-label="关闭图层编辑" @click="requestClose">✕</button>
         </header>
 
         <div class="editor-body">
           <div class="stage">
+            <div v-if="dirty" class="stage-badge">布局已修改 · 预览仍是上一版图片</div>
             <div ref="canvasRef" class="canvas-wrap">
               <img :src="imageUrl" alt="待编辑的生成图片" draggable="false" @dragstart.prevent />
               <div
@@ -44,7 +45,8 @@
           </div>
 
           <aside class="side">
-            <div class="panel-block layer-list-block">
+            <div class="side-scroll">
+              <div class="panel-block layer-list-block">
               <div class="panel-head">
                 <span class="panel-title">图层（{{ draft.items.length }}）</span>
                 <button class="ghost-btn" type="button" @click="addLayer">＋ 添加</button>
@@ -61,7 +63,9 @@
                   <span class="layer-index" :style="{ background: colorAt(index) }">{{ index + 1 }}</span>
                   <span class="layer-meta">
                     <span class="layer-kind">{{ labelText(item.label) }}</span>
-                    <span class="layer-caption">{{ item.text || item.caption || '未命名图层' }}</span>
+                    <span class="layer-caption" :class="{ missing: !hasLayerContent(item) }">
+                      {{ item.text || item.caption || '缺少描述 · 不会出现在生成结果中' }}
+                    </span>
                   </span>
                   <span
                     v-if="draft.items.length > 1"
@@ -94,6 +98,7 @@
               <label class="field">
                 <span>元素描述<em>英文效果更好</em></span>
                 <textarea
+                  ref="captionInputRef"
                   v-model="selectedItem.caption"
                   rows="3"
                   placeholder="例如：a white ceramic latte cup with leaf latte art, soft shadow"
@@ -130,20 +135,32 @@
                 :disabled="busy"
                 placeholder="例如：把标题移到顶部居中，咖啡杯放大并移到正中偏左，右下角再加一行小字「手冲 · 拿铁」"
               />
+              <p class="panel-hint">这里只修改图层与位置，不会自动出图。直接点下方「按此布局重新生成」也会先执行这段修改。</p>
               <button class="ai-btn" type="button" :disabled="busy || !instruction.trim()" @click="applyInstruction">
-                {{ busy ? 'AI 正在更新布局…' : '让 AI 更新布局' }}
+                {{ busy ? 'AI 正在更新布局…' : '让 AI 修改布局' }}
               </button>
               <p v-if="errorMessage" class="error-text">{{ errorMessage }}</p>
             </div>
 
+            </div>
+
             <footer class="editor-foot">
-              <p class="foot-note">
+              <p v-if="missingCaptionCount" class="foot-warn">
+                有 {{ missingCaptionCount }} 个图层还没有描述，生成时会被忽略，请先补充「元素描述」。
+              </p>
+              <p v-if="dirty" class="foot-dirty">布局已修改，点右侧按钮才会按新布局出图。</p>
+              <p v-else class="foot-note">
                 重新生成会消耗一次 Moss 调用。未移动的元素会按原布局尽量保持原位，但细节可能有轻微差异。
               </p>
               <div class="foot-actions">
-                <button class="ghost-btn" type="button" @click="$emit('close')">取消</button>
-                <button class="primary-btn" type="button" :disabled="busy" @click="regenerate">
-                  按此布局重新生成
+                <button class="ghost-btn" type="button" @click="requestClose">放弃修改</button>
+                <button
+                  class="primary-btn"
+                  type="button"
+                  :disabled="busy || generating"
+                  @click="regenerate"
+                >
+                  {{ generating ? '正在生成中…' : busy ? '正在更新布局…' : '按此布局重新生成' }}
                 </button>
               </div>
             </footer>
@@ -155,7 +172,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { MossLayout, MossLayoutItem, MossLayoutLabel } from '@/types/layout'
 import {
   clampLayoutItem,
@@ -169,6 +186,8 @@ import { normalizeErrorMessage } from '@/utils/errors'
 const props = defineProps<{
   imageUrl: string
   layout: MossLayout
+  /** 主页面是否正在生成；生成中禁止重复提交，避免点击后毫无反馈。 */
+  generating?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -182,10 +201,28 @@ const draft = ref<MossLayout>(cloneLayout(props.layout))
 const selectedId = ref<string | null>(draft.value.items[0]?.id ?? null)
 const instruction = ref('')
 const busy = ref(false)
+const dirty = ref(false)
 const errorMessage = ref('')
 const canvasRef = ref<HTMLElement | null>(null)
+const captionInputRef = ref<HTMLTextAreaElement | null>(null)
+
+// 任何图层改动都要显式提示：预览图是上一版生成结果，只有重新生成才会变。
+watch(
+  draft,
+  () => {
+    dirty.value = true
+  },
+  { deep: true }
+)
 
 const selectedItem = computed(() => draft.value.items.find((item) => item.id === selectedId.value) || null)
+
+/** 没有描述或文字内容的图层不会出现在发送给 Moss 的布局里。 */
+function hasLayerContent(item: MossLayoutItem): boolean {
+  return !!(item.caption.trim() || item.text?.trim())
+}
+
+const missingCaptionCount = computed(() => draft.value.items.filter((item) => !hasLayerContent(item)).length)
 
 function colorAt(index: number): string {
   return LAYER_COLORS[index % LAYER_COLORS.length]
@@ -238,6 +275,8 @@ function addLayer() {
   const item = createDefaultLayoutItem(draft.value)
   draft.value.items.push(item)
   selectedId.value = item.id
+  // 新图层默认没有描述，直接聚焦描述框，避免加完忘记写导致生成时被忽略。
+  nextTick(() => captionInputRef.value?.focus())
 }
 
 function removeLayer(id: string) {
@@ -310,9 +349,9 @@ function stopDrag() {
   window.removeEventListener('pointercancel', stopDrag)
 }
 
-async function applyInstruction() {
+async function applyInstructionLayout(): Promise<MossLayout | null> {
   const text = instruction.value.trim()
-  if (!text || busy.value) return
+  if (!text || busy.value) return null
 
   busy.value = true
   errorMessage.value = ''
@@ -323,20 +362,41 @@ async function applyInstruction() {
     if (!next.items.some((item) => item.id === selectedId.value)) {
       selectedId.value = next.items[0]?.id ?? null
     }
+    return next
   } catch (error) {
     errorMessage.value = normalizeErrorMessage(error, 'AI 更新布局失败，请稍后重试。')
+    return null
   } finally {
     busy.value = false
   }
 }
 
-function regenerate() {
+async function applyInstruction() {
   if (busy.value) return
+  await applyInstructionLayout()
+}
+
+async function regenerate() {
+  if (busy.value || props.generating) return
+  // 自然语言框里还有没应用的指令时，先执行它再出图，避免用户以为输入已生效。
+  if (instruction.value.trim()) {
+    const next = await applyInstructionLayout()
+    if (!next) return
+  }
   emit('regenerate', cloneLayout(draft.value))
 }
 
+/** 改动未应用时关闭前二次确认，避免用户误以为已经生成。 */
+function requestClose() {
+  if (dirty.value) {
+    const ok = window.confirm('布局已修改但还没重新生成，关闭会放弃这些修改。确定关闭吗？')
+    if (!ok) return
+  }
+  emit('close')
+}
+
 function handleKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') emit('close')
+  if (event.key === 'Escape') requestClose()
 }
 
 onMounted(() => {
@@ -419,6 +479,7 @@ onBeforeUnmount(() => {
 }
 
 .stage {
+  position: relative;
   display: flex;
   flex: 1;
   min-width: 0;
@@ -428,6 +489,22 @@ onBeforeUnmount(() => {
   background:
     radial-gradient(circle at 50% 0%, rgba(217, 205, 184, 0.09), transparent 60%),
     rgba(8, 8, 8, 0.55);
+}
+
+.stage-badge {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 3;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(246, 196, 83, 0.92);
+  color: #241a06;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
 }
 
 /* 画布容器必须与图片尺寸完全一致，否则 bbox 百分比定位会和图片错位。 */
@@ -526,6 +603,13 @@ onBeforeUnmount(() => {
   flex: 0 0 360px;
   min-height: 0;
   border-left: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+/* 面板区独立滚动，底部操作按钮始终可见。 */
+.side-scroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -552,6 +636,13 @@ onBeforeUnmount(() => {
 .hint-text {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.42);
+}
+
+.panel-hint {
+  margin: 8px 0 0;
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .ghost-btn {
@@ -629,6 +720,11 @@ onBeforeUnmount(() => {
   color: rgba(255, 255, 255, 0.8);
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+.layer-caption.missing {
+  color: #f6ad55;
+  font-style: italic;
 }
 
 .layer-remove {
@@ -727,13 +823,29 @@ onBeforeUnmount(() => {
 }
 
 .editor-foot {
-  margin-top: auto;
-  padding: 14px 16px 18px;
+  flex: 0 0 auto;
+  padding: 12px 16px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, rgba(18, 17, 15, 0.92), rgba(12, 11, 10, 0.98));
 }
 
 .foot-note {
   margin: 0 0 10px;
   color: rgba(255, 255, 255, 0.38);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.foot-dirty {
+  margin: 0 0 10px;
+  color: #f6d98a;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.foot-warn {
+  margin: 0 0 8px;
+  color: #f6ad55;
   font-size: 11px;
   line-height: 1.5;
 }

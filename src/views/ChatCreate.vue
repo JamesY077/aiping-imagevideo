@@ -869,6 +869,7 @@
       v-if="layerEditorState"
       :image-url="layerEditorState.imageUrl"
       :layout="layerEditorState.layout"
+      :generating="activeSessionGenerating"
       @close="layerEditorState = null"
       @regenerate="handleLayerRegenerate"
     />
@@ -2347,8 +2348,11 @@ function handleEditLayers(result: GenerateResult) {
 
 /** 图层编辑完成后，按新布局调用 Moss 重新生成一张图。 */
 async function handleLayerRegenerate(layout: MossLayout) {
+  if (activeSessionGenerating.value) {
+    showErrorMessage('当前还有生成任务进行中，请等它完成后再按新布局生成。')
+    return
+  }
   layerEditorState.value = null
-  if (activeSessionGenerating.value) return
 
   settingsStore.setMediaType('image')
   settingsStore.selectedModel = 'Moss-Image-SFT'

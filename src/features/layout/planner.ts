@@ -110,9 +110,19 @@ function toInternalItem(raw: RawPlanItem, width: number, height: number): MossLa
   }
 
   const bbox = Array.isArray(raw?.bbox) ? raw.bbox.map((value) => Number(value)) : []
-  if (bbox.length !== 4 || bbox.some((value) => !Number.isFinite(value))) return null
-
-  const [x, y, itemWidth, itemHeight] = bbox
+  const hasBbox = bbox.length === 4 && bbox.every((value) => Number.isFinite(value))
+  // 新元素缺少 bbox 时不再直接丢弃（否则用户会看到"加了描述却没变化"），
+  // 而是放到画布正中的默认位置，用户可在编辑器里再调整。
+  const fallbackWidth = Math.round(width * 0.4)
+  const fallbackHeight = Math.round(height * 0.4)
+  const [x, y, itemWidth, itemHeight] = hasBbox
+    ? bbox
+    : [
+        Math.round((width - fallbackWidth) / 2),
+        Math.round((height - fallbackHeight) / 2),
+        fallbackWidth,
+        fallbackHeight,
+      ]
   return clampLayoutItem(
     {
       id: createLayoutItemId(),
@@ -220,13 +230,25 @@ export async function editMossLayout(input: EditMossLayoutInput): Promise<MossLa
   )
 
   const existing = new Map(layout.items.map((item) => [item.id, item]))
+  // 模型偶尔会漏掉 id：此时用 caption/text 兜底匹配已有图层，避免整份布局被当成新元素重复添加。
+  const keyOf = (caption: unknown, text: unknown) =>
+    String(text ?? '').trim() || String(caption ?? '').trim()
+  const existingByKey = new Map<string, MossLayoutItem>()
+  for (const item of layout.items) {
+    const key = keyOf(item.caption, item.text)
+    if (key && !existingByKey.has(key)) existingByKey.set(key, item)
+  }
   const next = layout.items.map((item) => ({ ...item }))
   const nextById = new Map(next.map((item) => [item.id, item]))
   let touched = false
 
   for (const rawItem of readRawItems(raw).slice(0, MOSS_LAYOUT_MAX_ITEMS + 4)) {
     const rawId = typeof rawItem.id === 'string' ? rawItem.id : ''
-    const target = rawId ? existing.get(rawId) : null
+    const fallbackKey = keyOf(rawItem.caption, rawItem.text)
+    const target =
+      (rawId ? existing.get(rawId) : null) ||
+      (fallbackKey ? existingByKey.get(fallbackKey) : null) ||
+      null
 
     if (target) {
       if (rawItem.remove === true) {
