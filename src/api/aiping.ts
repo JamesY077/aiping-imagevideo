@@ -367,7 +367,8 @@ export async function generateImage(params: ImageGenerateRequest): Promise<Image
     if (error.response?.status === 400) {
       const alternateBody: Record<string, unknown> = { ...fullBody }
 
-      if (typeof fullBody.size === 'string' && !fullBody.width && !fullBody.height) {
+      // Moss 只接受 size（WxH），width / height 会被判为非法参数，跳过尺寸改写重试。
+      if (provider.provider !== 'moss' && typeof fullBody.size === 'string' && !fullBody.width && !fullBody.height) {
         const size = parseImageSize(fullBody.size)
         if (size) {
           delete alternateBody.size

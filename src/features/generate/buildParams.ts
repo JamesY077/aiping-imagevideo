@@ -34,7 +34,14 @@ export async function buildImageParams(
     size: aspectRatioToImageSize(aspectRatio),
   }
 
-  if (mode && mode !== 'default') {
+  if (mode === 'moss') {
+    // Moss 仅支持文生图：size 必须用 WxH，且不接受 image / width / height /
+    // output_format / watermark，因此这里只保留提示词和尺寸。
+    imageParams.size = aspectRatioToImageSize(aspectRatio, 'moss')
+    delete imageParams.image
+    delete imageParams.width
+    delete imageParams.height
+  } else if (mode && mode !== 'default') {
     const { width, height } = aspectRatioToDimensions(aspectRatio, mode)
     imageParams.output_format = 'png'
     imageParams.watermark = false

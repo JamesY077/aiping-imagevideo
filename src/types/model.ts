@@ -27,7 +27,7 @@ export interface ModelCapability {
     | 'supports-multimodal-upload'
     | 'requires-image-upload'
     | 'requires-video-upload'
-  imageRequestMode?: 'default' | 'seedream-5-lite'
+  imageRequestMode?: 'default' | 'seedream-5-lite' | 'moss'
   videoRequestMode?: 'kling-v26' | 'kling-v3' | 'kling-omni' | 'kling-o1' | 'viduq3-fast' | 'minimax-hailuo' | 'minimax-h3' | 'seedance-2'
   /**
    * 视频时长可选项（秒）。不同模型上限不同，未配置时由 videoRequestMode 的默认档位决定。

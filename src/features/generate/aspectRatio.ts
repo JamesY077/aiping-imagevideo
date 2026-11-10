@@ -1,4 +1,4 @@
-export type ImageRequestMode = 'default' | 'seedream-5-lite'
+export type ImageRequestMode = 'default' | 'seedream-5-lite' | 'moss'
 
 const ASPECT_RATIO_SIZE_MAP: Record<string, { width: number; height: number }> = {
   '21:9': { width: 1680, height: 720 },
@@ -35,7 +35,7 @@ export function aspectRatioToDimensions(
 export function aspectRatioToImageSize(
   aspectRatio: string,
   mode: ImageRequestMode = 'default',
-  separator: '*' | 'x' = '*'
+  separator: '*' | 'x' = mode === 'moss' ? 'x' : '*'
 ): string {
   const { width, height } = aspectRatioToDimensions(aspectRatio, mode)
   return `${width}${separator}${height}`
