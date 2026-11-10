@@ -71,6 +71,8 @@ export async function startEnv({ apiKey, proxyPort = 5271 }) {
   const vid = await vite.ssrLoadModule('/src/features/generate/video.ts')
   const model = await vite.ssrLoadModule('/src/types/model.ts')
   const models = await vite.ssrLoadModule('/src/models/index.ts')
+  const layout = await vite.ssrLoadModule('/src/features/layout/mossLayout.ts')
+  const planner = await vite.ssrLoadModule('/src/features/layout/planner.ts')
 
   return {
     api,
@@ -78,6 +80,8 @@ export async function startEnv({ apiKey, proxyPort = 5271 }) {
     vid,
     model,
     models,
+    layout,
+    planner,
     async close() {
       await vite.close()
       await new Promise((resolve) => proxy.close(resolve))

@@ -13,6 +13,9 @@ import { aspectRatioToDimensions } from '@/features/generate/aspectRatio'
 import { pollVideoStatus } from '@/features/generate/video'
 import { resolveRealCost } from '@/utils/format'
 import { buildEffectivePrompt } from '@/features/skill/apply'
+import type { MossLayout } from '@/types/layout'
+import { cloneLayout, toMossLayoutPrompt } from '@/features/layout/mossLayout'
+import { planMossLayout } from '@/features/layout/planner'
 
 type UploadInput = UploadedFile | UploadedFile[] | null | undefined
 
@@ -25,6 +28,10 @@ export interface GenerateOptions {
   imageSize?: string
   /** 视频生成方式；部分模型（如 Seedance 编辑视频）需要据此改写比例与时长。 */
   videoGenerationMode?: VideoGenerationMode | null
+  /** 直接使用指定布局生成（Moss 图层编辑后重新生成）。 */
+  mossLayout?: MossLayout | null
+  /** 首次生成时，先让文本模型把自然语言拆成 Moss 分层布局。 */
+  mossLayoutMode?: boolean
 }
 
 function ioTypeToGenerateType(ioType: ModelIOType): GenerateType {
@@ -52,14 +59,15 @@ function buildImageResult(
   model: string | null,
   aspectRatio: string,
   capability: ModelCapability | null,
-  outputSize?: { width: number; height: number } | null
+  outputSize?: { width: number; height: number } | null,
+  layout?: MossLayout | null
 ): GenerateResult {
   const url = response.data[0]?.url || ''
   if (!url) {
     throw new Error('图片生成完成但未返回有效图片地址，请稍后重试或切换模型。')
   }
 
-  return buildImageResultFromUrl(url, response, model, aspectRatio, capability, outputSize)
+  return buildImageResultFromUrl(url, response, model, aspectRatio, capability, outputSize, layout)
 }
 
 function buildImageResultFromUrl(
@@ -68,7 +76,8 @@ function buildImageResultFromUrl(
   model: string | null,
   aspectRatio: string,
   capability: ModelCapability | null,
-  outputSize?: { width: number; height: number } | null
+  outputSize?: { width: number; height: number } | null,
+  layout?: MossLayout | null
 ): GenerateResult {
   return {
     type: 'image',
@@ -79,6 +88,7 @@ function buildImageResultFromUrl(
     aspectRatio,
     createdAt: Date.now(),
     size: outputSize || aspectRatioToDimensions(aspectRatio, capability?.imageRequestMode),
+    ...(layout ? { layout } : {}),
   }
 }
 
@@ -177,8 +187,24 @@ export function useGenerate() {
       const outputSize = parseImageSize(options.imageSize)
 
       if (generateType === 'image') {
+        // Moss 分层：可直接沿用编辑后的布局，或先让文本模型把自然语言拆成布局。
+        let mossLayout: MossLayout | null = options.mossLayout ? cloneLayout(options.mossLayout) : null
+        if (!mossLayout && options.mossLayoutMode && capability?.imageRequestMode === 'moss') {
+          const layoutSize = outputSize || aspectRatioToDimensions(aspectRatio, capability?.imageRequestMode)
+          mossLayout = await planMossLayout({
+            idea: effectivePrompt,
+            width: layoutSize.width,
+            height: layoutSize.height,
+            aspectRatio,
+          })
+        }
+        if (mossLayout) {
+          chatStore.updateMessage(assistantId, { layout: mossLayout })
+        }
+        const requestPrompt = mossLayout ? toMossLayoutPrompt(mossLayout) : effectivePrompt
+
         const imageParams = await buildImageParams(
-          effectivePrompt,
+          requestPrompt,
           model,
           options.generationFile || uploadedFile,
           aspectRatio,
@@ -188,7 +214,7 @@ export function useGenerate() {
 
         if (requestedBatchSize === 1) {
           const result = await generateImage(imageParams)
-          const imageResult = buildImageResult(result, model, aspectRatio, capability, outputSize)
+          const imageResult = buildImageResult(result, model, aspectRatio, capability, outputSize, mossLayout)
           chatStore.updateMessage(assistantId, {
             generateStatus: 'completed',
             generateResult: imageResult,
@@ -209,7 +235,7 @@ export function useGenerate() {
             const batchResults = batchResult.data
               .filter((item) => !!item.url)
               .slice(0, requestedBatchSize)
-              .map((item) => buildImageResultFromUrl(item.url as string, batchResult, model, aspectRatio, capability, outputSize))
+              .map((item) => buildImageResultFromUrl(item.url as string, batchResult, model, aspectRatio, capability, outputSize, mossLayout))
             imageResults.push(...batchResults)
             if (imageResults.length) {
               chatStore.updateMessage(assistantId, {
@@ -236,7 +262,7 @@ export function useGenerate() {
         if (remainingCount > 0) {
           const imageTasks = Array.from({ length: remainingCount }, async () => {
             const result = await generateImage({ ...imageParams })
-            const imageResult = buildImageResult(result, model, aspectRatio, capability, outputSize)
+            const imageResult = buildImageResult(result, model, aspectRatio, capability, outputSize, mossLayout)
             imageResults.push(imageResult)
             // 出一张显示一张，不必等整批完成。
             chatStore.updateMessage(assistantId, {

@@ -12,6 +12,10 @@ const MOSS_MAX_SIDE = 2048
 const MOSS_SIDE_STEP = 16
 const MOSS_MAX_PIXELS = 2097152
 
+/** 分层布局必须关闭提示词增强，否则 JSON 会被模型改写。 */
+const MOSS_DEFAULT_NEGATIVE_PROMPT =
+  'blurry, low quality, bad anatomy, distorted text, watermark, jpeg artifacts'
+
 function isValidMossSize(width: number, height: number): boolean {
   const sidesValid = [width, height].every(
     (side) => side >= MOSS_MIN_SIDE && side <= MOSS_MAX_SIDE && side % MOSS_SIDE_STEP === 0
@@ -65,6 +69,14 @@ export function buildMossImageRequestBody(params: ImageGenerateRequest): Record<
 
   if (body.response_format !== 'url') {
     delete body.response_format
+  }
+
+  // 布局 JSON 必须原样送给模型：显式关闭提示词增强，并默认关闭可见水印。
+  body.prompt_enhance = params.prompt_enhance === true
+  body.negative_prompt = params.negative_prompt || MOSS_DEFAULT_NEGATIVE_PROMPT
+  body.output_watermark = params.output_watermark || { enabled: false }
+  if (typeof params.seed === 'number' && Number.isFinite(params.seed)) {
+    body.seed = Math.max(0, Math.trunc(params.seed))
   }
 
   return body

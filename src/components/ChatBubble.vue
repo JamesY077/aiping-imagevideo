@@ -65,6 +65,7 @@
               :result="result"
               @regenerate="$emit('regenerate', message)"
               @expand="$emit('expandImage', result)"
+              @edit-layers="$emit('editLayers', result)"
             />
             <VideoResult
               v-else-if="result.type === 'video'"
@@ -114,6 +115,7 @@ defineEmits<{
   (e: 'regenerate', message: Message): void
   (e: 'copyPrompt', prompt: string): void
   (e: 'expandImage', result: GenerateResult): void
+  (e: 'editLayers', result: GenerateResult): void
 }>()
 
 const previewFiles = computed(() => props.message.uploadedFiles?.length ? props.message.uploadedFiles : props.message.uploadedFile ? [props.message.uploadedFile] : [])

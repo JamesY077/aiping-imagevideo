@@ -58,6 +58,7 @@
               @regenerate="handleRegenerate"
               @copy-prompt="handleCopyPrompt"
               @expand-image="handleExpandImage"
+              @edit-layers="handleEditLayers"
             />
 
             <div v-if="!hasUserMessages" class="quick-start-block">
@@ -260,6 +261,28 @@
                 </div>
               </div>
 
+              <div v-if="isMossImageModel && !isExpandMode" class="meta-pill meta-pill-layout">
+                <span class="meta-pill-label">分层布局</span>
+                <div class="video-mode-switch compact-switch" role="tablist" aria-label="Moss 分层布局">
+                  <button
+                    class="switch-btn mode-switch-btn"
+                    :class="{ active: mossLayoutEnabled }"
+                    type="button"
+                    @click="mossLayoutEnabled = true"
+                  >
+                    按图层
+                  </button>
+                  <button
+                    class="switch-btn mode-switch-btn"
+                    :class="{ active: !mossLayoutEnabled }"
+                    type="button"
+                    @click="mossLayoutEnabled = false"
+                  >
+                    整图
+                  </button>
+                </div>
+              </div>
+
             </div>
 
             <p v-if="isFrameRatioLocked" class="ratio-lock-note">
@@ -279,6 +302,9 @@
             </p>
             <p v-if="isExpandMode && isExpandRatioSame" class="ratio-lock-note expand-ratio-warning">
               当前扩图比例与原图一致，请选择其他比例后再发送。
+            </p>
+            <p v-if="isMossImageModel && mossLayoutEnabled && !isExpandMode" class="ratio-lock-note">
+              会先用文本模型把描述拆成图层与位置（约 5-10 秒），再用 Moss 按布局出图；生成后可在结果卡片点「图层」进入编辑。
             </p>
 
 
@@ -838,6 +864,14 @@
       @upload="chooseLocalAudio"
       @select="addAudioFromLibrary"
     />
+
+    <MossLayerEditor
+      v-if="layerEditorState"
+      :image-url="layerEditorState.imageUrl"
+      :layout="layerEditorState.layout"
+      @close="layerEditorState = null"
+      @regenerate="handleLayerRegenerate"
+    />
   </div>
 </template>
 
@@ -845,6 +879,7 @@
 import { ref, nextTick, onMounted, computed, watch, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import ChatBubble from '@/components/ChatBubble.vue'
+import MossLayerEditor from '@/components/MossLayerEditor.vue'
 import ModelSelector from '@/components/ModelSelector.vue'
 import CameraMovementGuide from '@/components/CameraMovementGuide.vue'
 import AudioLibraryPicker from '@/components/AudioLibraryPicker.vue'
@@ -874,6 +909,7 @@ import {
 import { showErrorMessage } from '@/utils/errors'
 import { getReadableErrorMessage, validatePromptOrThrow } from '@/utils/errorHandling'
 import type { GenerateResult, ImageGenerationMode, Message, UploadedFile } from '@/types/chat'
+import type { MossLayout } from '@/types/layout'
 import { resolveGenerateIoType } from '@/features/generate/media'
 import { createExpandedUploadedFile, getExpandTargetSize } from '@/features/generate/expand'
 import {
@@ -1095,6 +1131,12 @@ const activeMessages = computed(() => chatStore.messages)
 const hasUserMessages = computed(() => chatStore.messages.some((m) => m.type === 'user'))
 const activeSessionGenerating = computed(() => chatStore.isGenerating)
 const modelCapability = computed(() => getModelCapability(settingsStore.selectedModel))
+// Moss-Image 原生支持结构化布局，是唯一可做「分层布局 / 图层编辑」的图片模型。
+const isMossImageModel = computed(
+  () => settingsStore.mediaType === 'image' && modelCapability.value?.imageRequestMode === 'moss',
+)
+const mossLayoutEnabled = ref(true)
+const layerEditorState = ref<{ imageUrl: string; layout: MossLayout } | null>(null)
 const isViduVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'viduq3-fast')
 const isViduQ3ProFastModel = computed(() => isViduVideoModel.value && settingsStore.selectedModel?.toLowerCase() === 'viduq3-pro-fast')
 const isMinimaxHailuoVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'minimax-hailuo')
@@ -2295,6 +2337,43 @@ function handleExpandImage(result: GenerateResult) {
   quickExpandResult.value = result
 }
 
+function handleEditLayers(result: GenerateResult) {
+  if (!result.layout) return
+  layerEditorState.value = {
+    imageUrl: result.url,
+    layout: result.layout,
+  }
+}
+
+/** 图层编辑完成后，按新布局调用 Moss 重新生成一张图。 */
+async function handleLayerRegenerate(layout: MossLayout) {
+  layerEditorState.value = null
+  if (activeSessionGenerating.value) return
+
+  settingsStore.setMediaType('image')
+  settingsStore.selectedModel = 'Moss-Image-SFT'
+  settingsStore.aspectRatio = layout.aspectRatio || settingsStore.aspectRatio
+  settingsStore.saveToStorage()
+  imageMode.value = 'text2image'
+
+  await generate(
+    `图层调整后重新生成 · ${layout.items.length} 个图层`,
+    'text2image',
+    'Moss-Image-SFT',
+    null,
+    settingsStore.aspectRatio,
+    settingsStore.videoDuration,
+    false,
+    null,
+    settingsStore.videoResolution,
+    1,
+    { mossLayout: layout },
+  )
+
+  await nextTick()
+  scrollChatToBottom()
+}
+
 function closeQuickExpand() {
   quickExpandResult.value = null
 }
@@ -2421,6 +2500,8 @@ async function handleSend() {
   scrollChatToBottom()
   await generate(prompt, ioType, settingsStore.selectedModel, file, settingsStore.aspectRatio, settingsStore.videoDuration, false, skillStore.activeSkill?.content || null, settingsStore.videoResolution, settingsStore.batchSize, {
     videoGenerationMode: videoMode.value,
+    // Moss 开启分层时，先把自然语言拆成布局再出图；生成后可在结果卡片进入图层编辑。
+    mossLayoutMode: isMossImageModel.value && mossLayoutEnabled.value && !isExpandMode.value,
   })
 
 
@@ -2447,6 +2528,8 @@ async function handleRegenerate(message: Message) {
     const model = userMsg.model || settingsStore.selectedModel
     const duration = userMsg.duration || settingsStore.videoDuration
     const batchSize = userMsg.batchSize || settingsStore.batchSize
+    // Moss 分层结果重生成时沿用原布局，避免退化成普通文生图。
+    const savedLayout = message.layout || message.generateResults?.find((item) => item.layout)?.layout || null
     await generate(
       userMsg.content,
       resolveGenerateIoType(settingsStore.mediaType, userMsg.uploadedFiles?.[0] || userMsg.uploadedFile),
@@ -2461,6 +2544,7 @@ async function handleRegenerate(message: Message) {
       {
         // 沿用发起时的视频方式，避免编辑视频重新生成时被当成普通生成。
         videoGenerationMode: userMsg.videoMode ?? null,
+        mossLayout: savedLayout,
       },
     )
     await nextTick()

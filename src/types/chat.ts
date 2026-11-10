@@ -1,4 +1,5 @@
 import type { VideoGenerationMode } from '@/types/model'
+import type { MossLayout } from '@/types/layout'
 
 export type MessageType = 'system' | 'user' | 'assistant'
 
@@ -24,6 +25,8 @@ export interface GenerateResult {
     width: number
     height: number
   }
+  /** Moss 分层布局：仅该模型生成的图片会携带，用于打开图层编辑器。 */
+  layout?: MossLayout
 }
 
 export interface Message {
@@ -51,6 +54,8 @@ export interface Message {
   imageMode?: ImageGenerationMode
   /** 用户发起本轮生成时选择的视频生成方式；重新生成时沿用（如 Seedance 编辑视频）。 */
   videoMode?: VideoGenerationMode
+  /** 本轮图片生成使用的 Moss 分层布局；重生成与图层编辑沿用。 */
+  layout?: MossLayout
 }
 
 export interface MotionControlOptions {

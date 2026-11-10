@@ -81,6 +81,14 @@ export interface ImageGenerateRequest {
   extra_body?: Record<string, unknown>
   n?: number
   response_format?: 'url' | 'b64_json'
+  /** 不希望出现的内容（Moss 支持）。 */
+  negative_prompt?: string
+  /** 是否在同一任务内增强提示词；Moss 的分层 JSON 必须关闭，否则会被改写。 */
+  prompt_enhance?: boolean
+  /** 输出水印开关（Moss 支持）。 */
+  output_watermark?: { enabled: boolean }
+  /** 随机种子（Moss 支持）。 */
+  seed?: number
 }
 
 export interface ImageGenerateResponse {
