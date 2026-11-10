@@ -464,15 +464,22 @@ function isAipingApiConfigured(): boolean {
   }
 }
 
-/** 把 Seedance 2.0 的上游错误转换成普通用户能理解的提示。 */
+/** 从上游错误响应里取出可读的错误文案。 */
+function readUpstreamMessage(error: any): string {
+  const data = error?.response?.data
+  return (
+    (typeof data?.error?.message === 'string' && data.error.message) ||
+    (typeof data?.msg === 'string' && data.msg) ||
+    (typeof data?.error === 'string' && data.error) ||
+    (typeof data?.message === 'string' && data.message) ||
+    ''
+  )
+}
+
+/** 把 Seedance 的上游错误转换成普通用户能理解的提示。 */
 function resolveSeedanceCreateError(error: any): AppError | null {
   const status = error?.response?.status
-  const data = error?.response?.data
-  const msg =
-    (typeof data?.msg === 'string' && data.msg) ||
-    (typeof data?.error?.message === 'string' && data.error.message) ||
-    (typeof data?.error === 'string' && data.error) ||
-    ''
+  const msg = readUpstreamMessage(error)
 
   if (status === 401 || status === 403) {
     return new AppError('Seedance 2.0 系列仅支持已开通白名单的账号调用。当前 API Key 未开通白名单权限，请联系服务商开通后重试。')
@@ -497,6 +504,14 @@ function resolveSeedanceCreateError(error: any): AppError | null {
     const maxSeconds = Math.floor(Number(durationMatch[1]))
     return new AppError(
       `参考视频时长超出当前模型限制（最多 ${maxSeconds} 秒）。请换用更短的视频；如果只是想编辑这段视频，请改用「编辑视频」模式（支持 4-30 秒）。`,
+    )
+  }
+
+  // 任务被判定为「视频续写/延长」时，输出比例只能跟随原视频（adaptive）。
+  if (/video extension/i.test(msg) && /`?ratio`?.*adaptive/i.test(msg)) {
+    return new AppError(
+      '这段提示词被识别为「视频续写/延长」，输出比例必须跟随参考视频，不能指定 16:9 等固定比例。' +
+        '请把画面比例改为「自适应」，或把提示词改成「参考视频中的动作/风格」这类描述后重试。',
     )
   }
 
@@ -572,7 +587,13 @@ async function generateSeedanceVideo(params: VideoGenerateRequest, canonicalMode
   const videoUrls = await prepareSeedanceReferenceUrls(referenceVideos, 'Video')
   const audioUrls = await prepareSeedanceReferenceUrls(referenceAudios, 'Audio')
 
-  const body: Record<string, unknown> = {
+  // 带参考视频时上游可能把任务判定为「视频续写/延长」，此时输出比例必须跟随原视频，
+  // 只能传 adaptive（传 16:9 等会在创建阶段被拒）。这里直接按 adaptive 提交，
+  // 无参考视频时仍然尊重用户选择的比例。
+  const hasReferenceVideo = videoUrls.length > 0
+  const requestedRatio = params.aspect_ratio || params.ratio || '16:9'
+
+  const buildBody = (ratio: string): Record<string, unknown> => ({
     model: params.model || canonicalModel,
     content: buildSeedanceContent(params.prompt, {
       images: imageUrls,
@@ -580,11 +601,12 @@ async function generateSeedanceVideo(params: VideoGenerateRequest, canonicalMode
       audios: audioUrls,
     }),
     generate_audio: typeof params.audio === 'boolean' ? params.audio : true,
-    ratio: params.aspect_ratio || params.ratio || '16:9',
+    ratio,
     duration: params.duration || params.seconds || 5,
     watermark: typeof params.watermark === 'boolean' ? params.watermark : false,
-  }
+  })
 
+  const body = buildBody(hasReferenceVideo ? 'adaptive' : requestedRatio)
 
   debugLog('generateVideo provider=seedance body:', sanitizeDebugBody(body))
   try {
@@ -596,9 +618,17 @@ async function generateSeedanceVideo(params: VideoGenerateRequest, canonicalMode
       status: error.response?.status,
       data: error.response?.data,
     })
+
+    // 兜底：上游仍要求 adaptive（例如任务被识别为视频续写）时，改用 adaptive 重试一次。
+    if (body.ratio !== 'adaptive' && readUpstreamMessage(error).includes('must be `adaptive`')) {
+      const retryBody = buildBody('adaptive')
+      const response = await postVideoCreateWithRetry(SEEDANCE_TASKS_ENDPOINT, retryBody)
+      return normalizeSeedanceResponse(response.data)
+    }
+
     const resolvedError = resolveSeedanceCreateError(error)
     if (resolvedError) throw resolvedError
-    throw new AppError(getApiErrorMessage(error, 'Seedance 2.0 视频生成失败，请确认账号已完成白名单接入后重试。'))
+    throw new AppError(getApiErrorMessage(error, 'Seedance 视频生成失败，请确认账号已完成白名单接入后重试。'))
   }
 }
 

@@ -346,6 +346,11 @@ export async function buildVideoParams(
       videoParams.watermark = false
       deleteVideoRatio(videoParams)
       videoParams.aspect_ratio = aspectRatio || '16:9'
+      if (referenceVideos.length) {
+        // 带参考视频时，上游可能把任务判定为「视频续写/延长」，此时输出比例必须跟随
+        // 参考视频（只接受 adaptive），传 16:9 等固定比例会在创建阶段被拒。
+        videoParams.aspect_ratio = 'adaptive'
+      }
       if (videoGenerationMode === 'editVideo') {
         // Seedance 编辑视频：输出比例与时长必须跟随被编辑的输入视频，
         // 上游只接受 ratio=adaptive、duration=-1（输入视频需 4-30s）。

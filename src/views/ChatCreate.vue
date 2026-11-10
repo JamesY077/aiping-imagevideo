@@ -168,17 +168,17 @@
                 </div>
               </div>
 
-              <div class="meta-pill meta-pill-ratio" :class="{ 'ratio-locked': isFrameRatioLocked }">
+              <div class="meta-pill meta-pill-ratio" :class="{ 'ratio-locked': isFrameRatioLocked || isReferenceVideoRatioLocked }">
                 <span class="meta-pill-label">{{ isExpandMode ? '扩图比例' : '比例' }}</span>
                 <div class="duration-selector">
                   <div class="duration-select-wrap">
                     <select
-                      v-if="isFrameRatioLocked || isEditVideoMode"
+                      v-if="isFrameRatioLocked || isEditVideoMode || isReferenceVideoRatioLocked"
                       class="duration-select"
                       disabled
-                      :aria-label="isEditVideoMode ? '比例由被编辑的原视频决定' : '比例由上传图片决定'"
+                      :aria-label="isEditVideoMode ? '比例由被编辑的原视频决定' : isReferenceVideoRatioLocked ? '比例由参考视频决定' : '比例由上传图片决定'"
                     >
-                      <option>{{ isEditVideoMode ? '跟随原视频' : '跟随图片' }}</option>
+                      <option>{{ isReferenceVideoRatioLocked ? '跟随参考视频' : isEditVideoMode ? '跟随原视频' : '跟随图片' }}</option>
                     </select>
                     <select
                       v-else
@@ -267,6 +267,9 @@
             </p>
             <p v-if="isEditVideoMode" class="ratio-lock-note">
               编辑视频模式下，输出比例与时长跟随被编辑的原视频（原视频需 4-30 秒）
+            </p>
+            <p v-if="isReferenceVideoRatioLocked" class="ratio-lock-note">
+              多模态参考带参考视频时，输出比例跟随参考视频（自适应），不支持手动调整
             </p>
             <p v-if="videoMode === 'startEnd2video'" class="ratio-lock-note">
               首尾帧上传图片比例需要一致
@@ -1126,6 +1129,10 @@ const isFrameRatioLocked = computed(
 )
 // 多模态参考：Seedance 2.0 与 MiniMax-H3 共用「素材 + @ 引用」面板。
 const isMultimodalReferenceMode = computed(() => (isSeedanceVideoModel.value || isMinimaxH3VideoModel.value) && videoMode.value === 'multimodalReference2video')
+// Seedance 多模态参考带参考视频时，输出比例必须跟随参考视频（上游只接受 adaptive）。
+const isReferenceVideoRatioLocked = computed(
+  () => isSeedanceVideoModel.value && videoMode.value === 'multimodalReference2video' && multimodalVideos.value.length > 0,
+)
 const isEditVideoMode = computed(() => isSeedanceVideoModel.value && videoMode.value === 'editVideo')
 // 多模态参考、编辑视频、Kling 参考生视频都使用「素材 + @ 引用」的面板
 const isSeedanceMentionMode = computed(() => isMultimodalReferenceMode.value || isEditVideoMode.value || isKlingReferenceMode.value)
