@@ -29,6 +29,11 @@ export interface ModelCapability {
     | 'requires-video-upload'
   imageRequestMode?: 'default' | 'seedream-5-lite'
   videoRequestMode?: 'kling-v26' | 'kling-v3' | 'kling-omni' | 'kling-o1' | 'viduq3-fast' | 'minimax-hailuo' | 'minimax-h3' | 'seedance-2'
+  /**
+   * 视频时长可选项（秒）。不同模型上限不同，未配置时由 videoRequestMode 的默认档位决定。
+   * 例：Seedance 2.0 系列 4-15s，Seedance 2.5 4-30s。
+   */
+  videoDurations?: number[]
 
 }
 
@@ -189,13 +194,24 @@ export function getSupportedAspectRatios(
 
 
 export function getSupportedVideoDurations(modelId: string | null | undefined): VideoDurationOption[] | null {
-  const mode = getModelCapability(modelId)?.videoRequestMode
+  const capability = getModelCapability(modelId)
+  const mode = capability?.videoRequestMode
+
+  // 模型自己声明了时长档位时优先使用（各 Seedance 版本上限不同）。
+  if (capability?.videoDurations?.length) {
+    return capability.videoDurations.map((value) => ({ value, label: `${value}s` }))
+  }
 
   switch (mode) {
     case 'seedance-2':
+      // 兜底：Seedance 2.0 系列实测 4-15s（4/16 边界已验证）。
       return [
+        { value: 4, label: '4s' },
         { value: 5, label: '5s' },
         { value: 8, label: '8s' },
+        { value: 10, label: '10s' },
+        { value: 12, label: '12s' },
+        { value: 15, label: '15s' },
       ]
     case 'kling-v26':
     case 'kling-v3':

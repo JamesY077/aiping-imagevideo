@@ -507,6 +507,14 @@ function resolveSeedanceCreateError(error: any): AppError | null {
     )
   }
 
+  // 时长不在模型允许范围内（各版本上限不同）。
+  if (/parameter duration specified in the request is not valid/i.test(msg)) {
+    const received = msg.match(/received:\s*"?(\d+)/i)?.[1]
+    return new AppError(
+      `当前模型不支持 ${received ? `${received} 秒` : '该'}时长。实测范围：Seedance 2.0 / 2.0-fast / 2.0-mini 为 4-15 秒，Seedance 2.5 为 4-30 秒。`,
+    )
+  }
+
   // 任务被判定为「视频续写/延长」时，输出比例只能跟随原视频（adaptive）。
   if (/video extension/i.test(msg) && /`?ratio`?.*adaptive/i.test(msg)) {
     return new AppError(
