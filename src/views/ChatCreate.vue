@@ -614,6 +614,35 @@
                 </div>
               </template>
 
+              <div v-else-if="isImageMultiReferenceMode" class="multimodal-panel image-multimodal-panel">
+                <p class="multimodal-note">
+                  多图参考
+                  <small>最多 {{ imageReferenceLimit }} 张。上传后可在文本中输入 <b>@</b> 精确指定素材位置，例如「把 @图片1 的商品放进 @图片2 的场景」。支持 PNG / JPG / WebP 等格式。</small>
+                </p>
+                <div class="multimodal-groups">
+                  <div class="multimodal-group">
+                    <div class="multimodal-group-head">
+                      <span class="multimodal-group-title">参考图片</span>
+                      <span class="multimodal-group-count">{{ multimodalImages.length }}/{{ imageReferenceLimit }}</span>
+                    </div>
+                    <div class="multimodal-thumb-row">
+                      <div v-for="item in multimodalImages" :key="item.url" class="multimodal-thumb">
+                        <img :src="item.url" :alt="item.refLabel" loading="lazy" decoding="async" />
+                        <span class="multimodal-thumb-tag">{{ item.refLabel }}</span>
+                        <button class="multimodal-thumb-remove" type="button" aria-label="移除" @click="removeMultimodalAsset('image', item)">×</button>
+                      </div>
+                      <button
+                        v-if="multimodalImages.length < imageReferenceLimit"
+                        class="multimodal-add-btn"
+                        type="button"
+                        aria-label="添加参考图片"
+                        @click="multimodalImageInput?.click()"
+                      >+</button>
+                    </div>
+                    <input ref="multimodalImageInput" type="file" :accept="IMAGE_FILE_ACCEPT" multiple class="file-input" @change="handleMultimodalFileChange($event, 'image')" />
+                  </div>
+                </div>
+              </div>
 
               <div
                 v-else-if="isImageReferenceMode || isExpandMode"
@@ -1136,6 +1165,14 @@ const modelCapability = computed(() => getModelCapability(settingsStore.selected
 const isMossImageModel = computed(
   () => settingsStore.mediaType === 'image' && modelCapability.value?.imageRequestMode === 'moss',
 )
+// Seedream 5.0 Lite 等图片模型支持多图参考：复用视频的「素材 + @ 引用」面板（仅图片）。
+const isImageMultiReferenceMode = computed(
+  () =>
+    settingsStore.mediaType === 'image' &&
+    imageMode.value === 'image2image' &&
+    modelCapability.value?.imageReferenceMode === 'multi',
+)
+const imageReferenceLimit = computed(() => modelCapability.value?.imageReferenceLimit ?? MULTIMODAL_LIMITS.image)
 const mossLayoutEnabled = ref(true)
 const layerEditorState = ref<{ imageUrl: string; layout: MossLayout } | null>(null)
 const isViduVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'viduq3-fast')
@@ -1184,7 +1221,10 @@ const isSeedanceMentionMode = computed(() => isMultimodalReferenceMode.value || 
 const usesViduLikeVideoMode = computed(() => isViduVideoModel.value || isMinimaxHailuoVideoModel.value || isMinimaxH3VideoModel.value || isKlingMultimodalVideoModel.value || isSeedanceVideoModel.value)
 // 统一引用开关：MiniMax-H3 等视频模型只要处于「多模态参考」模式，就复用 seedance2 的 @ 引用面板。
 const isMentionReferenceMode = computed(
-  () => isSeedanceMentionMode.value || (usesViduLikeVideoMode.value && videoMode.value === 'multimodalReference2video'),
+  () =>
+    isSeedanceMentionMode.value ||
+    (usesViduLikeVideoMode.value && videoMode.value === 'multimodalReference2video') ||
+    isImageMultiReferenceMode.value,
 )
 const activeVideoModeOptions = computed(() => {
   if (isMinimaxHailuoVideoModel.value) return minimaxHailuoVideoModeOptions
@@ -1201,6 +1241,10 @@ const mentionableAssets = computed<UploadedFile[]>(() => {
   // 编辑视频：固定「视频1 + 图片1」，用于 @ 引用与彩色标签
   if (isEditVideoMode.value) {
     return [editVideoFile.value, editImageFile.value].filter((item): item is UploadedFile => !!item)
+  }
+  // 图片多图参考：只允许图片素材（不支持音频 / 视频）。
+  if (isImageMultiReferenceMode.value) {
+    return [...multimodalImages.value]
   }
   return [
     ...multimodalImages.value,
@@ -1260,7 +1304,9 @@ const requiresUpload = computed(() => {
 const showReferenceUrlInput = computed(() => requiresUpload.value && !isUploadEnabled.value)
 const showReferenceField = computed(() => {
   if (usesViduLikeVideoMode.value) return videoMode.value !== 'text2video'
-  if (settingsStore.mediaType === 'image') return isImageReferenceMode.value || isExpandMode.value || showReferenceUrlInput.value
+  if (settingsStore.mediaType === 'image') {
+    return isImageMultiReferenceMode.value || isImageReferenceMode.value || isExpandMode.value || showReferenceUrlInput.value
+  }
   return isUploadEnabled.value || showReferenceUrlInput.value
 })
 
@@ -1353,6 +1399,11 @@ const needsMaterialAttention = computed(() => {
 const materialSummaryLabel = computed(() => {
   if (!showReferenceField.value) return ''
   if (isExpandMode.value) return uploadedFile.value ? `原图：${uploadedFile.value.name}` : '原图：待上传'
+  if (isImageMultiReferenceMode.value) {
+    return multimodalImages.value.length
+      ? `多图参考 ${multimodalImages.value.length}/${imageReferenceLimit.value}`
+      : '多图参考待上传'
+  }
   if (isImageReferenceMode.value) return uploadedFile.value ? `素材：${uploadedFile.value.name}` : '素材：待上传'
   if (showReferenceUrlInput.value) return referenceUrl.value.trim() ? '参考链接已填写' : '参考链接待填写'
   if (usesViduLikeVideoMode.value) {
@@ -1400,6 +1451,9 @@ const inputPlaceholder = computed(() => {
   if (usesViduLikeVideoMode.value && videoMode.value === 'startEnd2video') {
     return '描述首帧到尾帧之间的变化过程、镜头运动、节奏和氛围。'
   }
+  if (isImageMultiReferenceMode.value) {
+    return '描述生成目标，可输入 @ 引用图片，例如「把 @图片1 的人物放进 @图片2 的场景，保持图2 的光线」。'
+  }
   if (isMentionReferenceMode.value) {
     return '描述生成目标，可输入 @ 引用图片、视频或音频，例如「让 @图片1 的角色走向 @视频1 的场景，并配合 @音频1 的节奏」。'
   }
@@ -1445,6 +1499,7 @@ const canSend = computed(() => {
   }
 
   if (settingsStore.mediaType === 'image' && imageMode.value === 'image2image') {
+    if (isImageMultiReferenceMode.value) return multimodalImages.value.length > 0
     return supportsImageReferenceMode.value && !!uploadedFile.value
   }
   if (modelCapability.value?.availabilityNote === 'requires-image-upload' || modelCapability.value?.availabilityNote === 'requires-video-upload') {
@@ -1976,7 +2031,9 @@ function handleMultimodalFileChange(e: Event, type: 'image' | 'video' | 'audio')
   if (!files.length) return
 
   const listRef = multimodalRefFromType(type)
-  const limit = MULTIMODAL_LIMITS[type]
+  const limit = type === 'image' && isImageMultiReferenceMode.value
+    ? imageReferenceLimit.value
+    : MULTIMODAL_LIMITS[type]
 
   for (const file of files) {
     if (listRef.value.length >= limit) {
@@ -2262,6 +2319,10 @@ watch(
     if (!supportsImageReferenceMode.value) {
       imageMode.value = 'text2image'
     }
+    // 图片模型切到不支持多图参考的模型时，释放已上传的多图素材，避免残留占用。
+    if (settingsStore.mediaType === 'image' && capability?.imageReferenceMode !== 'multi') {
+      clearMultimodalAssets()
+    }
     const usesModeSwitcher = settingsStore.mediaType === 'video' && ['viduq3-fast', 'minimax-hailuo', 'minimax-h3', 'kling-v26', 'kling-v3', 'kling-omni', 'seedance-2'].includes(capability?.videoRequestMode || '')
     if (!usesModeSwitcher) {
       videoMode.value = 'text2video'
@@ -2447,7 +2508,9 @@ async function handleSend() {
 
   inputText.value = ''
 
-  const file: UploadedFile | UploadedFile[] | null = usesViduLikeVideoMode.value
+  const file: UploadedFile | UploadedFile[] | null = isImageMultiReferenceMode.value
+    ? (multimodalImages.value.length ? [...multimodalImages.value] : null)
+    : usesViduLikeVideoMode.value
     ? videoMode.value === 'image2video'
       ? uploadedFile.value
       : videoMode.value === 'motionControl2video' && motionControlImage.value && motionControlVideo.value

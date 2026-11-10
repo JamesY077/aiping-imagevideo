@@ -5,7 +5,7 @@
 ## 功能
 
 - **对话式创作（简易模式）**：以聊天流形式展示提示词、生成状态与最终结果，支持下载与再次迭代。
-- **图片生成**：文生图、图生图、参考图生成，内置常用画面比例（16:9 至 9:16）。
+- **图片生成**：文生图、图生图、参考图生成；Seedream 5.0 Lite 支持最多 10 张多图参考，可用 `@图片N` 在提示词中指定素材；内置常用画面比例（16:9 至 9:16）。
 - **视频生成**：文生视频、图生视频、首尾帧、尾帧、主体参考、动作控制、多模态参考与视频编辑，按模型能力自动展示可用方式。
 - **Skill 创作**：通过 ArtSkills-V1 把一句话需求生成标准化 Skill Markdown，支持多轮修改、模板库、本地应用与下载。
 - **提示词模板库**：内置一批可直接使用的创作模板，如产品电商图、国风插画、电影镜头等。
@@ -112,16 +112,17 @@ node scripts/analyze-matrix.mjs test-results/matrix-*.jsonl          # 汇总为
 
 API Base URL 与 API Key 保存在浏览器本地，配置完成后即可进入工作台，未配置时受限页面会自动跳转回首页。
 
-## 参考文件上传服务（仅 Seedance 2 本地参考视频必需）
+## 参考文件上传服务（Seedance 2 本地参考视频 / Seedream 多图参考）
 
 实测结论（2026-11）：
 
 - **Seedance 2 系列**：参考图、参考音频支持 base64 dataURI 直传；**参考视频只接受公网 URL**（传 dataURI 返回 `reference_video must be provided as a web url`）。
 - **MiniMax-H3**：参考图、参考视频、参考音频都支持 dataURI 直传，不需要上传服务。
+- **Seedream 5.0 Lite**：参考图支持 dataURI，但多图参考（最多 10 张）会让请求体明显变大，优先换成公网 URL；服务不可用时自动降级为 dataURI。
 
-所以 `server/upload-service`（Express + 腾讯云 COS）只服务一个场景：**Seedance 2 的本地参考视频**。
+所以 `server/upload-service`（Express + 腾讯云 COS）主要服务两个场景：**Seedance 2 的本地参考视频**，以及 **Seedream 5.0 Lite 的多图参考**。
 
-- 不部署上传服务时：图片、音频、文生视频、图生视频、H3 全链路都正常；只有「Seedance + 本地视频」会给出明确提示，建议改用公网视频地址。
+- 不部署上传服务时：图片、音频、文生视频、图生视频、H3 全链路都正常；只有「Seedance + 本地视频」会给出明确提示，建议改用公网视频地址；Seedream 多图参考会自动降级为 dataURI。
 - 需要支持「Seedance + 本地视频」时：部署 `server/upload-service`，并在 Nginx 加 `/upload` 反代（约 10 行）。
 
 部署与配置方法见 `server/upload-service/README.md` 与 `DEPLOYMENT.md` 第四 / 七节；前端通过 `VITE_UPLOAD_SERVICE_URL` 与 `VITE_UPLOAD_SERVICE_TOKEN` 配置。

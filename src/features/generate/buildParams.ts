@@ -19,18 +19,23 @@ export async function buildImageParams(
   uploadedFile: UploadInput,
   aspectRatio: string,
   mode: ImageRequestMode | undefined,
-  sizeOverride?: string
+  sizeOverride?: string,
+  /** 'multi' 时把多张参考图作为 image 数组下发（Seedream 5.0 Lite 支持）。 */
+  imageReferenceMode?: ModelCapability['imageReferenceMode']
 ): Promise<ImageGenerateRequest> {
-  const primaryFile = Array.isArray(uploadedFile) ? uploadedFile[0] : uploadedFile
-  let imageInput = primaryFile?.url
-  if (primaryFile?.file) {
-    imageInput = await fileToBase64(primaryFile.file)
-  }
+  const uploadedFiles = Array.isArray(uploadedFile) ? uploadedFile : uploadedFile ? [uploadedFile] : []
+  const uploadValues = (await Promise.all(
+    uploadedFiles.map(async (file) => (file.file ? fileToBase64(file.file) : file.url))
+  )).filter((value): value is string => !!value)
+  const imageInput = uploadValues[0]
+  const isMultiImage = imageReferenceMode === 'multi'
 
   const imageParams: ImageGenerateRequest = {
     prompt,
     model: model || undefined,
-    image: imageInput,
+    image: isMultiImage
+      ? (uploadValues.length ? uploadValues : undefined)
+      : imageInput,
     size: aspectRatioToImageSize(aspectRatio),
   }
 
@@ -47,6 +52,9 @@ export async function buildImageParams(
     imageParams.watermark = false
     if (mode === 'seedream-5-lite') {
       imageParams.size = aspectRatioToImageSize(aspectRatio, mode, 'x')
+      // Seedream 5 固定单图输出：批量生成由前端并发请求实现，
+      // 避免上游按 prompt 意图额外输出组图（组图会明显拉长耗时）。
+      imageParams.sequential_image_generation = 'disabled'
       delete imageParams.width
       delete imageParams.height
     } else {

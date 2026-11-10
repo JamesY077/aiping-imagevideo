@@ -18,6 +18,7 @@ export function buildOpenAiImageRequestBody(
   if (params.extra_body) body.extra_body = params.extra_body
   if (params.n) body.n = params.n
   if (params.response_format) body.response_format = params.response_format
+  if (params.sequential_image_generation) body.sequential_image_generation = params.sequential_image_generation
 
   return body
 }

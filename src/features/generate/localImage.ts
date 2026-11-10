@@ -154,24 +154,35 @@ export async function prepareMinimaxH3ImageDataUri(value: string): Promise<strin
 }
 
 /**
- * Seedance 2 图片合规预处理：
+ * 参考图统一合规预处理：
  * - 先执行通用压缩（大图重采样）。
  * - 上游对 dataURI 的格式检测比较严格，实测 `image/webp` 会返回
  *   `invalid image format (detected format); received: ""`，因此统一把非 PNG/JPEG
  *   的图片重编码为 JPEG 后再直传。
+ * Seedance 2 与 Seedream 5.0 Lite 共用这套预处理，只是后续的尺寸/体积校验不同。
  */
-const SEEDANCE_ACCEPTED_IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/jpg']
+const REFERENCE_ACCEPTED_IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/jpg']
 
-export async function prepareSeedanceImageDataUri(value: string): Promise<string> {
+async function preparePngOrJpegImageDataUri(value: string): Promise<string> {
   const prepared = await prepareLocalImageDataUri(value)
   if (!isDataUri(prepared)) return prepared
 
   const mime = prepared.slice(5, prepared.indexOf(';')).toLowerCase()
-  if (SEEDANCE_ACCEPTED_IMAGE_MIMES.includes(mime)) return prepared
+  if (REFERENCE_ACCEPTED_IMAGE_MIMES.includes(mime)) return prepared
 
   const dimensions = await readDataUriDimensions(prepared)
   if (!dimensions) return prepared
 
   const jpeg = await resizeDataUriToJpeg(prepared, dimensions.width, dimensions.height)
   return jpeg || prepared
+}
+
+/** Seedance 2 图片合规预处理。 */
+export function prepareSeedanceImageDataUri(value: string): Promise<string> {
+  return preparePngOrJpegImageDataUri(value)
+}
+
+/** Seedream 5.0 Lite 图片合规预处理（同样统一为 PNG/JPEG）。 */
+export function prepareSeedreamImageDataUri(value: string): Promise<string> {
+  return preparePngOrJpegImageDataUri(value)
 }

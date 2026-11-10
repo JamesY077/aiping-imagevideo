@@ -41,6 +41,7 @@ import {
   ensurePublicVideoUrlForModel,
   ensureMinimaxH3VideoForModel,
   ensureSeedanceImageForModel,
+  ensureSeedreamImageForModel,
   ensureMinimaxH3ImageForModel,
 } from '@/features/generate/upload'
 
@@ -268,11 +269,26 @@ export async function chatCompletion(params: ChatCompletionRequest): Promise<str
   }
 }
 
-async function prepareImageGenerationParams(params: ImageGenerateRequest): Promise<ImageGenerateRequest> {
+async function prepareImageGenerationParams(
+  params: ImageGenerateRequest,
+  provider: ReturnType<typeof getImageProvider>,
+): Promise<ImageGenerateRequest> {
   if (!params.image) return params
+
+  // Seedream 5.0 Lite 支持多图参考：逐张压缩 / 校验，配置了上传服务时优先换成公网 URL，
+  // 不可用时降级为 dataURI 直传（与 Seedance 2 系列的处理方式保持一致）。
+  const prepare = provider.provider === 'doubao'
+    ? ensureSeedreamImageForModel
+    : ensurePublicImageUrlForModel
+
+  if (Array.isArray(params.image)) {
+    const prepared = await Promise.all(params.image.map((item) => prepare(item)))
+    return { ...params, image: prepared }
+  }
+
   return {
     ...params,
-    image: await ensurePublicImageUrlForModel(params.image),
+    image: await prepare(params.image),
   }
 }
 
@@ -353,8 +369,8 @@ async function postImageWithRetry(endpoint: string, body: Record<string, unknown
 }
 
 export async function generateImage(params: ImageGenerateRequest): Promise<ImageGenerateResponse> {
-  const preparedParams = await prepareImageGenerationParams(params)
-  const provider = getImageProvider(preparedParams)
+  const provider = getImageProvider(params)
+  const preparedParams = await prepareImageGenerationParams(params, provider)
   const fullBody = provider.buildRequestBody(preparedParams)
 
   debugLog(`generateImage provider=${provider.provider} trying full body:`, sanitizeDebugBody(fullBody))

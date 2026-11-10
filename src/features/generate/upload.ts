@@ -3,6 +3,7 @@ import {
   prepareLocalImageDataUri,
   prepareMinimaxH3ImageDataUri,
   prepareSeedanceImageDataUri,
+  prepareSeedreamImageDataUri,
 } from '@/features/generate/localImage'
 
 /**
@@ -11,10 +12,12 @@ import {
  * 各模型对本地素材的接受度不同（下面每条都是实测结论）：
  * - Seedance 2 系列：参考图、参考音频支持 base64 dataURI 直传；参考视频只接受公网 URL。
  * - MiniMax-H3：参考图、参考视频、参考音频均支持 dataURI 直传。
+ * - Seedream 5.0 Lite：参考图支持 dataURI，但多图参考时请求体较大，优先换成公网 URL。
  * - 其他模型：配置了上传服务时，把 base64 图片换成公网 URL，避免大请求体导致上游 503。
  *
- * 因此上传服务（server/upload-service → 腾讯云 COS）只服务一个场景：
- * Seedance 2 系列的**本地参考视频**。未配置时其它素材全部内联直传，不受影响。
+ * 因此上传服务（server/upload-service → 腾讯云 COS）主要服务两个场景：
+ * Seedance 2 系列的**本地参考视频**，以及 Seedream 5.0 Lite 的**多图参考**。
+ * 未配置或服务不可用时自动降级为 dataURI 直传，不影响单图场景。
  * 上传服务地址与鉴权 token 通过前端环境变量配置：
  *   VITE_UPLOAD_SERVICE_URL   例如 https://artrealm.nextmak.cn/upload
  *   VITE_UPLOAD_SERVICE_TOKEN 与服务端 UPLOAD_TOKEN 一致
@@ -41,6 +44,14 @@ const SEEDANCE_IMAGE_RULES = {
   minRatio: 0.4,
   maxRatio: 2.5,
   maxBytes: 30 * 1024 * 1024,
+} as const
+
+/** Seedream 5.0 Lite 参考图限制：单张 ≤ 10MB，边长 ≤ 6000px，宽高比 [1/16, 16]，最多 10 张。 */
+const SEEDREAM_IMAGE_RULES = {
+  maxSide: 6000,
+  minRatio: 1 / 16,
+  maxRatio: 16,
+  maxBytes: 10 * 1024 * 1024,
 } as const
 
 function estimateDataUriBytes(dataUri: string): number {
@@ -103,6 +114,41 @@ async function assertSeedanceImageValid(dataUri: string): Promise<void> {
   if (width > SEEDANCE_IMAGE_RULES.maxSide || height > SEEDANCE_IMAGE_RULES.maxSide) {
     throw new AppError(
       `这张参考图尺寸太大，Seedance 2.0 要求最长边不超过 6000 像素（当前为 ${width}×${height}）。请缩小图片后重试。`,
+    )
+  }
+}
+
+/**
+ * Seedream 5.0 Lite 参考图校验：
+ * - 单张不超过 10MB；
+ * - 每条边不超过 6000px；
+ * - 宽高比在 [1/16, 16] 之间。
+ */
+async function assertSeedreamImageValid(dataUri: string): Promise<void> {
+  if (!/^data:image\//i.test(dataUri)) {
+    throw new AppError('参考图格式不正确，请重新选择图片后重试。', { code: 'IMAGE_INVALID' })
+  }
+
+  const bytes = estimateDataUriBytes(dataUri)
+  if (bytes > SEEDREAM_IMAGE_RULES.maxBytes) {
+    throw new AppError('这张图片文件太大，Seedream 5.0 Lite 要求单张不超过 10MB。请压缩图片后重试。')
+  }
+
+  const dimensions = await readDataUriDimensions(dataUri)
+  if (!dimensions) return
+
+  const { width, height } = dimensions
+  const ratio = width / height
+
+  if (ratio < SEEDREAM_IMAGE_RULES.minRatio || ratio > SEEDREAM_IMAGE_RULES.maxRatio) {
+    throw new AppError(
+      `这张参考图比例过于极端，Seedream 5.0 Lite 暂不支持。请换一张宽高比在 1:16 到 16:1 之间的图片（当前为 ${width}×${height}）。`,
+    )
+  }
+
+  if (width > SEEDREAM_IMAGE_RULES.maxSide || height > SEEDREAM_IMAGE_RULES.maxSide) {
+    throw new AppError(
+      `这张参考图尺寸太大，Seedream 5.0 Lite 要求每条边不超过 6000 像素（当前为 ${width}×${height}）。请缩小图片后重试。`,
     )
   }
 }
@@ -285,6 +331,28 @@ export async function ensureSeedanceImageForModel(value: string): Promise<string
   if (publicUrl) return publicUrl
 
   console.warn('[upload] 图片上传服务不可用，Seedance 本次降级为 dataURI 直传。')
+  return preparedDataUri
+}
+
+/**
+ * Seedream 5.0 Lite 专用图片处理（对齐 Seedance 2 系列的处理方式）：
+ * - 本地 dataURI 先压缩并转成 PNG/JPEG，再做尺寸/体积校验；
+ * - 配置了上传服务时优先换公网 URL，服务不可用时自动降级为 dataURI 直传；
+ * - 已是 http/https 的地址原样返回。
+ * 多张参考图由调用方逐张处理后再以 image 数组下发。
+ */
+export async function ensureSeedreamImageForModel(value: string): Promise<string> {
+  if (!isDataUri(value)) return value
+
+  const preparedDataUri = await prepareSeedreamImageDataUri(value)
+  await assertSeedreamImageValid(preparedDataUri)
+
+  if (!UPLOAD_SERVICE_URL) return preparedDataUri
+
+  const publicUrl = await tryUploadImageToPublicUrl(preparedDataUri)
+  if (publicUrl) return publicUrl
+
+  console.warn('[upload] 图片上传服务不可用，Seedream 本次降级为 dataURI 直传。')
   return preparedDataUri
 }
 

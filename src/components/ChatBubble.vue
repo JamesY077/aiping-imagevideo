@@ -17,7 +17,9 @@
             :key="`${file.url}-${index}`"
             class="file-preview"
           >
-            <span v-if="previewFiles.length > 1" class="frame-badge">{{ index === 0 ? '首帧' : '尾帧' }}</span>
+            <span v-if="previewFiles.length > 1" class="frame-badge">
+              {{ file.refLabel || (index === 0 ? '首帧' : '尾帧') }}
+            </span>
             <img v-if="file.type === 'image'" :src="file.url" class="preview-img" loading="lazy" decoding="async" />
             <video v-else :src="file.url" class="preview-video" controls preload="metadata" />
             <span class="file-name">{{ file.name }}</span>

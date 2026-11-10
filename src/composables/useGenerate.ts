@@ -210,6 +210,7 @@ export function useGenerate() {
           aspectRatio,
           capability?.imageRequestMode,
           options.imageSize,
+          capability?.imageReferenceMode,
         )
 
         if (requestedBatchSize === 1) {

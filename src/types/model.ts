@@ -28,6 +28,14 @@ export interface ModelCapability {
     | 'requires-image-upload'
     | 'requires-video-upload'
   imageRequestMode?: 'default' | 'seedream-5-lite' | 'moss'
+  /**
+   * 图片参考模式：
+   * - 'multi'：支持多张参考图（通过 image 数组上传），可使用 @ 在提示词中引用；
+   * - 未设置：仅支持单张参考图。
+   */
+  imageReferenceMode?: 'multi'
+  /** 多图参考的最大张数（默认 10，与 Seedream 5.0 Lite 上限一致）。 */
+  imageReferenceLimit?: number
   videoRequestMode?: 'kling-v26' | 'kling-v3' | 'kling-omni' | 'kling-o1' | 'viduq3-fast' | 'minimax-hailuo' | 'minimax-h3' | 'seedance-2'
   /**
    * 视频时长可选项（秒）。不同模型上限不同，未配置时由 videoRequestMode 的默认档位决定。

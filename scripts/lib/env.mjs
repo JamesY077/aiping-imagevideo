@@ -47,13 +47,20 @@ function makeStorage(seed = {}) {
 export async function startEnv({ apiKey, proxyPort = 5271 }) {
   if (!apiKey) throw new Error('缺少 AIPING_API_KEY')
 
+  // 登录态按「当周周一」校验，脚本里写死日期会在一周后失效。
+  // 这里按北京时间计算当前周的周一，避免历史脚本隔周跑不通。
+  const chinaNow = new Date(Date.now() + 8 * 60 * 60 * 1000)
+  const dayOffset = (chinaNow.getUTCDay() + 6) % 7
+  chinaNow.setUTCDate(chinaNow.getUTCDate() - dayOffset)
+  const verifiedDateCN = chinaNow.toISOString().slice(0, 10)
+
   const proxy = await startProxy(proxyPort)
   const auth = {
     apiKey,
     apiBaseUrl: `http://127.0.0.1:${proxyPort}/api/v1`,
     sessionId: 'matrix-test',
     verifiedAtEpochMs: Date.now(),
-    verifiedDateCN: '2026-10-30',
+    verifiedDateCN,
   }
   const storage = makeStorage({ aiping_api_auth_session: JSON.stringify(auth) })
   globalThis.sessionStorage = storage
