@@ -1,11 +1,15 @@
 <template>
   <Teleport to="body">
     <div class="layer-editor-mask" @click.self="requestClose">
-      <section class="layer-editor" role="dialog" aria-modal="true" aria-label="Moss 图层编辑">
+      <section class="layer-editor" role="dialog" aria-modal="true" :aria-label="`图层编辑 · ${editorModelLabel}`">
         <header class="editor-head">
           <div class="head-text">
-            <h2>图层编辑 · Moss</h2>
-            <p>
+            <h2>图层编辑 · {{ editorModelLabel }}</h2>
+            <p v-if="isGlobalMode">
+              拖动框调整元素位置和大小，也可以在右侧用自然语言让 AI 改布局。当前模型没有原生分层能力，
+              会以参考图为底图，按图层描述与位置近似还原布局。改完点右下角「按此布局生成新图」才会出图。
+            </p>
+            <p v-else>
               拖动框调整元素位置和大小，也可以在右侧用自然语言让 AI 改布局。Moss 是文生图模型，
               布局改完必须点右下角「按此布局重新生成」才会出图。
             </p>
@@ -24,18 +28,18 @@
                 class="bbox"
                 :class="{
                   selected: item.id === selectedId,
-                  background: isFullBleed(item),
+                  background: isBackgroundLike(item),
                   'label-inside': item.y < draft.height * 0.03,
                 }"
                 :style="itemStyle(item, index)"
                 @pointerdown="startDrag($event, item, 'move')"
               >
                 <span class="bbox-label">
-                  {{ index + 1 }} · {{ labelText(item.label) }}
-                  <em v-if="isFullBleed(item)">背景</em>
+                  {{ index + 1 }} · {{ isBackgroundLike(item) ? '背景' : labelText(item.label) }}
+                  <em v-if="isBackgroundLike(item)">底图</em>
                 </span>
                 <span
-                  v-if="!isFullBleed(item)"
+                  v-if="!isBackgroundLike(item)"
                   class="resize-handle"
                   aria-hidden="true"
                   @pointerdown.stop="startDrag($event, item, 'resize')"
@@ -62,13 +66,17 @@
                 >
                   <span class="layer-index" :style="{ background: colorAt(index) }">{{ index + 1 }}</span>
                   <span class="layer-meta">
-                    <span class="layer-kind">{{ labelText(item.label) }}</span>
-                    <span class="layer-caption" :class="{ missing: !hasLayerContent(item) }">
-                      {{ item.text || item.caption || '缺少描述 · 不会出现在生成结果中' }}
+                    <span class="layer-kind">{{ isBackgroundLike(item) ? '背景 / 底图' : labelText(item.label) }}</span>
+                    <span class="layer-caption" :class="{ missing: !isBackgroundLike(item) && !hasLayerContent(item) }">
+                      {{
+                        isBackgroundLike(item)
+                          ? (item.caption || '整张参考图 · 底图')
+                          : (item.text || item.caption || '缺少描述 · 不会出现在生成结果中')
+                      }}
                     </span>
                   </span>
                   <span
-                    v-if="draft.items.length > 1"
+                    v-if="editableLayerCount > 1 && !isBackgroundLike(item)"
                     class="layer-remove"
                     role="button"
                     tabindex="0"
@@ -80,13 +88,33 @@
               </div>
             </div>
 
+            <div class="panel-block summary-block">
+              <div class="panel-head">
+                <span class="panel-title">整体画面</span>
+                <span class="hint-text">背景 / 风格 / 光线</span>
+              </div>
+              <label class="field summary-field">
+                <span>整体描述<em>作为底图与画面的补充说明</em></span>
+                <textarea
+                  v-model="draft.summary.caption"
+                  rows="3"
+                  :placeholder="summaryPlaceholder"
+                />
+              </label>
+              <p class="panel-hint">
+                {{ isGlobalMode
+                  ? '会与参考图一起下发给模型；未提及区域尽量保持原图不变。'
+                  : 'Moss 会把这里的内容当作整张图的背景与整体风格描述。' }}
+              </p>
+            </div>
+
             <div v-if="selectedItem" class="panel-block inspector-block">
               <div class="panel-head">
                 <span class="panel-title">图层属性</span>
-                <span class="hint-text">{{ positionLabel(selectedItem) }}</span>
+                <span class="hint-text">{{ isBackgroundLike(selectedItem) ? '整张参考图' : positionLabel(selectedItem) }}</span>
               </div>
 
-              <label class="field">
+              <label v-if="!isBackgroundLike(selectedItem)" class="field">
                 <span>类型</span>
                 <select v-model="selectedItem.label">
                   <option value="object">物体</option>
@@ -96,7 +124,10 @@
               </label>
 
               <label class="field">
-                <span>元素描述<em>英文效果更好</em></span>
+                <span>
+                  {{ isBackgroundLike(selectedItem) ? '底图补充描述（可选）' : '元素描述' }}
+                  <em v-if="!isBackgroundLike(selectedItem)">英文效果更好</em>
+                </span>
                 <textarea
                   ref="captionInputRef"
                   v-model="selectedItem.caption"
@@ -105,7 +136,7 @@
                 />
               </label>
 
-              <label v-if="selectedItem.label === 'text'" class="field">
+              <label v-if="selectedItem.label === 'text' && !isBackgroundLike(selectedItem)" class="field">
                 <span>文字内容</span>
                 <textarea
                   v-model="selectedItem.text"
@@ -114,7 +145,7 @@
                 />
               </label>
 
-              <div class="field">
+              <div v-if="!isBackgroundLike(selectedItem)" class="field">
                 <span>位置与大小（像素）</span>
                 <div class="coord-grid">
                   <label>X<input v-model.number="selectedItem.x" type="number" min="0" @change="clampSelected" /></label>
@@ -123,6 +154,7 @@
                   <label>高<input v-model.number="selectedItem.height" type="number" min="24" @change="clampSelected" /></label>
                 </div>
               </div>
+              <p v-else class="panel-hint">整张参考图作为底图，位置与大小固定，不可移动或缩放。</p>
             </div>
 
             <div class="panel-block ai-block">
@@ -135,7 +167,10 @@
                 :disabled="busy"
                 placeholder="例如：把标题移到顶部居中，咖啡杯放大并移到正中偏左，右下角再加一行小字「手冲 · 拿铁」"
               />
-              <p class="panel-hint">这里只修改图层与位置，不会自动出图。直接点下方「按此布局重新生成」也会先执行这段修改。</p>
+              <p class="panel-hint">
+                这里只修改图层与位置，不会自动出图。直接点下方
+                「{{ isGlobalMode ? '按此布局生成新图' : '按此布局重新生成' }}」也会先执行这段修改。
+              </p>
               <button class="ai-btn" type="button" :disabled="busy || !instruction.trim()" @click="applyInstruction">
                 {{ busy ? 'AI 正在更新布局…' : '让 AI 修改布局' }}
               </button>
@@ -148,7 +183,10 @@
               <p v-if="missingCaptionCount" class="foot-warn">
                 有 {{ missingCaptionCount }} 个图层还没有描述，生成时会被忽略，请先补充「元素描述」。
               </p>
-              <p v-if="dirty" class="foot-dirty">布局已修改，点右侧按钮才会按新布局出图。</p>
+              <p v-if="dirty" class="foot-dirty">布局已修改，点右侧按钮才会按新布局生成新图。</p>
+              <p v-else-if="isGlobalMode" class="foot-note">
+                生成会以参考图为底图，按图层描述与位置近似还原；未提及区域尽量保持原样。
+              </p>
               <p v-else class="foot-note">
                 重新生成会消耗一次 Moss 调用。未移动的元素会按原布局尽量保持原位，但细节可能有轻微差异。
               </p>
@@ -160,7 +198,13 @@
                   :disabled="busy || generating"
                   @click="regenerate"
                 >
-                  {{ generating ? '正在生成中…' : busy ? '正在更新布局…' : '按此布局重新生成' }}
+                  {{ generating
+                    ? '正在生成中…'
+                    : busy
+                      ? '正在更新布局…'
+                      : isGlobalMode
+                        ? '按此布局生成新图'
+                        : '按此布局重新生成' }}
                 </button>
               </div>
             </footer>
@@ -179,26 +223,48 @@ import {
   cloneLayout,
   createDefaultLayoutItem,
   describeItemPosition,
+  isBackgroundLayer,
 } from '@/features/layout/mossLayout'
 import { editMossLayout } from '@/features/layout/planner'
 import { normalizeErrorMessage } from '@/utils/errors'
 
-const props = defineProps<{
-  imageUrl: string
-  layout: MossLayout
-  /** 主页面是否正在生成；生成中禁止重复提交，避免点击后毫无反馈。 */
-  generating?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    imageUrl: string
+    layout: MossLayout
+    /** 主页面是否正在生成；生成中禁止重复提交，避免点击后毫无反馈。 */
+    generating?: boolean
+    /** moss：使用原生分层 JSON；global：其他图片模型按图层描述近似还原。 */
+    mode?: 'moss' | 'global'
+    modelName?: string
+  }>(),
+  {
+    generating: false,
+    mode: 'moss',
+    modelName: '',
+  },
+)
 
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'regenerate', layout: MossLayout): void
 }>()
 
+const isGlobalMode = computed(() => props.mode === 'global')
+const editorModelLabel = computed(() => props.modelName || (isGlobalMode.value ? '通用图片模型' : 'Moss'))
+const summaryPlaceholder = computed(() =>
+  isGlobalMode.value
+    ? '例如：以参考图为基础，保持人物与场景不变，整体改为黄昏暖色调'
+    : '例如：夏日午后，暖光，极简海报风格',
+)
+
 const LAYER_COLORS = ['#f6c453', '#63b3ed', '#f687b3', '#68d391', '#b794f4', '#f6ad55', '#4fd1c5', '#fc8181']
 
 const draft = ref<MossLayout>(cloneLayout(props.layout))
-const selectedId = ref<string | null>(draft.value.items[0]?.id ?? null)
+// 背景层不可编辑位置，默认选中第一个可编辑图层，没有时才回落到背景层。
+const selectedId = ref<string | null>(
+  draft.value.items.find((item) => !isBackgroundLayer(item))?.id ?? draft.value.items[0]?.id ?? null,
+)
 const instruction = ref('')
 const busy = ref(false)
 const dirty = ref(false)
@@ -222,7 +288,17 @@ function hasLayerContent(item: MossLayoutItem): boolean {
   return !!(item.caption.trim() || item.text?.trim())
 }
 
-const missingCaptionCount = computed(() => draft.value.items.filter((item) => !hasLayerContent(item)).length)
+/** 背景层：整张参考图铺满画布，位置固定，也不参与「缺少描述」统计。 */
+function isBackgroundLike(item: MossLayoutItem): boolean {
+  return isBackgroundLayer(item)
+}
+
+const missingCaptionCount = computed(
+  () => draft.value.items.filter((item) => !isBackgroundLike(item) && !hasLayerContent(item)).length,
+)
+
+/** 可移动 / 可删除的普通图层数量（不含背景层）。 */
+const editableLayerCount = computed(() => draft.value.items.filter((item) => !isBackgroundLike(item)).length)
 
 function colorAt(index: number): string {
   return LAYER_COLORS[index % LAYER_COLORS.length]
@@ -232,10 +308,6 @@ function labelText(label: MossLayoutLabel): string {
   if (label === 'text') return '文字'
   if (label === 'character') return '人物'
   return '物体'
-}
-
-function isFullBleed(item: MossLayoutItem): boolean {
-  return item.width >= draft.value.width * 0.95 && item.height >= draft.value.height * 0.95
 }
 
 function itemStyle(item: MossLayoutItem, index: number) {
@@ -256,7 +328,7 @@ function positionLabel(item: MossLayoutItem): string {
 
 function clampSelected() {
   const item = selectedItem.value
-  if (!item) return
+  if (!item || isBackgroundLike(item)) return
   const clamped = clampLayoutItem(
     {
       ...item,
@@ -280,7 +352,10 @@ function addLayer() {
 }
 
 function removeLayer(id: string) {
-  if (draft.value.items.length <= 1) return
+  const target = draft.value.items.find((item) => item.id === id)
+  if (!target || isBackgroundLike(target)) return
+  // 背景层之外至少要留一个图层。
+  if (draft.value.items.filter((item) => !isBackgroundLike(item)).length <= 1) return
   const index = draft.value.items.findIndex((item) => item.id === id)
   if (index < 0) return
   draft.value.items.splice(index, 1)
@@ -305,7 +380,7 @@ function canvasRect(): DOMRect | null {
 }
 
 function startDrag(event: PointerEvent, item: MossLayoutItem, mode: 'move' | 'resize') {
-  if (isFullBleed(item) && mode === 'move') return
+  if (isBackgroundLike(item)) return
   event.preventDefault()
   selectedId.value = item.id
   dragState = {
@@ -541,7 +616,14 @@ onBeforeUnmount(() => {
 
 .bbox.background {
   cursor: default;
+  border-color: rgba(255, 255, 255, 0.38);
   border-style: dashed;
+  background: transparent;
+}
+
+.bbox.background.selected {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.32);
 }
 
 .bbox.selected {

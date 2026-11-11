@@ -5,6 +5,7 @@ import {
   MOSS_LAYOUT_MAX_ITEMS,
   clampLayoutItem,
   createLayoutItemId,
+  isBackgroundLayer,
   normalizeLayoutLabel,
   normalizeSummary,
 } from './mossLayout'
@@ -211,21 +212,29 @@ export async function editMossLayout(input: EditMossLayoutInput): Promise<MossLa
   const { layout, instruction } = input
   if (!instruction.trim()) return layout
 
+  const background = layout.items.find((item) => isBackgroundLayer(item))
   const compactLayout = {
     width: layout.width,
     height: layout.height,
     summary: layout.summary,
-    items: layout.items.map((item) => ({
-      id: item.id,
-      label: item.label,
-      caption: item.caption,
-      ...(item.label === 'text' ? { text: item.text ?? '' } : {}),
-      bbox: [item.x, item.y, item.width, item.height],
-    })),
+    // 背景层是整张参考图，位置固定，不交给文本模型改动，避免被误删或复制。
+    items: layout.items
+      .filter((item) => !isBackgroundLayer(item))
+      .map((item) => ({
+        id: item.id,
+        label: item.label,
+        caption: item.caption,
+        ...(item.label === 'text' ? { text: item.text ?? '' } : {}),
+        bbox: [item.x, item.y, item.width, item.height],
+      })),
   }
 
+  const backgroundNote = background
+    ? '\n说明：当前布局使用的参考图整图作为固定背景层，不要新增或修改背景层，只需调整其他元素与整体描述。'
+    : ''
+
   const raw = await requestLayout(
-    `画布尺寸：${layout.width}x${layout.height}。\n当前布局：${JSON.stringify(compactLayout)}\n修改指令：${instruction}`,
+    `画布尺寸：${layout.width}x${layout.height}。\n当前布局：${JSON.stringify(compactLayout)}${backgroundNote}\n修改指令：${instruction}`,
     EDIT_SYSTEM_PROMPT
   )
 
@@ -297,6 +306,26 @@ export async function editMossLayout(input: EditMossLayoutInput): Promise<MossLa
   if (!touched && !raw?.summary?.caption) {
     return layout
   }
+
+  // 背景层必须始终铺满画布，且不能被自然语言编辑误删。
+  if (background) {
+    const normalizedBackground = {
+      ...background,
+      x: 0,
+      y: 0,
+      width: layout.width,
+      height: layout.height,
+    }
+    const backgroundIndex = next.findIndex((item) => item.id === background.id)
+    if (backgroundIndex >= 0) {
+      next.splice(backgroundIndex, 1, normalizedBackground)
+      nextById.set(background.id, normalizedBackground)
+    } else {
+      next.unshift(normalizedBackground)
+      nextById.set(background.id, normalizedBackground)
+    }
+  }
+
   if (!next.length) {
     throw new Error('修改后布局为空，请至少保留一个图层。')
   }

@@ -41,6 +41,26 @@ export function aspectRatioToImageSize(
   return `${width}${separator}${height}`
 }
 
+/** 从支持的画面比例中挑一个最接近上传图片实际比例的，用于编辑参考图时保持构图。 */
+export function pickClosestAspectRatio(width: number, height: number): string {
+  if (!width || !height) return '1:1'
+  const sourceRatio = width / height
+  // 只从图像模式可选的常见比例里挑，避免选出 UI 不支持的 21:9。
+  const candidates = ['16:9', '3:2', '4:3', '1:1', '3:4', '2:3', '9:16']
+  let best = '1:1'
+  let bestDelta = Number.POSITIVE_INFINITY
+  for (const candidate of candidates) {
+    const [w, h] = candidate.split(':').map(Number)
+    if (!w || !h) continue
+    const delta = Math.abs(Math.log(sourceRatio / (w / h)))
+    if (delta < bestDelta) {
+      bestDelta = delta
+      best = candidate
+    }
+  }
+  return best
+}
+
 export function getKlingAspectRatio(aspectRatio: string): string {
   if (['16:9', '9:16', '1:1'].includes(aspectRatio)) return aspectRatio
   throw new Error('当前可灵视频模型仅支持 16:9、9:16、1:1，请切换比例或模型后重试。')

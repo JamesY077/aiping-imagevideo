@@ -15,6 +15,7 @@ import { resolveRealCost } from '@/utils/format'
 import { buildEffectivePrompt } from '@/features/skill/apply'
 import type { MossLayout } from '@/types/layout'
 import { cloneLayout, toMossLayoutPrompt } from '@/features/layout/mossLayout'
+import { buildGlobalEditPrompt } from '@/features/layout/globalEdit'
 import { planMossLayout } from '@/features/layout/planner'
 
 type UploadInput = UploadedFile | UploadedFile[] | null | undefined
@@ -201,7 +202,12 @@ export function useGenerate() {
         if (mossLayout) {
           chatStore.updateMessage(assistantId, { layout: mossLayout })
         }
-        const requestPrompt = mossLayout ? toMossLayoutPrompt(mossLayout) : effectivePrompt
+        // Moss 使用原生布局 JSON；其他图片模型把布局转成提示词，配合参考图近似还原。
+        const requestPrompt = mossLayout
+          ? capability?.imageRequestMode === 'moss'
+            ? toMossLayoutPrompt(mossLayout)
+            : buildGlobalEditPrompt(mossLayout, effectivePrompt)
+          : effectivePrompt
 
         const imageParams = await buildImageParams(
           requestPrompt,

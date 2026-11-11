@@ -16,6 +16,11 @@ export interface MossLayoutItem {
   caption: string
   /** 仅 text 元素使用：要渲染的原文。 */
   text?: string
+  /**
+   * 背景/底图层：整张参考图铺满画布，位置固定，生成时作为底图。
+   * 通用图片模型没有原生分层能力时，用它承载上传的参考图。
+   */
+  role?: 'background'
   /** 左上角原点坐标与尺寸，单位为目标画布像素。 */
   x: number
   y: number

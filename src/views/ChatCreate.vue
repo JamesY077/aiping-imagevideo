@@ -641,6 +641,18 @@
                     </div>
                     <input ref="multimodalImageInput" type="file" :accept="IMAGE_FILE_ACCEPT" multiple class="file-input" @change="handleMultimodalFileChange($event, 'image')" />
                   </div>
+                  <div v-if="canOpenImageEditor" class="image-edit-entry-row">
+                    <button
+                      class="image-edit-btn"
+                      type="button"
+                      title="把这张图作为底图，进入图层编辑"
+                      @click="openImageEditorFromUpload"
+                    >图像编辑</button>
+                    <span class="image-edit-entry-hint">以这张参考图作为底图，添加图层后生成新图</span>
+                  </div>
+                  <p v-else-if="multimodalImages.length > 1" class="image-edit-entry-hint image-edit-entry-note">
+                    图像编辑仅支持 1 张参考图，请先移除多余图片。
+                  </p>
                 </div>
               </div>
 
@@ -672,6 +684,13 @@
                 </div>
                 <img v-if="uploadedFile" class="upload-thumb" :src="uploadedFile.url" alt="已上传素材" />
                 <span v-if="uploadedFile" class="pill-filename">{{ uploadedFile.name }}</span>
+                <button
+                  v-if="uploadedFile && canOpenImageEditor"
+                  class="image-edit-btn"
+                  type="button"
+                  title="把这张图作为底图，进入图层编辑"
+                  @click="openImageEditorFromUpload"
+                >图像编辑</button>
                 <button v-if="uploadedFile" class="text-btn" type="button" @click="() => removeUploadedFile()">移除</button>
               </div>
               <div v-else-if="isUploadEnabled" class="upload-mini-row" :class="{ 'has-file': !!uploadedFile }">
@@ -898,6 +917,8 @@
       v-if="layerEditorState"
       :image-url="layerEditorState.imageUrl"
       :layout="layerEditorState.layout"
+      :mode="layerEditorState.mode"
+      :model-name="layerEditorState.modelName"
       :generating="activeSessionGenerating"
       @close="layerEditorState = null"
       @regenerate="handleLayerRegenerate"
@@ -940,6 +961,8 @@ import { showErrorMessage } from '@/utils/errors'
 import { getReadableErrorMessage, validatePromptOrThrow } from '@/utils/errorHandling'
 import type { GenerateResult, ImageGenerationMode, Message, UploadedFile } from '@/types/chat'
 import type { MossLayout } from '@/types/layout'
+import { createLayoutFromImage, isMossLayoutModel } from '@/features/layout/mossLayout'
+import { pickClosestAspectRatio } from '@/features/generate/aspectRatio'
 import { resolveGenerateIoType } from '@/features/generate/media'
 import { createExpandedUploadedFile, getExpandTargetSize } from '@/features/generate/expand'
 import {
@@ -1174,7 +1197,18 @@ const isImageMultiReferenceMode = computed(
 )
 const imageReferenceLimit = computed(() => modelCapability.value?.imageReferenceLimit ?? MULTIMODAL_LIMITS.image)
 const mossLayoutEnabled = ref(true)
-const layerEditorState = ref<{ imageUrl: string; layout: MossLayout } | null>(null)
+interface LayerEditorState {
+  imageUrl: string
+  layout: MossLayout
+  /** moss：原生分层模型；global：整张参考图作底图的近似分层。 */
+  mode: 'moss' | 'global'
+  modelName: string
+  /** global 模式下作为底图的参考图；Moss 模式为空。 */
+  baseFile: UploadedFile | null
+  /** 打开编辑器时的提示词，重新生成时作为编辑要求。 */
+  prompt: string
+}
+const layerEditorState = ref<LayerEditorState | null>(null)
 const isViduVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'viduq3-fast')
 const isViduQ3ProFastModel = computed(() => isViduVideoModel.value && settingsStore.selectedModel?.toLowerCase() === 'viduq3-pro-fast')
 const isMinimaxHailuoVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'minimax-hailuo')
@@ -1286,6 +1320,18 @@ const isImageReferenceMode = computed(() => {
   return settingsStore.mediaType === 'image' && imageMode.value === 'image2image' && supportsImageReferenceMode.value
 })
 const isExpandMode = computed(() => settingsStore.mediaType === 'image' && imageMode.value === 'expand')
+// 全局图片模型：上传单张参考图后，可把它当作底图进入图层编辑。
+const editableImageSource = computed<UploadedFile | null>(() => {
+  if (settingsStore.mediaType !== 'image' || isMossImageModel.value) return null
+  if (isImageMultiReferenceMode.value) {
+    return multimodalImages.value.length === 1 ? multimodalImages.value[0] : null
+  }
+  if (isImageReferenceMode.value) {
+    return uploadedFile.value?.type === 'image' ? uploadedFile.value : null
+  }
+  return null
+})
+const canOpenImageEditor = computed(() => !!editableImageSource.value)
 const expandSourceAspectRatio = computed(() => {
   const dimensions = uploadedFile.value?.dimensions
   if (!dimensions?.width || !dimensions?.height) return null
@@ -1709,6 +1755,40 @@ async function resolveUploadedImageDimensions(uploadedFile: UploadedFile): Promi
   const dimensions = await getImageDimensions(uploadedFile.file)
   uploadedFile.dimensions = dimensions
   return dimensions
+}
+
+/**
+ * 全局图片模型的「图像编辑」入口：
+ * 把已上传的参考图作为整张底图（背景层）打开图层编辑器，
+ * 用户可继续添加图层、写描述、拖拽调整，完成后直接生成新图。
+ */
+async function openImageEditorFromUpload() {
+  const source = editableImageSource.value
+  if (!source) return
+  try {
+    const dimensions = await resolveUploadedImageDimensions(source)
+    if (!dimensions?.width || !dimensions?.height) {
+      showErrorMessage('无法读取图片尺寸，请重新上传后再试。')
+      return
+    }
+    const aspectRatio = pickClosestAspectRatio(dimensions.width, dimensions.height)
+    const caption = inputText.value.trim()
+    layerEditorState.value = {
+      imageUrl: source.url,
+      layout: createLayoutFromImage({
+        width: dimensions.width,
+        height: dimensions.height,
+        aspectRatio,
+        caption,
+      }),
+      mode: 'global',
+      modelName: settingsStore.selectedModel || '',
+      baseFile: source,
+      prompt: caption,
+    }
+  } catch (error) {
+    showErrorMessage(getReadableErrorMessage(error, '无法打开图像编辑，请重试。'))
+  }
 }
 
 function showViduFrameAspectRatioError(startDimensions: ImageDimensions, endDimensions: ImageDimensions) {
@@ -2401,19 +2481,77 @@ function handleExpandImage(result: GenerateResult) {
 
 function handleEditLayers(result: GenerateResult) {
   if (!result.layout) return
+  // 带背景层的布局来自通用图片模型的「近似分层」，其余走 Moss 原生布局。
+  const hasBackground = result.layout.items.some((item) => item.role === 'background')
+  const mode: LayerEditorState['mode'] = hasBackground
+    ? 'global'
+    : isMossLayoutModel(result.model)
+      ? 'moss'
+      : 'global'
+  // 结果里的 model 可能来自上游的完整 id，无法识别时回落到当前选择的模型。
+  const modelName = getModelCapability(result.model) ? result.model : settingsStore.selectedModel || result.model
   layerEditorState.value = {
     imageUrl: result.url,
     layout: result.layout,
+    mode,
+    modelName,
+    baseFile:
+      mode === 'global'
+        ? {
+            name: `图层底图-${Date.now()}.png`,
+            type: 'image',
+            url: result.url,
+            size: 0,
+            dimensions: result.size,
+          }
+        : null,
+    prompt: '',
   }
 }
 
-/** 图层编辑完成后，按新布局调用 Moss 重新生成一张图。 */
+/** 图层编辑完成后，按新布局重新生成一张图。 */
 async function handleLayerRegenerate(layout: MossLayout) {
   if (activeSessionGenerating.value) {
     showErrorMessage('当前还有生成任务进行中，请等它完成后再按新布局生成。')
     return
   }
+  const editorState = layerEditorState.value
   layerEditorState.value = null
+
+  if (editorState?.mode === 'global') {
+    const baseFile = editorState.baseFile
+    if (!baseFile) {
+      showErrorMessage('缺少底图，无法生成新图，请重新上传参考图后再试。')
+      return
+    }
+    const model = getModelCapability(editorState.modelName)
+      ? editorState.modelName
+      : settingsStore.selectedModel
+
+    settingsStore.setMediaType('image')
+    settingsStore.selectedModel = model
+    settingsStore.aspectRatio = layout.aspectRatio || settingsStore.aspectRatio
+    settingsStore.saveToStorage()
+    imageMode.value = 'image2image'
+
+    await generate(
+      editorState.prompt.trim() || '保持参考图的主体、构图与风格不变，按图层布局调整画面',
+      'image2image',
+      model,
+      baseFile,
+      settingsStore.aspectRatio,
+      settingsStore.videoDuration,
+      false,
+      null,
+      settingsStore.videoResolution,
+      1,
+      { mossLayout: layout },
+    )
+
+    await nextTick()
+    scrollChatToBottom()
+    return
+  }
 
   settingsStore.setMediaType('image')
   settingsStore.selectedModel = 'Moss-Image-SFT'
@@ -3438,6 +3576,51 @@ async function handleRegenerate(message: Message) {
   border-color: rgba(248, 113, 113, 0.52);
   background: rgba(248, 113, 113, 0.16);
   color: #fca5a5;
+}
+
+/* 上传后的「图像编辑」入口：全局图片模型把整张参考图当作底图。 */
+.image-edit-btn {
+  flex: 0 0 auto;
+  min-height: 26px;
+  padding: 0 11px;
+  border: 1px solid rgba(246, 196, 83, 0.42);
+  border-radius: 999px;
+  background: rgba(246, 196, 83, 0.12);
+  color: rgba(246, 196, 83, 0.95);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.image-edit-btn:hover {
+  border-color: rgba(246, 196, 83, 0.7);
+  background: rgba(246, 196, 83, 0.2);
+}
+
+.image-edit-btn::before {
+  content: '✎';
+  margin-right: 4px;
+  font-size: 10px;
+}
+
+.image-edit-entry-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.image-edit-entry-hint {
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.image-edit-entry-note {
+  margin: 10px 0 0;
 }
 
 .skill-control-row {

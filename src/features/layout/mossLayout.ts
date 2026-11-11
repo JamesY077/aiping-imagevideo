@@ -34,6 +34,47 @@ export function normalizeLayoutLabel(value: unknown): MossLayoutLabel {
   return LABELS.includes(value as MossLayoutLabel) ? (value as MossLayoutLabel) : 'object'
 }
 
+/** 是否为整张参考图对应的背景层（不可移动 / 缩放）。 */
+export function isBackgroundLayer(item: MossLayoutItem): boolean {
+  return item.role === 'background'
+}
+
+/**
+ * 用一张已上传 / 已生成的参考图创建可编辑布局：
+ * 整张图作为铺满画布的背景层，用户可在此基础上继续添加元素图层。
+ */
+export function createLayoutFromImage(input: {
+  width: number
+  height: number
+  aspectRatio: string
+  caption?: string
+}): MossLayout {
+  const width = Math.max(1, Math.round(input.width))
+  const height = Math.max(1, Math.round(input.height))
+  return {
+    width,
+    height,
+    aspectRatio: input.aspectRatio,
+    summary: {
+      caption: (input.caption || '').trim(),
+      meta: ['reference'],
+      canvas: 'single',
+    },
+    items: [
+      {
+        id: createLayoutItemId(),
+        label: 'object',
+        caption: '',
+        role: 'background',
+        x: 0,
+        y: 0,
+        width,
+        height,
+      },
+    ],
+  }
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
@@ -94,6 +135,7 @@ export function normalizeSummary(raw: any, fallbackCaption: string): MossLayoutS
 export function toMossLayoutPrompt(layout: MossLayout): string {
   const { width, height } = layout
   const items = layout.items
+    .filter((item) => !isBackgroundLayer(item))
     .filter((item) => item.caption.trim() || item.text?.trim())
     .slice(0, MOSS_LAYOUT_MAX_ITEMS)
     .map((item) => {
