@@ -21,6 +21,13 @@ export interface MossLayoutItem {
    * 通用图片模型没有原生分层能力时，用它承载上传的参考图。
    */
   role?: 'background'
+  /**
+   * 图层素材：用户上传的图片，生成前按 bbox 位置合成到底图上
+   * （多图参考模型也可以作为独立参考图下发给模型）。
+   */
+  assetUrl?: string
+  /** 图层素材原始文件，仅前端持有，用于合成与重新生成。 */
+  assetFile?: File
   /** 左上角原点坐标与尺寸，单位为目标画布像素。 */
   x: number
   y: number

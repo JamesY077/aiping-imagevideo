@@ -19,6 +19,13 @@
 
         <div class="editor-body">
           <div class="stage">
+            <input
+              ref="assetInputRef"
+              type="file"
+              accept="image/*"
+              class="file-input"
+              @change="handleAssetFileChange"
+            />
             <div v-if="dirty" class="stage-badge">布局已修改 · 预览仍是上一版图片</div>
             <div ref="canvasRef" class="canvas-wrap">
               <img :src="imageUrl" alt="待编辑的生成图片" draggable="false" @dragstart.prevent />
@@ -29,13 +36,22 @@
                 :class="{
                   selected: item.id === selectedId,
                   background: isBackgroundLike(item),
+                  'has-asset': !!item.assetUrl,
                   'label-inside': item.y < draft.height * 0.03,
                 }"
                 :style="itemStyle(item, index)"
                 @pointerdown="startDrag($event, item, 'move')"
               >
+                <img
+                  v-if="item.assetUrl"
+                  class="bbox-asset"
+                  :src="item.assetUrl"
+                  alt=""
+                  draggable="false"
+                  @dragstart.prevent
+                />
                 <span class="bbox-label">
-                  {{ index + 1 }} · {{ isBackgroundLike(item) ? '背景' : labelText(item.label) }}
+                  {{ index + 1 }} · {{ isBackgroundLike(item) ? '背景' : item.assetUrl ? '素材' : labelText(item.label) }}
                   <em v-if="isBackgroundLike(item)">底图</em>
                 </span>
                 <span
@@ -53,7 +69,17 @@
               <div class="panel-block layer-list-block">
               <div class="panel-head">
                 <span class="panel-title">图层（{{ draft.items.length }}）</span>
-                <button class="ghost-btn" type="button" @click="addLayer">＋ 添加</button>
+                <div class="layer-add-actions">
+                  <button class="ghost-btn" type="button" @click="addLayer">＋ 添加</button>
+                  <button
+                    v-if="isGlobalMode"
+                    class="ghost-btn asset-add-btn"
+                    type="button"
+                    :disabled="busy"
+                    title="上传一张素材图作为新图层，可拖拽与缩放"
+                    @click="addAssetLayer"
+                  >上传参考图</button>
+                </div>
               </div>
               <div class="layer-list">
                 <button
@@ -66,17 +92,21 @@
                 >
                   <span class="layer-index" :style="{ background: colorAt(index) }">{{ index + 1 }}</span>
                   <span class="layer-meta">
-                    <span class="layer-kind">{{ isBackgroundLike(item) ? '背景 / 底图' : labelText(item.label) }}</span>
+                    <span class="layer-kind">
+                      {{ isBackgroundLike(item) ? '背景 / 底图' : item.assetUrl ? '素材图' : labelText(item.label) }}
+                    </span>
                     <span class="layer-caption" :class="{ missing: !isBackgroundLike(item) && !hasLayerContent(item) }">
                       {{
                         isBackgroundLike(item)
                           ? (item.caption || '整张参考图 · 底图')
-                          : (item.text || item.caption || '缺少描述 · 不会出现在生成结果中')
+                          : item.assetUrl
+                            ? (item.caption || '已上传素材 · 可拖拽定位')
+                            : (item.text || item.caption || '缺少描述 · 不会出现在生成结果中')
                       }}
                     </span>
                   </span>
                   <span
-                    v-if="editableLayerCount > 1 && !isBackgroundLike(item)"
+                    v-if="!isBackgroundLike(item) && (editableLayerCount > 1 || hasBackgroundLayer)"
                     class="layer-remove"
                     role="button"
                     tabindex="0"
@@ -144,6 +174,23 @@
                   placeholder="要渲染的原文，可换行"
                 />
               </label>
+
+              <div v-if="isGlobalMode && !isBackgroundLike(selectedItem)" class="field asset-field">
+                <span>图层素材<em>可选 · 按框位置参与生成</em></span>
+                <div v-if="selectedItem.assetUrl" class="asset-preview">
+                  <img :src="selectedItem.assetUrl" alt="图层素材预览" />
+                  <div class="asset-preview-actions">
+                    <button class="mini-btn" type="button" @click="pickAssetFor(selectedItem.id)">更换</button>
+                    <button class="mini-btn danger" type="button" @click="clearAsset(selectedItem)">移除</button>
+                  </div>
+                </div>
+                <button v-else class="asset-upload-btn" type="button" @click="pickAssetFor(selectedItem.id)">
+                  ＋ 上传参考图作为素材
+                </button>
+                <p class="asset-hint">
+                  支持 PNG / JPG / WebP。单图模型会先把素材合成到框内位置；多图参考模型会作为独立参考图下发。
+                </p>
+              </div>
 
               <div v-if="!isBackgroundLike(selectedItem)" class="field">
                 <span>位置与大小（像素）</span>
@@ -271,6 +318,12 @@ const dirty = ref(false)
 const errorMessage = ref('')
 const canvasRef = ref<HTMLElement | null>(null)
 const captionInputRef = ref<HTMLTextAreaElement | null>(null)
+const assetInputRef = ref<HTMLInputElement | null>(null)
+/** 下一次选择素材文件时要写入的图层 id。 */
+const pendingAssetLayerId = ref<string | null>(null)
+/** 下一次选择素材文件时是否需要新建图层（「上传参考图」入口）。 */
+const pendingNewAssetLayer = ref(false)
+const ASSET_MAX_BYTES = 10 * 1024 * 1024
 
 // 任何图层改动都要显式提示：预览图是上一版生成结果，只有重新生成才会变。
 watch(
@@ -283,9 +336,9 @@ watch(
 
 const selectedItem = computed(() => draft.value.items.find((item) => item.id === selectedId.value) || null)
 
-/** 没有描述或文字内容的图层不会出现在发送给 Moss 的布局里。 */
+/** 没有描述、文字或素材的图层不会出现在发送给模型的布局里。 */
 function hasLayerContent(item: MossLayoutItem): boolean {
-  return !!(item.caption.trim() || item.text?.trim())
+  return !!(item.caption.trim() || item.text?.trim() || item.assetUrl)
 }
 
 /** 背景层：整张参考图铺满画布，位置固定，也不参与「缺少描述」统计。 */
@@ -299,6 +352,7 @@ const missingCaptionCount = computed(
 
 /** 可移动 / 可删除的普通图层数量（不含背景层）。 */
 const editableLayerCount = computed(() => draft.value.items.filter((item) => !isBackgroundLike(item)).length)
+const hasBackgroundLayer = computed(() => draft.value.items.some((item) => isBackgroundLike(item)))
 
 function colorAt(index: number): string {
   return LAYER_COLORS[index % LAYER_COLORS.length]
@@ -354,13 +408,161 @@ function addLayer() {
 function removeLayer(id: string) {
   const target = draft.value.items.find((item) => item.id === id)
   if (!target || isBackgroundLike(target)) return
-  // 背景层之外至少要留一个图层。
-  if (draft.value.items.filter((item) => !isBackgroundLike(item)).length <= 1) return
+  // 没有背景底图时，至少保留一个图层；有底图时可以清空图层只保留底图。
+  if (!hasBackgroundLayer.value && editableLayerCount.value <= 1) return
   const index = draft.value.items.findIndex((item) => item.id === id)
   if (index < 0) return
+  releaseAsset(target)
   draft.value.items.splice(index, 1)
   if (selectedId.value === id) {
     selectedId.value = draft.value.items[Math.min(index, draft.value.items.length - 1)]?.id ?? null
+  }
+}
+
+/**
+ * 释放素材图层的本地 blob URL。
+ *
+ * 布局快照会被存进聊天消息，并可能共享同一个 blob URL，
+ * 因此只有确认当前草稿和已保存布局都不再引用时才真正释放。
+ */
+function releaseAsset(item: MossLayoutItem) {
+  const url = item.assetUrl
+  if (!url?.startsWith('blob:')) return
+  nextTick(() => {
+    const stillInDraft = draft.value.items.some((candidate) => candidate.assetUrl === url)
+    const stillInSaved = props.layout.items.some((candidate) => candidate.assetUrl === url)
+    if (!stillInDraft && !stillInSaved) URL.revokeObjectURL(url)
+  })
+}
+
+/** 「上传参考图」：选好文件后再创建图层，取消选择不会留下空图层。 */
+function addAssetLayer() {
+  if (!isGlobalMode.value) return
+  pendingAssetLayerId.value = null
+  pendingNewAssetLayer.value = true
+  if (assetInputRef.value) assetInputRef.value.value = ''
+  assetInputRef.value?.click()
+}
+
+function pickAssetFor(id: string) {
+  pendingNewAssetLayer.value = false
+  pendingAssetLayerId.value = id
+  if (assetInputRef.value) assetInputRef.value.value = ''
+  assetInputRef.value?.click()
+}
+
+function clearAsset(item: MossLayoutItem) {
+  releaseAsset(item)
+  delete item.assetUrl
+  delete item.assetFile
+}
+
+function readLocalImageSize(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file)
+    const image = new Image()
+    image.onload = () => {
+      const size = { width: image.naturalWidth, height: image.naturalHeight }
+      URL.revokeObjectURL(objectUrl)
+      resolve(size)
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      reject(new Error('素材图片读取失败'))
+    }
+    image.src = objectUrl
+  })
+}
+
+function probeImageUrl(url: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (!url) {
+      resolve(false)
+      return
+    }
+    const image = new Image()
+    image.onload = () => resolve(!!image.naturalWidth)
+    image.onerror = () => resolve(false)
+    image.src = url
+  })
+}
+
+/**
+ * 打开历史布局时，素材预览的 blob URL 可能已经失效。
+ * 素材原文件仍保存在布局里，这里重新生成预览地址，保证「图层」再次打开仍可编辑。
+ */
+async function restoreAssetUrls() {
+  if (!isGlobalMode.value) return
+  let changed = false
+  for (const item of draft.value.items) {
+    if (!item.assetFile) continue
+    if (item.assetUrl && (await probeImageUrl(item.assetUrl))) continue
+    item.assetUrl = URL.createObjectURL(item.assetFile)
+    changed = true
+  }
+  if (!changed) return
+  await nextTick()
+  // 恢复预览地址不算用户修改，避免一打开就提示「布局已修改」。
+  dirty.value = false
+}
+
+async function handleAssetFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  let id = pendingAssetLayerId.value
+  const createNew = pendingNewAssetLayer.value
+  pendingAssetLayerId.value = null
+  pendingNewAssetLayer.value = false
+  input.value = ''
+  if (!file || (!id && !createNew)) return
+  if (!file.type.startsWith('image/')) {
+    errorMessage.value = '请选择图片文件作为图层素材。'
+    return
+  }
+  if (file.size > ASSET_MAX_BYTES) {
+    errorMessage.value = '素材图片不能超过 10MB，请压缩后再试。'
+    return
+  }
+
+  let item = id ? draft.value.items.find((candidate) => candidate.id === id) : undefined
+  if (createNew) {
+    const created = createDefaultLayoutItem(draft.value)
+    draft.value.items.push(created)
+    // 从响应式数组重新取出代理对象，后续修改尺寸才能触发视图更新。
+    item = draft.value.items.find((candidate) => candidate.id === created.id)
+    id = created.id
+  }
+  if (!item || !id) return
+
+  releaseAsset(item)
+  item.assetFile = file
+  item.assetUrl = URL.createObjectURL(file)
+  selectedId.value = id
+  errorMessage.value = ''
+
+  // 让图层框贴合素材比例（等比），用户仍可继续拖拽 / 缩放。
+  try {
+    const size = await readLocalImageSize(file)
+    if (!size.width || !size.height) return
+    const ratio = size.height / size.width
+    const maxWidth = draft.value.width * 0.9
+    const maxHeight = draft.value.height * 0.9
+    let width = Math.min(item.width, maxWidth)
+    let height = width * ratio
+    if (height > maxHeight) {
+      height = maxHeight
+      width = height / ratio
+    }
+    width = Math.round(Math.max(24, width))
+    height = Math.round(Math.max(24, height))
+    const centerX = item.x + item.width / 2
+    const centerY = item.y + item.height / 2
+    item.width = width
+    item.height = height
+    item.x = Math.round(Math.min(Math.max(centerX - width / 2, 0), draft.value.width - width))
+    item.y = Math.round(Math.min(Math.max(centerY - height / 2, 0), draft.value.height - height))
+  } catch {
+    // 尺寸读取失败时保留默认框。
   }
 }
 
@@ -476,6 +678,7 @@ function handleKeydown(event: KeyboardEvent) {
 
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
+  void restoreAssetUrls()
 })
 
 onBeforeUnmount(() => {
@@ -626,6 +829,22 @@ onBeforeUnmount(() => {
   box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.32);
 }
 
+.bbox.has-asset {
+  background: transparent;
+  overflow: visible;
+}
+
+.bbox-asset {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
 .bbox.selected {
   background: color-mix(in srgb, var(--layer-color, #f6c453) 22%, transparent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--layer-color, #f6c453) 45%, transparent);
@@ -739,6 +958,37 @@ onBeforeUnmount(() => {
 
 .ghost-btn:hover {
   background: rgba(255, 255, 255, 0.1);
+}
+
+.file-input {
+  display: none;
+}
+
+.layer-add-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.asset-add-btn {
+  border-color: rgba(246, 196, 83, 0.38);
+  background: rgba(246, 196, 83, 0.10);
+  color: rgba(246, 196, 83, 0.92);
+}
+
+.asset-add-btn::before {
+  content: '🖼';
+  margin-right: 4px;
+  font-size: 10px;
+}
+
+.asset-add-btn:hover {
+  background: rgba(246, 196, 83, 0.18);
+}
+
+.asset-add-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .layer-list {
@@ -872,6 +1122,81 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   color: rgba(255, 255, 255, 0.45);
+}
+
+.asset-field {
+  padding-top: 10px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.asset-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.asset-preview img {
+  width: 64px;
+  height: 64px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.asset-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.asset-upload-btn {
+  padding: 10px 12px;
+  border: 1px dashed rgba(246, 196, 83, 0.45);
+  border-radius: 10px;
+  background: rgba(246, 196, 83, 0.08);
+  color: #f6e3b0;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.asset-upload-btn:hover {
+  background: rgba(246, 196, 83, 0.16);
+}
+
+.asset-hint {
+  margin: 2px 0 0;
+  color: rgba(255, 255, 255, 0.32);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.mini-btn {
+  padding: 5px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mini-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.mini-btn.danger {
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+}
+
+.mini-btn.danger:hover {
+  background: rgba(248, 113, 113, 0.16);
 }
 
 .ai-btn {

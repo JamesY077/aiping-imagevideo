@@ -1,4 +1,5 @@
 import type { UploadedFile } from '@/types/chat'
+import { canvasToBlob, loadUploadedImage } from '@/features/generate/imageSource'
 
 /**
  * 扩图输出尺寸：Qwen-Image-2.0-Pro 支持 512*512 ~ 2048*2048，
@@ -30,77 +31,6 @@ export function getExpandTargetSize(aspectRatio: string): ExpandTargetSize {
   }
 }
 
-function loadImage(source: string, crossOrigin = false): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const image = new Image()
-    if (crossOrigin) image.crossOrigin = 'anonymous'
-    image.decoding = 'async'
-    image.onload = () => {
-      if (!image.naturalWidth || !image.naturalHeight) {
-        reject(new Error('图片尺寸为空'))
-        return
-      }
-      resolve(image)
-    }
-    image.onerror = () => reject(new Error('图片读取失败'))
-    image.src = source
-  })
-}
-
-async function loadSourceImage(source: UploadedFile): Promise<{ image: HTMLImageElement; cleanup: () => void } | null> {
-  if (source.file) {
-    const objectUrl = URL.createObjectURL(source.file)
-    try {
-      return {
-        image: await loadImage(objectUrl),
-        cleanup: () => URL.revokeObjectURL(objectUrl),
-      }
-    } catch (error) {
-      URL.revokeObjectURL(objectUrl)
-      throw error
-    }
-  }
-
-  if (!source.url) return null
-
-  const isLocalUrl = source.url.startsWith('blob:') || source.url.startsWith('data:')
-  if (isLocalUrl) {
-    return {
-      image: await loadImage(source.url),
-      cleanup: () => {},
-    }
-  }
-
-  // 生成结果通常是远程 URL。优先 fetch 成 Blob，避免 Canvas 被跨域污染；
-  // 若服务端未开放 CORS，则尝试匿名图片加载，失败时由调用方降级为原图直传。
-  try {
-    const response = await fetch(source.url, { mode: 'cors', credentials: 'omit' })
-    if (!response.ok) throw new Error(`图片下载失败：${response.status}`)
-    const blob = await response.blob()
-    const objectUrl = URL.createObjectURL(blob)
-    try {
-      return {
-        image: await loadImage(objectUrl),
-        cleanup: () => URL.revokeObjectURL(objectUrl),
-      }
-    } catch (error) {
-      URL.revokeObjectURL(objectUrl)
-      throw error
-    }
-  } catch {
-    return {
-      image: await loadImage(source.url, true),
-      cleanup: () => {},
-    }
-  }
-}
-
-function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
-  return new Promise((resolve) => {
-    canvas.toBlob((blob) => resolve(blob), 'image/png')
-  })
-}
-
 /**
  * 把原图放到目标比例的画布中央，四周用原图的模糊放大版本填充，
  * 作为 Qwen 图生图的输入。这样模型能看到完整的画面边界，而不是被裁切。
@@ -111,9 +41,9 @@ export async function createExpandedUploadedFile(
 ): Promise<UploadedFile | null> {
   if (typeof document === 'undefined') return null
 
-  let loaded: Awaited<ReturnType<typeof loadSourceImage>> = null
+  let loaded: Awaited<ReturnType<typeof loadUploadedImage>> = null
   try {
-    loaded = await loadSourceImage(source)
+    loaded = await loadUploadedImage(source)
     if (!loaded) return null
 
     const target = getExpandTargetSize(aspectRatio)

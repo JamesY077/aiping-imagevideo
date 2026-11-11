@@ -15,7 +15,8 @@ import { resolveRealCost } from '@/utils/format'
 import { buildEffectivePrompt } from '@/features/skill/apply'
 import type { MossLayout } from '@/types/layout'
 import { cloneLayout, toMossLayoutPrompt } from '@/features/layout/mossLayout'
-import { buildGlobalEditPrompt } from '@/features/layout/globalEdit'
+import { buildGlobalEditPrompt, type GlobalEditPromptOptions } from '@/features/layout/globalEdit'
+import { assetLayerToUploadedFile, composeLayoutWithAssets, getAssetLayers } from '@/features/layout/layerCompose'
 import { planMossLayout } from '@/features/layout/planner'
 
 type UploadInput = UploadedFile | UploadedFile[] | null | undefined
@@ -203,16 +204,52 @@ export function useGenerate() {
           chatStore.updateMessage(assistantId, { layout: mossLayout })
         }
         // Moss 使用原生布局 JSON；其他图片模型把布局转成提示词，配合参考图近似还原。
-        const requestPrompt = mossLayout
-          ? capability?.imageRequestMode === 'moss'
-            ? toMossLayoutPrompt(mossLayout)
-            : buildGlobalEditPrompt(mossLayout, effectivePrompt)
-          : effectivePrompt
+        let requestUpload: UploadInput = options.generationFile || uploadedFile
+        let requestPrompt = effectivePrompt
+        if (mossLayout) {
+          if (capability?.imageRequestMode === 'moss') {
+            requestPrompt = toMossLayoutPrompt(mossLayout)
+          } else {
+            let editPromptOptions: GlobalEditPromptOptions | undefined
+            const assetLayers = getAssetLayers(mossLayout)
+            if (assetLayers.length) {
+              const base = Array.isArray(requestUpload) ? requestUpload[0] : requestUpload
+              if (!base) {
+                throw new Error('素材图层需要一张底图，请重新上传参考图后再生成。')
+              }
+              const multiLimit =
+                capability?.imageReferenceMode === 'multi'
+                  ? capability.imageReferenceLimit ?? 10
+                  : 1
+              if (capability?.imageReferenceMode === 'multi' && assetLayers.length + 1 <= multiLimit) {
+                // 多图参考模型：底图 + 素材分别下发，素材保真度更高，也不受跨域影响。
+                requestUpload = [
+                  base,
+                  ...assetLayers.map((item, index) => assetLayerToUploadedFile(item, index)),
+                ]
+                const indexByLayerId: Record<string, number> = {}
+                assetLayers.forEach((item, index) => {
+                  indexByLayerId[item.id] = index + 2
+                })
+                editPromptOptions = { assetImageIndexByLayerId: indexByLayerId }
+              } else {
+                // 单图模型：把素材按 bbox 预先合成到底图上。
+                const composed = await composeLayoutWithAssets(base, mossLayout)
+                if (!composed) {
+                  throw new Error('素材图层合成失败，请重试或移除素材图层后再生成。')
+                }
+                requestUpload = composed
+                editPromptOptions = { assetsComposited: true }
+              }
+            }
+            requestPrompt = buildGlobalEditPrompt(mossLayout, effectivePrompt, editPromptOptions)
+          }
+        }
 
         const imageParams = await buildImageParams(
           requestPrompt,
           model,
-          options.generationFile || uploadedFile,
+          requestUpload,
           aspectRatio,
           capability?.imageRequestMode,
           options.imageSize,
