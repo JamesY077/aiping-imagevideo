@@ -285,10 +285,72 @@ export function taskFailureMessage(task: MeshTaskResult | MotionTaskResult | nul
   return task.message || task.msg || '任务执行失败，请调整输入后重试。'
 }
 
-/** axios 错误 -> 用户可读文案（AIPing 错误体是 { code, msg, data }）。 */
+/**
+ * 上游参数校验错误里的字段名 -> 中文。
+ * FastAPI 风格的错误体是 `{ detail: [{ loc: ['body','input_images','front'], msg }] }`，
+ * 直接把 `input_images.front` 抛给用户很难懂。
+ */
+const FIELD_LABELS: Record<string, string> = {
+  model: '模型',
+  prompt: '提示词',
+  input_image: '参考图',
+  input_images: '多视角图片',
+  'input_images.front': '正视图',
+  'input_images.left': '左视图',
+  'input_images.back': '背视图',
+  'input_images.right': '右视图',
+  input_video: '视频',
+  start_time_seconds: '起始时间',
+  duration_seconds: '片段时长',
+  bboxes: '人物框',
+  'options.priority': '优先级',
+}
+
+function fieldLabel(loc: unknown): string {
+  if (!Array.isArray(loc)) return ''
+  const path = loc.filter((item) => typeof item === 'string' && item !== 'body').join('.')
+  return FIELD_LABELS[path] || path
+}
+
+/** FastAPI 的 detail 可能是字符串，也可能是 [{ loc, msg }] 数组。 */
+function detailMessage(detail: unknown): string {
+  if (typeof detail === 'string') return detail.trim()
+  if (!Array.isArray(detail)) return ''
+
+  return detail
+    .map((item) => {
+      if (typeof item === 'string') return item
+      const entry = item as { msg?: unknown; loc?: unknown }
+      const message = typeof entry?.msg === 'string' ? entry.msg.trim() : ''
+      if (!message) return ''
+      const label = fieldLabel(entry?.loc)
+      // Pydantic 的默认文案对用户没意义，这里换成人话。
+      if (/^field required$/i.test(message)) return label ? `缺少${label}` : '缺少必填参数'
+      if (/^string (type expected|should be a valid string)$/i.test(message)) return label ? `${label}格式不正确` : '参数格式不正确'
+      return label ? `${label}：${message}` : message
+    })
+    .filter(Boolean)
+    .join('；')
+}
+
+/** 参数类错误（400 / 422）里常见的上游英文提示 -> 中文。 */
+const PARAM_ERROR_TRANSLATIONS: { pattern: RegExp; text: string }[] = [
+  { pattern: /(aspect ratio|resolution|image size|dimension)/i, text: '图片尺寸或比例不符合上游要求，请改用方向统一、接近正方形的图片后重试。' },
+  { pattern: /(unsupported|not supported|invalid).*(image|format|file)/i, text: '图片格式不受支持，请改用 JPG / PNG / WebP 后重试。' },
+  { pattern: /(image|file).*(too (large|big)|size limit|exceeds)/i, text: '图片体积或分辨率超出上限，请压缩后重试。' },
+  { pattern: /(duplicate|same (image|view))/i, text: '多视角图片重复，请为每个视角上传不同角度的图片。' },
+  { pattern: /(moderation|safety|nsfw)/i, text: '图片未通过内容审核，请更换图片后重试。' },
+]
+
+function translateParamError(raw: string): string {
+  const matched = PARAM_ERROR_TRANSLATIONS.find((item) => item.pattern.test(raw))
+  return matched ? matched.text : raw
+}
+
+/** axios 错误 -> 用户可读文案（AIPing 错误体是 { code, msg, data }，上游校验可能是 { detail }）。 */
 export function taskRequestError(error: unknown, fallback = '请求失败，请稍后重试。'): string {
   const anyError = error as {
-    response?: { status?: number; data?: { msg?: string; message?: string; error?: string | { message?: string } } }
+    response?: { status?: number; data?: unknown }
     message?: string
     code?: string
   }
@@ -296,14 +358,50 @@ export function taskRequestError(error: unknown, fallback = '请求失败，请�
   if (status === 401 || status === 403) return 'API Key 无效或权限不足，请重新登录后再试。'
   if (status === 404) return '任务不存在或已过期。'
   if (status === 429) return '请求过于频繁，已达到并发或 RPM 限制，请稍后再试。'
-  const data = anyError?.response?.data
-  const raw =
-    data?.msg ||
-    data?.message ||
-    (typeof data?.error === 'string' ? data.error : data?.error?.message) ||
-    anyError?.message ||
-    ''
   if (anyError?.code === 'ECONNABORTED') return '请求超时，请检查网络后重试。'
+
+  let data = anyError?.response?.data
+  if (typeof data === 'string') {
+    const text = data.trim()
+    // 上游偶尔直接返回纯文本；能解析成 JSON 的按结构读，避免把整段 JSON 抛给用户。
+    if (text.startsWith('{') || text.startsWith('[')) {
+      try {
+        data = JSON.parse(text)
+      } catch {
+        // 不是合法 JSON，保留原文
+      }
+    }
+  }
+
+  const payload = (typeof data === 'object' && data !== null ? data : {}) as {
+    msg?: string
+    message?: string
+    error?: string | { message?: string }
+    detail?: unknown
+  }
+  const raw =
+    payload.msg ||
+    payload.message ||
+    (typeof payload.error === 'string' ? payload.error : payload.error?.message) ||
+    detailMessage(payload.detail) ||
+    (typeof data === 'string' ? data.slice(0, 200) : '') ||
+    ''
+
   if (raw.includes('No provider is currently available')) return '上游服务商暂时不可用，请稍后重试。'
-  return raw || fallback
+  if (/rate limit|concurren/i.test(raw)) return '请求过于频繁或并发已满，请稍后再试。'
+
+  if (raw) {
+    const translated = translateError(raw)
+    if (translated !== raw) return translated
+    if (status === 400 || status === 422) {
+      const paramError = translateParamError(raw)
+      // 参数类提示是推测出的中文，附上上游原文，方便用户/我们判断真实原因。
+      return paramError === raw ? raw : `${paramError}（上游提示：${raw}）`
+    }
+    return raw
+  }
+
+  // 兜底也不能只剩一句英文 status text，至少告诉用户是哪一步失败。
+  if (status === 400 || status === 422) return '请求参数被上游拒绝，请检查图片与模型选择后重试。'
+  return anyError?.message || fallback
 }

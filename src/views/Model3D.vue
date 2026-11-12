@@ -190,7 +190,7 @@
                     </template>
                   </div>
                 </div>
-                <p class="field-hint">正视图必填，补全左 / 背 / 右视图可以显著提升还原度。</p>
+                <p class="field-hint">正视图必填，补全左 / 背 / 右视图可以显著提升还原度；四个视角建议同一分辨率、主体居中。</p>
               </div>
             </div>
 
@@ -657,6 +657,7 @@ import {
   type TaskAsset,
 } from '@/api/model3d'
 import { AssetError, downloadAsset, formatBytes, mediaUrl } from '@/features/model3d/assets'
+import { normalizeMultiViewImages } from '@/features/model3d/multiView'
 import { HologramViewer, type ViewerStats } from '@/features/model3d/viewer'
 import {
   addHistoryEntry,
@@ -1009,6 +1010,10 @@ async function readImageFile(file: File) {
   const dataUrl = await fileToBase64(file)
   const prepared = await prepareLocalImageDataUri(dataUrl)
   const dimensions = await measureImage(prepared)
+  // HEIC / AVIF 等格式在部分浏览器里无法解码：此时上传只会被上游判为非法图片，提前拦下更好懂。
+  if (!dimensions.width || !dimensions.height) {
+    throw new Error(`无法读取这张图片（${file.type || '未知格式'}），请改用 JPG / PNG / WebP。`)
+  }
   return { dataUrl: prepared, name: file.name, width: dimensions.width, height: dimensions.height }
 }
 
@@ -1147,12 +1152,13 @@ async function submit() {
       if (meshMode.value === 'text') payload.prompt = prompt.value.trim()
       if (meshMode.value === 'image') payload.image = singleImage.value?.dataUrl
       if (meshMode.value === 'multi') {
-        payload.views = {
+        // 四个视角先统一尺寸并压缩成 JPEG，避免上游因图片规格不一致直接 400。
+        payload.views = await normalizeMultiViewImages({
           front: views.front?.dataUrl,
           left: views.left?.dataUrl || undefined,
           back: views.back?.dataUrl || undefined,
           right: views.right?.dataUrl || undefined,
-        }
+        })
       }
       const response = await createMeshTask(payload)
       beginTask(response.task_uuid, 'mesh', response)
@@ -1167,6 +1173,10 @@ async function submit() {
       status: 'RUNNING',
     })
   } catch (error) {
+    if (import.meta.env.DEV) {
+      const response = (error as { response?: { status?: number; data?: unknown } })?.response
+      console.error('[3D] 创建任务失败', response?.status ?? '', response?.data ?? error)
+    }
     errorMessage.value = taskRequestError(error, '任务创建失败，请稍后重试。')
     taskPhase.value = 'failed'
   } finally {
