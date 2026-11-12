@@ -14,6 +14,10 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js'
+import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js'
+import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js'
+import { PLYExporter } from 'three/examples/jsm/exporters/PLYExporter.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark'
 import { AssetError, fetchAssetBytes, detectModelFormat } from './assets'
@@ -22,7 +26,18 @@ const CYAN = 0x38bdf8
 const CYAN_SOFT = 0x7dd3fc
 
 /** 预览材质：只影响本地渲染与导出，不改变上游返回的模型文件。 */
-export type ViewerMaterial = 'original' | 'metal' | 'glass'
+export type ViewerMaterial =
+  | 'original'
+  | 'matte'
+  | 'ceramic'
+  | 'metal'
+  | 'chrome'
+  | 'gold'
+  | 'glass'
+  | 'jade'
+
+/** 可导出的三角网格格式。点云 PLY 无法可靠转换成 OBJ / STL。 */
+export type ModelExportFormat = 'glb' | 'gltf' | 'obj' | 'stl' | 'ply'
 
 /** 快捷机位：等轴 + 四个正交方向。 */
 export type ViewerView = 'iso' | 'front' | 'back' | 'left' | 'right'
@@ -31,6 +46,9 @@ export interface ScreenshotOptions {
   /** transparent：透明背景；solid：纯色；scene：当前 AI 背景 */
   background?: 'transparent' | 'solid' | 'scene'
   color?: string
+  /** PNG / JPEG / WebP；JPEG 不支持透明，透明模式会回落为白底。 */
+  format?: 'png' | 'jpeg' | 'webp'
+  quality?: number
 }
 
 const VIEW_DIRECTIONS: Record<ViewerView, THREE.Vector3> = {
@@ -157,6 +175,8 @@ export class HologramViewer {
   private materialThickness = 0.6
   private viewTween: { from: THREE.Vector3; to: THREE.Vector3; start: number; duration: number } | null = null
   private backdropImage: HTMLImageElement | null = null
+  private building = false
+  private buildingProgress = 0
 
   onStateChange: ((state: ViewerState) => void) | null = null
   onProgress: ((loaded: number, total: number) => void) | null = null
@@ -393,11 +413,20 @@ export class HologramViewer {
     this.controls.update()
 
     if (this.state !== 'ready') {
-      this.placeholder.rotation.y = elapsed * 0.5
+      // 任务进行中装配台加速运转，扫描环自下而上循环扫过占位体。
+      const speed = this.building ? 1.25 : 0.5
+      this.placeholder.rotation.y = elapsed * speed
       const wire = this.placeholder.getObjectByName('placeholder-wire')
       if (wire) {
-        wire.rotation.x = Math.sin(elapsed * 0.5) * 0.25
-        wire.rotation.z = elapsed * 0.18
+        wire.rotation.x = Math.sin(elapsed * (this.building ? 1.7 : 0.5)) * (this.building ? 0.45 : 0.25)
+        wire.rotation.z = elapsed * (this.building ? 0.62 : 0.18)
+      }
+      this.placeholder.scale.setScalar(this.building ? 1 + Math.sin(elapsed * 5.4) * 0.04 : 1)
+      if (this.building) {
+        const sweep = (elapsed * (0.4 + (this.buildingProgress / 100) * 0.4)) % 1
+        this.scanRing.visible = true
+        this.scanRing.position.y = 0.02 + sweep * 2.15
+        ;(this.scanRing.material as THREE.MeshBasicMaterial).opacity = 0.85 * (1 - sweep * 0.72)
       }
     } else {
       this.modelGroup.position.y = Math.sin(elapsed * 1.05) * 0.016
@@ -469,6 +498,17 @@ export class HologramViewer {
   }
 
   /* ---------------------------------------------------------------- 模型加载 */
+
+  /** 回到待命状态：清空已加载模型，让装配台显示执行 / 待命动画。 */
+  resetToIdle() {
+    this.revealActive = false
+    this.clearModel()
+    this.placeholder.visible = true
+    this.scanRing.visible = this.building
+    this.modelHeight = 2.2
+    this.modelRadius = 1.4
+    this.setState('idle')
+  }
 
   async loadFromUrl(rawUrl: string): Promise<LoadResult> {
     this.setState('loading')
@@ -593,10 +633,73 @@ export class HologramViewer {
         mesh.material = base
         return
       }
-      const material = this.materialPreset === 'metal' ? this.buildMetalMaterial(base) : this.buildGlassMaterial()
+      const material = this.buildOverrideMaterial(base)
       this.overrideMaterials.push(material)
       mesh.material = material
     })
+  }
+
+  private buildOverrideMaterial(base: THREE.MeshStandardMaterial): THREE.Material {
+    switch (this.materialPreset) {
+      case 'matte':
+        return new THREE.MeshStandardMaterial({
+          color: base.color?.clone() ?? new THREE.Color(0xcbd5df),
+          map: base.map ?? null,
+          metalness: 0.02,
+          roughness: 0.94,
+          envMap: this.envTexture,
+          envMapIntensity: 0.25,
+          side: THREE.DoubleSide,
+        })
+      case 'ceramic':
+        return new THREE.MeshPhysicalMaterial({
+          color: 0xf3efe6,
+          metalness: 0,
+          roughness: 0.2,
+          clearcoat: 1,
+          clearcoatRoughness: 0.08,
+          envMap: this.envTexture,
+          envMapIntensity: 0.8,
+          side: THREE.DoubleSide,
+        })
+      case 'chrome':
+        return new THREE.MeshStandardMaterial({
+          color: 0xe9f2fa,
+          metalness: 1,
+          roughness: 0.035,
+          envMap: this.envTexture,
+          envMapIntensity: 1.7,
+          side: THREE.DoubleSide,
+        })
+      case 'gold':
+        return new THREE.MeshStandardMaterial({
+          color: 0xf3c75f,
+          metalness: 1,
+          roughness: 0.17,
+          envMap: this.envTexture,
+          envMapIntensity: 1.5,
+          side: THREE.DoubleSide,
+        })
+      case 'glass':
+        return this.buildGlassMaterial()
+      case 'jade':
+        return new THREE.MeshPhysicalMaterial({
+          color: 0x7fe0b6,
+          metalness: 0,
+          roughness: 0.26,
+          transmission: 0.62,
+          thickness: 0.9,
+          ior: 1.55,
+          envMap: this.envTexture,
+          envMapIntensity: 1.1,
+          clearcoat: 0.55,
+          clearcoatRoughness: 0.12,
+          transparent: true,
+          side: THREE.DoubleSide,
+        })
+      default:
+        return this.buildMetalMaterial(base)
+    }
   }
 
   private buildMetalMaterial(base: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
@@ -670,6 +773,60 @@ export class HologramViewer {
     this.controls.autoRotate = enabled
   }
 
+  /**
+   * 任务进行中：装配台进入「执行中」状态。
+   * 占位体加速旋转 + 轻微脉冲，扫描环上下循环扫过。
+   */
+  setBuilding(active: boolean, progress = 0) {
+    this.buildingProgress = Math.min(100, Math.max(0, progress))
+    if (active === this.building) return
+    this.building = active
+    if (!active) {
+      this.placeholder.scale.setScalar(1)
+      if (!this.revealActive) this.scanRing.visible = false
+    }
+  }
+
+  /** 导出当前预览模型。点云无法转成三角网格，需提示用户下载原始 PLY。 */
+  async exportModel(format: ModelExportFormat): Promise<Blob> {
+    let meshCount = 0
+    this.modelGroup.traverse((object) => {
+      if ((object as THREE.Mesh).isMesh) meshCount += 1
+    })
+    if (!meshCount) throw new AssetError('点云模型无法转换为网格格式，请在右侧下载原始 PLY', 'format')
+
+    switch (format) {
+      case 'glb':
+      case 'gltf': {
+        const exporter = new GLTFExporter()
+        const result = await exporter.parseAsync(this.modelGroup, {
+          binary: format === 'glb',
+          onlyVisible: true,
+        })
+        if (format === 'glb') return new Blob([result as ArrayBuffer], { type: 'model/gltf-binary' })
+        return new Blob([JSON.stringify(result, null, 2)], { type: 'model/gltf+json' })
+      }
+      case 'obj': {
+        const text = new OBJExporter().parse(this.modelGroup)
+        return new Blob([text], { type: 'text/plain' })
+      }
+      case 'stl': {
+        const data = new STLExporter().parse(this.modelGroup, { binary: true }) as BlobPart
+        return new Blob([data], { type: 'model/stl' })
+      }
+      default: {
+        // PLYExporter 是回调式 API，binary 模式返回 DataView。
+        const data = await new Promise<BlobPart | null>((resolve) => {
+          new PLYExporter().parse(this.modelGroup, (result) => resolve(result as unknown as BlobPart), {
+            binary: true,
+          })
+        })
+        if (!data) throw new AssetError('PLY 导出失败，请改用 GLB 或 STL', 'format')
+        return new Blob([data], { type: 'application/octet-stream' })
+      }
+    }
+  }
+
   setGridVisible(visible: boolean) {
     this.grid.visible = visible
     this.floor.visible = visible
@@ -692,6 +849,7 @@ export class HologramViewer {
    */
   screenshot(options: ScreenshotOptions = {}): string | null {
     const mode = options.background ?? 'solid'
+    const format = options.format ?? 'png'
     const rigVisible = this.rig.visible
     const placeholderVisible = this.placeholder.visible
     const ringVisible = this.scanRing.visible
@@ -720,10 +878,15 @@ export class HologramViewer {
         } else {
           fillStageGradient(ctx, canvas.width, canvas.height)
         }
+      } else if (format === 'jpeg') {
+        // JPEG 没有 alpha 通道，透明背景会变成黑底，统一回落为白底。
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
       }
 
       ctx.drawImage(source, 0, 0)
-      return canvas.toDataURL('image/png')
+      const mime = format === 'jpeg' ? 'image/jpeg' : format === 'webp' ? 'image/webp' : 'image/png'
+      return canvas.toDataURL(mime, format === 'png' ? undefined : (options.quality ?? 0.92))
     } catch {
       return null
     } finally {

@@ -105,17 +105,19 @@
                   <span class="material-title">预览材质</span>
                   <span class="material-hint">仅影响预览 / 导出</span>
                 </div>
-                <div class="segmented segmented--compact" role="tablist" aria-label="预览材质">
+                <div class="material-grid" role="tablist" aria-label="预览材质">
                   <button
                     v-for="item in MATERIAL_PRESETS"
                     :key="item.value"
-                    class="segmented-item"
+                    class="material-chip"
                     :class="{ active: materialPreset === item.value }"
                     type="button"
                     role="tab"
                     :aria-selected="materialPreset === item.value"
+                    :title="item.hint"
                     @click="materialPreset = item.value"
                   >
+                    <span class="material-swatch" :style="{ background: item.swatch }" aria-hidden="true" />
                     {{ item.label }}
                   </button>
                 </div>
@@ -128,7 +130,7 @@
                   <input v-model.number="materialThickness" class="time-range" type="range" min="0" max="1" step="0.01" />
                 </div>
 
-                <p class="field-hint">金属 / 玻璃是高光预览效果；高斯点云 PLY 不支持材质替换，GLB / GLTF 模型生效。</p>
+                <p class="field-hint">预览材质只改变本地渲染与导出结果，不修改上游模型文件；高斯点云 PLY 不支持材质替换。</p>
               </div>
 
               <!-- 文本 -->
@@ -400,7 +402,7 @@
                   <path d="M4 5.5V11h5.4" />
                 </svg>
               </button>
-              <button class="stage-action" type="button" :disabled="!viewerReady" title="导出 PNG" @click="openExport">
+              <button class="stage-action" type="button" :disabled="!viewerReady" title="导出产物" @click="openExport">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M4 8.3h3.2L9 5.6h6l1.8 2.7H20v10.1H4z" />
                   <circle cx="12" cy="13.2" r="3.1" />
@@ -458,7 +460,7 @@
             </div>
 
             <!-- 空闲态提示 -->
-            <div v-if="!showVideoStage && viewerState === 'idle'" class="stage-idle">
+            <div v-if="!showVideoStage && viewerState === 'idle' && !isRunning && !stageNotice" class="stage-idle">
               <span class="idle-title">装配台待命</span>
               <span class="idle-sub">
                 {{
@@ -467,6 +469,20 @@
                     : '左侧选择模型并提交描述，生成的模型会在这里逐层显影'
                 }}
               </span>
+            </div>
+
+            <!-- 任务执行中：装配台运转状态 -->
+            <div v-if="!showVideoStage && isRunning && viewerState === 'idle'" class="stage-building">
+              <span class="building-badge">
+                <span class="live-dot" aria-hidden="true" />
+                LIVE ASSEMBLY
+              </span>
+              <span class="building-title">正在装配模型</span>
+              <span class="building-sub">{{ stageLabel }} · {{ stageStatusText }}</span>
+              <div class="building-bar">
+                <span class="progress-fill" :class="{ indeterminate: !hasRealProgress }" :style="{ width: `${progressPercent}%` }" />
+              </div>
+              <span class="building-percent">{{ progressPercent }}%</span>
             </div>
 
             <!-- 加载态 -->
@@ -675,66 +691,144 @@
       </aside>
     </main>
 
-    <!-- ============================ 导出 PNG ============================ -->
-    <div v-if="exportOpen" class="studio-modal" role="dialog" aria-modal="true" aria-label="导出 PNG" @click.self="exportOpen = false">
+    <!-- ============================ 导出 ============================ -->
+    <div v-if="exportOpen" class="studio-modal" role="dialog" aria-modal="true" aria-label="导出产物" @click.self="exportOpen = false">
       <div class="modal-card">
         <header class="modal-head">
           <div class="modal-headings">
-            <span class="modal-kicker">Export · PNG</span>
-            <h3 class="modal-title">导出静态图</h3>
+            <span class="modal-kicker">Export · {{ exportKind === 'image' ? 'IMAGE' : 'MODEL' }}</span>
+            <h3 class="modal-title">{{ exportKind === 'image' ? '导出静态图' : '导出 3D 模型' }}</h3>
           </div>
           <button class="modal-close" type="button" aria-label="关闭" @click="exportOpen = false">×</button>
         </header>
 
         <div class="modal-body">
           <div class="modal-field">
-            <span class="modal-label">背景</span>
+            <span class="modal-label">类型</span>
             <div class="segmented">
               <button
-                v-for="item in EXPORT_BACKGROUNDS"
-                :key="item.value"
                 class="segmented-item"
-                :class="{ active: exportBackground === item.value }"
+                :class="{ active: exportKind === 'image' }"
                 type="button"
-                @click="exportBackground = item.value"
+                @click="exportKind = 'image'"
               >
-                {{ item.label }}
+                图片
+              </button>
+              <button
+                class="segmented-item"
+                :class="{ active: exportKind === 'model' }"
+                type="button"
+                @click="exportKind = 'model'"
+              >
+                3D 模型
               </button>
             </div>
           </div>
 
-          <div v-if="exportBackground === 'solid'" class="modal-field">
-            <span class="modal-label">纯色</span>
-            <div class="color-row">
-              <input v-model="exportColor" class="color-input" type="color" aria-label="导出背景颜色" />
-              <span class="color-value">{{ exportColor.toUpperCase() }}</span>
-              <div class="swatch-row">
+          <template v-if="exportKind === 'image'">
+            <div class="modal-field">
+              <span class="modal-label">图片格式</span>
+              <div class="segmented">
                 <button
-                  v-for="color in EXPORT_COLORS"
-                  :key="color"
-                  class="swatch"
-                  :class="{ active: exportColor.toLowerCase() === color.toLowerCase() }"
+                  v-for="item in EXPORT_IMAGE_FORMATS"
+                  :key="item.value"
+                  class="segmented-item"
+                  :class="{ active: exportImageFormat === item.value }"
                   type="button"
-                  :style="{ background: color }"
-                  :aria-label="color"
-                  @click="exportColor = color"
-                />
+                  @click="exportImageFormat = item.value"
+                >
+                  {{ item.label }}
+                </button>
+              </div>
+              <p class="field-hint">
+                {{ EXPORT_IMAGE_FORMATS.find((item) => item.value === exportImageFormat)?.hint }}
+                <template v-if="exportImageFormat === 'jpeg' && exportBackground === 'transparent'">
+                  JPG 不支持透明，将自动使用白色背景。
+                </template>
+              </p>
+            </div>
+
+            <div class="modal-field">
+              <span class="modal-label">背景</span>
+              <div class="segmented">
+                <button
+                  v-for="item in EXPORT_BACKGROUNDS"
+                  :key="item.value"
+                  class="segmented-item"
+                  :class="{ active: exportBackground === item.value }"
+                  type="button"
+                  @click="exportBackground = item.value"
+                >
+                  {{ item.label }}
+                </button>
               </div>
             </div>
-          </div>
 
-          <p v-if="exportBackground === 'scene' && !bgImage" class="field-hint">
-            还没有 AI 背景，本次会回落到蓝色舞台渐变。
-          </p>
-          <p v-else-if="exportBackground === 'scene' && !bgExportable" class="field-hint">
-            当前背景图未走同源反代，直接导出会被浏览器拦截；请配置 /ai-image-assets 反代后重试。
-          </p>
-          <p class="field-hint">导出会自动隐藏栅格、地面与扫描环，只保留模型本体；透明背景输出带 alpha 通道的 PNG。</p>
+            <div v-if="exportBackground === 'solid'" class="modal-field">
+              <span class="modal-label">纯色</span>
+              <div class="color-row">
+                <input v-model="exportColor" class="color-input" type="color" aria-label="导出背景颜色" />
+                <span class="color-value">{{ exportColor.toUpperCase() }}</span>
+                <div class="swatch-row">
+                  <button
+                    v-for="color in EXPORT_COLORS"
+                    :key="color"
+                    class="swatch"
+                    :class="{ active: exportColor.toLowerCase() === color.toLowerCase() }"
+                    type="button"
+                    :style="{ background: color }"
+                    :aria-label="color"
+                    @click="exportColor = color"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <p v-if="exportBackground === 'scene' && !bgImage" class="field-hint">
+              还没有 AI 背景，本次会回落到蓝色舞台渐变。
+            </p>
+            <p v-else-if="exportBackground === 'scene' && !bgExportable" class="field-hint">
+              当前背景图未走同源反代，直接导出会被浏览器拦截；请配置 /ai-image-assets 反代后重试。
+            </p>
+            <p class="field-hint">导出会自动隐藏栅格、地面与扫描环，只保留模型本体。</p>
+          </template>
+
+          <template v-else>
+            <div class="modal-field">
+              <span class="modal-label">模型格式</span>
+              <div class="format-grid">
+                <button
+                  v-for="item in EXPORT_MODEL_FORMATS"
+                  :key="item.value"
+                  class="format-chip"
+                  :class="{ active: exportModelFormat === item.value }"
+                  type="button"
+                  @click="exportModelFormat = item.value"
+                >
+                  <span class="format-name">{{ item.label }}</span>
+                  <span class="format-hint">{{ item.hint }}</span>
+                </button>
+              </div>
+            </div>
+            <p class="field-hint">
+              GLB / glTF 会带上当前预览材质与贴图，可直接导入 Blender、Maya、3ds Max、C4D 等建模软件；OBJ 仅几何与 UV，STL 仅三角面。
+            </p>
+            <p v-if="stats && stats.kind === 'splat'" class="field-hint">
+              当前是高斯点云模型，无法转换为三角网格；请从右侧产物中下载原始 PLY。
+            </p>
+          </template>
         </div>
 
         <footer class="modal-foot">
           <button class="studio-btn" type="button" @click="exportOpen = false">取消</button>
-          <button class="studio-btn studio-btn--primary" type="button" @click="exportPng">导出 PNG</button>
+          <button
+            class="studio-btn studio-btn--primary"
+            type="button"
+            :disabled="exportBusy || (exportKind === 'model' && stats?.kind === 'splat')"
+            @click="runExport"
+          >
+            {{ exportBusy ? '正在导出…' : exportKind === 'image' ? '导出图片' : `导出 ${exportModelFormat.toUpperCase()}` }}
+          </button>
         </footer>
       </div>
     </div>
@@ -770,7 +864,7 @@
           </label>
 
           <p class="field-hint">
-            调用 {{ AI_BG_MODEL }} 生成 4:3 背景图，仅用于当前预览与 PNG 导出，不会改写模型文件。
+            调用 {{ AI_BG_MODEL }} 生成 4:3 背景图，仅用于当前预览与图片导出，不会改写模型文件。
           </p>
           <p v-if="bgError" class="inline-error">{{ bgError }}</p>
         </div>
@@ -829,6 +923,7 @@ import { AssetError, downloadAsset, formatBytes, mediaUrl } from '@/features/mod
 import { normalizeMultiViewImages } from '@/features/model3d/multiView'
 import {
   HologramViewer,
+  type ModelExportFormat,
   type ViewerMaterial,
   type ViewerStats,
   type ViewerView,
@@ -854,10 +949,15 @@ const MESH_MODES: { value: MeshInputMode; label: string }[] = [
   { value: 'multi', label: '多视角' },
 ]
 
-const MATERIAL_PRESETS: { value: ViewerMaterial; label: string }[] = [
-  { value: 'original', label: '原始' },
-  { value: 'metal', label: '金属' },
-  { value: 'glass', label: '玻璃' },
+const MATERIAL_PRESETS: { value: ViewerMaterial; label: string; hint: string; swatch: string }[] = [
+  { value: 'original', label: '原始', hint: '保留模型自带贴图与颜色', swatch: 'linear-gradient(135deg, #9fb4c8, #4c637a)' },
+  { value: 'matte', label: '哑光', hint: '低反光，接近手办 / 黏土', swatch: 'linear-gradient(135deg, #97a1aa, #4c5560)' },
+  { value: 'ceramic', label: '陶瓷', hint: '清漆釉面，柔和高光', swatch: 'linear-gradient(135deg, #fdfaf2, #cfc8ba)' },
+  { value: 'metal', label: '金属', hint: '保留贴图的金属质感', swatch: 'linear-gradient(135deg, #e2edf7, #6b7d90)' },
+  { value: 'chrome', label: '镀铬', hint: '镜面反射，高对比高光', swatch: 'linear-gradient(135deg, #ffffff, #8ea6bb)' },
+  { value: 'gold', label: '黄金', hint: '暖金金属，适合奖杯 / 饰品', swatch: 'linear-gradient(135deg, #ffe9a8, #c79320)' },
+  { value: 'glass', label: '玻璃', hint: '可调厚度的透射材质', swatch: 'linear-gradient(135deg, rgba(223,242,255,0.95), rgba(120,190,230,0.45))' },
+  { value: 'jade', label: '玉石', hint: '半透青玉，温润光泽', swatch: 'linear-gradient(135deg, #b8f3d6, #2f9c72)' },
 ]
 
 const VIEW_PRESETS: { value: ViewerView; label: string }[] = [
@@ -875,6 +975,20 @@ const EXPORT_BACKGROUNDS: { value: ExportBackground; label: string }[] = [
 ]
 
 type ExportBackground = 'transparent' | 'solid' | 'scene'
+
+const EXPORT_IMAGE_FORMATS: { value: 'png' | 'jpeg' | 'webp'; label: string; hint: string }[] = [
+  { value: 'png', label: 'PNG', hint: '支持透明通道，画质无损' },
+  { value: 'jpeg', label: 'JPG', hint: '体积小，无透明通道' },
+  { value: 'webp', label: 'WebP', hint: '体积更小，支持透明' },
+]
+
+const EXPORT_MODEL_FORMATS: { value: ModelExportFormat; label: string; hint: string }[] = [
+  { value: 'glb', label: 'GLB', hint: '单文件含材质贴图，通用首选' },
+  { value: 'gltf', label: 'glTF', hint: 'JSON 结构，便于二次编辑' },
+  { value: 'obj', label: 'OBJ', hint: '兼容 Blender / Maya / C4D，文件较大' },
+  { value: 'stl', label: 'STL', hint: '仅几何，适合 3D 打印' },
+  { value: 'ply', label: 'PLY', hint: '网格 + 顶点色，适合扫描类软件' },
+]
 
 const EXPORT_COLORS = ['#0b1626', '#ffffff', '#000000', '#38bdf8', '#f5e7d0', '#1d2b36']
 
@@ -1098,8 +1212,12 @@ const materialPreset = ref<ViewerMaterial>('original')
 const materialThickness = ref(0.6)
 const viewPreset = ref<ViewerView>('iso')
 
-/** PNG 导出与 AI 背景。 */
+/** PNG / JPG / WebP 导出与 AI 背景。 */
 const exportOpen = ref(false)
+const exportKind = ref<'image' | 'model'>('image')
+const exportImageFormat = ref<'png' | 'jpeg' | 'webp'>('png')
+const exportModelFormat = ref<ModelExportFormat>('glb')
+const exportBusy = ref(false)
 const exportBackground = ref<ExportBackground>('transparent')
 const exportColor = ref('#0b1626')
 const bgOpen = ref(false)
@@ -1113,6 +1231,11 @@ let bgObjectUrl = ''
 
 watch([materialPreset, materialThickness], () => {
   viewer?.setMaterial(materialPreset.value, materialThickness.value)
+})
+
+// 任务进行中让装配台保持运转状态；完成后恢复待命 / 展示模型。
+watch([taskPhase, progressPercent], ([phase, progress]) => {
+  viewer?.setBuilding(phase === 'running', progress)
 })
 
 const viewerReady = computed(() => viewerState.value === 'ready')
@@ -1182,6 +1305,7 @@ onMounted(async () => {
     }
     viewer.setAutoRotate(autoRotate.value)
     viewer.setMaterial(materialPreset.value, materialThickness.value)
+    viewer.setBuilding(isRunning.value, progressPercent.value)
   }
 
   // 刷新页面 / 重新进入时，自动续接上一次未结束的任务，避免历史记录一直停在「进行中」。
@@ -1437,6 +1561,8 @@ function beginTask(taskId: string, kind: 'mesh' | 'motion', response: { status?:
   taskStartedAt = Date.now()
   elapsedMs.value = 0
   viewerError.value = ''
+  viewer?.resetToIdle()
+  stats.value = null
   startPolling()
 }
 
@@ -1568,6 +1694,8 @@ async function loadModel(url: string) {
     previewMode.value = true
     viewerError.value = describeAssetError(error)
     stats.value = null
+    // 失败后回到待命，避免加载动画一直转。
+    viewer?.resetToIdle()
   }
 }
 
@@ -1619,34 +1747,69 @@ function setView(view: ViewerView) {
 
 function openExport() {
   if (!viewerReady.value) {
-    showDownloadNotice('模型装配完成后才能导出 PNG。')
+    showDownloadNotice('模型装配完成后才能导出。')
     return
   }
   exportOpen.value = true
 }
 
-function exportPng() {
+async function runExport() {
+  if (exportBusy.value) return
   if (!viewerReady.value) {
-    showDownloadNotice('模型装配完成后才能导出 PNG。')
+    showDownloadNotice('模型装配完成后才能导出。')
+    return
+  }
+  if (exportKind.value === 'model') {
+    await exportModelFile()
     return
   }
   if (exportBackground.value === 'scene' && bgImage.value && !bgExportable.value) {
     showDownloadNotice('AI 背景未走同源反代，无法合成导出；请配置 /ai-image-assets 后重试。')
     return
   }
-  const dataUrl = viewer?.screenshot({ background: exportBackground.value, color: exportColor.value })
+  const dataUrl = viewer?.screenshot({
+    background: exportBackground.value,
+    color: exportColor.value,
+    format: exportImageFormat.value,
+  })
   if (!dataUrl) {
     showDownloadNotice('导出失败：当前浏览器不支持画布导出，请换用 Chrome / Edge。')
     return
   }
+  const ext = exportImageFormat.value === 'jpeg' ? 'jpg' : exportImageFormat.value
   const short = (task.value?.task_uuid || 'model').slice(0, 8)
   const anchor = document.createElement('a')
   anchor.href = dataUrl
-  anchor.download = `artrealm-3d-${short}-${viewPreset.value}-${exportBackground.value}.png`
+  anchor.download = `artrealm-3d-${short}-${viewPreset.value}-${exportBackground.value}.${ext}`
   anchor.click()
   exportOpen.value = false
-  const label = EXPORT_BACKGROUNDS.find((item) => item.value === exportBackground.value)?.label || ''
-  showDownloadNotice(`已导出 PNG（${label}）`)
+  const label = EXPORT_IMAGE_FORMATS.find((item) => item.value === exportImageFormat.value)?.label || 'PNG'
+  showDownloadNotice(`已导出 ${label} 图片`)
+}
+
+async function exportModelFile() {
+  if (!viewer) return
+  exportBusy.value = true
+  try {
+    const blob = await viewer.exportModel(exportModelFormat.value)
+    const short = (task.value?.task_uuid || 'model').slice(0, 8)
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `artrealm-3d-${short}.${exportModelFormat.value}`
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    // 大模型（几十 MB）落盘可能超过 5 秒，过早释放 Blob URL 会让下载失败。
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000)
+    exportOpen.value = false
+    const label = EXPORT_MODEL_FORMATS.find((item) => item.value === exportModelFormat.value)?.label || '模型'
+    showDownloadNotice(`已导出 ${label} 模型（${formatBytes(blob.size)}）`)
+  } catch (error) {
+    showDownloadNotice(error instanceof AssetError ? error.message : '模型导出失败，请稍后重试。')
+  } finally {
+    exportBusy.value = false
+  }
 }
 
 /* ------------------------------------------------------------- AI 背景 */
@@ -1840,6 +2003,8 @@ function restoreTask(entry: Model3DHistoryEntry) {
   viewerError.value = ''
   previewVideoUrl.value = ''
   completedVideoUrl.value = ''
+  viewer?.resetToIdle()
+  stats.value = null
   startPolling()
 }
 
@@ -3088,6 +3253,88 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
   padding-bottom: 78px;
 }
 
+/* 任务执行中：装配台覆盖层 */
+.stage-building {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  padding: 0 32px 72px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.building-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+  padding: 3px 9px;
+  border: 1px solid rgba(125, 211, 252, 0.3);
+  border-radius: 999px;
+  background: rgba(8, 24, 38, 0.72);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: rgba(186, 230, 253, 0.92);
+  backdrop-filter: blur(8px);
+}
+
+.building-badge .live-dot {
+  background: #7dd3fc;
+  box-shadow: 0 0 8px rgba(125, 211, 252, 0.95);
+  animation: building-pulse 1.1s ease-in-out infinite;
+}
+
+.building-title {
+  font-family: var(--font-family-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(226, 244, 255, 0.9);
+}
+
+.building-sub {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.building-bar {
+  width: 230px;
+  height: 3px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.building-bar .progress-fill {
+  transition: width 240ms ease;
+}
+
+.building-percent {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: rgba(125, 211, 252, 0.76);
+}
+
+@keyframes building-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
 .idle-title,
 .loading-title {
   font-family: var(--font-family-display);
@@ -3809,6 +4056,104 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
   min-height: 26px;
   border-radius: 8px;
   font-size: 11.5px;
+}
+
+.material-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.material-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.55);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.material-chip:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.material-chip.active {
+  border-color: rgba(125, 211, 252, 0.36);
+  background: rgba(56, 189, 248, 0.15);
+  color: #b8ecff;
+}
+
+.material-swatch {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+.format-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.format-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.format-chip:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.format-chip.active {
+  border-color: rgba(125, 211, 252, 0.4);
+  background: rgba(56, 189, 248, 0.14);
+}
+
+.format-chip:last-child {
+  grid-column: 1 / -1;
+}
+
+.format-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.format-chip.active .format-name {
+  color: #b8ecff;
+}
+
+.format-hint {
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.36);
 }
 
 .material-thickness {
