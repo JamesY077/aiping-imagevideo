@@ -4,7 +4,7 @@
       class="island-item island-home"
       type="button"
       aria-label="返回首页"
-      @click="go('/')"
+      @click="go({ path: '/' })"
     >
       <span class="island-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
@@ -20,12 +20,13 @@
       v-for="item in items"
       :key="item.path"
       class="island-item"
-      :class="{ active: item.path === activePath }"
+      :class="{ active: item.path === activePath, 'is-disabled': item.soon }"
       :style="{ '--item-accent': item.accent, '--item-accent-soft': item.accentSoft }"
       type="button"
-      :aria-label="item.label"
+      :aria-label="item.soon ? `${item.label}（即将上线）` : item.label"
       :aria-current="item.path === activePath ? 'page' : undefined"
-      @click="go(item.path)"
+      :aria-disabled="item.soon ? 'true' : undefined"
+      @click="go(item)"
     >
       <span class="island-icon" aria-hidden="true">
         <svg v-if="item.key === 'skill'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round">
@@ -52,7 +53,7 @@
           <path d="M12 17.8v3" />
         </svg>
       </span>
-      <span class="island-tip" aria-hidden="true">{{ item.label }}</span>
+      <span class="island-tip" aria-hidden="true">{{ item.soon ? `${item.label} · 即将上线` : item.label }}</span>
     </button>
   </nav>
 </template>
@@ -101,13 +102,16 @@ const items = [
     label: '动作捕捉',
     accent: '#38bdf8',
     accentSoft: 'rgba(56, 189, 248, 0.22)',
+    // 上游动捕服务暂不可用，先禁用入口（保留路由，恢复后去掉 soon 即可）。
+    soon: true,
   },
 ]
 
 const activePath = computed(() => items.find((item) => route.path.startsWith(item.path))?.path || '')
 
-function go(path: string) {
-  if (route.path !== path) router.push(path)
+function go(item: { path: string; soon?: boolean }) {
+  if (item.soon) return
+  if (route.path !== item.path) router.push(item.path)
 }
 </script>
 
@@ -185,6 +189,23 @@ function go(path: string) {
 .tone-light .island-item:hover {
   background: rgba(15, 23, 42, 0.06);
   color: rgba(15, 23, 42, 0.94);
+}
+
+/* 尚未开放的分区：保留图标但整体变灰，不可点击 */
+.island-item.is-disabled {
+  cursor: not-allowed;
+}
+
+.tone-dark .island-item.is-disabled,
+.tone-dark .island-item.is-disabled:hover {
+  background: transparent;
+  color: rgba(226, 232, 246, 0.2);
+}
+
+.tone-light .island-item.is-disabled,
+.tone-light .island-item.is-disabled:hover {
+  background: transparent;
+  color: rgba(51, 65, 85, 0.24);
 }
 
 .island-icon {

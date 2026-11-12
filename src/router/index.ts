@@ -38,11 +38,9 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    // 视频动捕与 3D 建模共用一套页面与任务流，只是初始进入的分区不同。
+    // 视频动捕入口已下线（上游服务不可用），旧书签统一回到 3D 建模页。
     path: '/motion',
-    name: 'Motion',
-    component: () => import('@/views/Model3D.vue'),
-    meta: { requiresAuth: true },
+    redirect: '/model3d',
   },
   {
     path: '/skill',

@@ -35,21 +35,6 @@
               <span class="studio-panel-meta">{{ modeModels.length }} 个模型</span>
             </header>
 
-            <div class="segmented mode-switch" role="tablist" aria-label="功能分区">
-              <button
-                v-for="tab in PAGE_MODES"
-                :key="tab.value"
-                class="segmented-item"
-                :class="{ active: pageMode === tab.value }"
-                type="button"
-                role="tab"
-                :aria-selected="pageMode === tab.value"
-                @click="setPageMode(tab.value)"
-              >
-                {{ tab.label }}
-              </button>
-            </div>
-
             <div class="model-grid">
               <button
                 v-for="option in modeModels"
@@ -566,7 +551,7 @@
             </div>
 
             <ul v-else class="asset-list">
-              <li v-for="asset in assets" :key="asset.path" class="asset-item">
+              <li v-for="asset in pagedAssets" :key="asset.path" class="asset-item">
                 <span class="asset-icon" :class="`asset-${asset.kind}`" aria-hidden="true">
                   {{ asset.kind === 'mesh' ? '◈' : asset.kind === 'video' ? '▷' : asset.kind === 'motion' ? '⌁' : '◇' }}
                 </span>
@@ -589,6 +574,8 @@
               </li>
             </ul>
 
+            <RailPager v-if="assets.length" :page="assetPage" :page-count="assetPageCount" @update:page="assetPage = $event" />
+
             <p v-if="assets.length" class="asset-tip">
               下载链接由 V2Fun OSS 临时签发，约 1 小时后失效。历史任务可重新查询获取新链接。
             </p>
@@ -609,7 +596,7 @@
               <span>还没有任务。提交后会保留任务 ID，方便随时回看。</span>
             </div>
             <ul v-else class="history-list">
-              <li v-for="entry in historyEntries" :key="entry.taskId">
+              <li v-for="entry in pagedHistory" :key="entry.taskId">
                 <button class="history-item" :class="{ active: task?.task_uuid === entry.taskId }" type="button" @click="restoreTask(entry)">
                   <span class="history-head">
                     <span class="history-model">{{ getModel3D(entry.modelId).shortName }}</span>
@@ -620,6 +607,13 @@
                 </button>
               </li>
             </ul>
+
+            <RailPager
+              v-if="modeHistory.length"
+              :page="historyPage"
+              :page-count="historyPageCount"
+              @update:page="historyPage = $event"
+            />
           </div>
         </section>
       </aside>
@@ -632,9 +626,10 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import StudioHeader from '@/components/StudioHeader.vue'
 import StudioIsland from '@/components/StudioIsland.vue'
+import RailPager from '@/components/RailPager.vue'
 import {
   DEFAULT_MODEL3D_ID,
   MODEL3D_OPTIONS,
@@ -676,12 +671,6 @@ import { fileToBase64 } from '@/features/generate/files'
 
 type PageMode = 'mesh' | 'motion'
 
-/** 两个入口共用一套任务流：/model3d = 3D 建模，/motion = 视频动捕。 */
-const PAGE_MODES: { value: PageMode; label: string; path: string }[] = [
-  { value: 'mesh', label: '3D 建模', path: '/model3d' },
-  { value: 'motion', label: '视频动捕', path: '/motion' },
-]
-
 const MESH_MODES: { value: MeshInputMode; label: string }[] = [
   { value: 'text', label: '文生 3D' },
   { value: 'image', label: '图生 3D' },
@@ -691,7 +680,6 @@ const MESH_MODES: { value: MeshInputMode; label: string }[] = [
 /* ------------------------------------------------------------- 表单状态 */
 
 const route = useRoute()
-const router = useRouter()
 const pageMode = computed<PageMode>(() => (route.path.startsWith('/motion') ? 'motion' : 'mesh'))
 const modeModels = computed(() => MODEL3D_OPTIONS.filter((item) => item.kind === pageMode.value))
 
@@ -746,6 +734,36 @@ const currentAssets = computed<TaskAsset[]>(() => {
     : collectMeshAssets(task.value as MeshTaskResult)
 })
 const assets = computed(() => currentAssets.value)
+
+/* --------------------------------------------------------- 右栏翻页 */
+
+/** 产物 / 历史都按 3 条一页展示，避免右栏无限拉长。 */
+const RAIL_PAGE_SIZE = 3
+const assetPage = ref(1)
+const historyPage = ref(1)
+
+const assetPageCount = computed(() => Math.max(1, Math.ceil(assets.value.length / RAIL_PAGE_SIZE)))
+const pagedAssets = computed(() =>
+  assets.value.slice((assetPage.value - 1) * RAIL_PAGE_SIZE, assetPage.value * RAIL_PAGE_SIZE),
+)
+
+/** 历史只展示当前分区（3D / 动捕）的任务。 */
+const modeHistory = computed(() => historyEntries.value.filter((entry) => entry.kind === pageMode.value))
+const historyPageCount = computed(() => Math.max(1, Math.ceil(modeHistory.value.length / RAIL_PAGE_SIZE)))
+const pagedHistory = computed(() =>
+  modeHistory.value.slice((historyPage.value - 1) * RAIL_PAGE_SIZE, historyPage.value * RAIL_PAGE_SIZE),
+)
+
+// 切换任务后产物整体变化，回到第一页；任务变少时把页码收回到最后一页。
+watch(() => task.value?.task_uuid, () => {
+  assetPage.value = 1
+})
+watch(assetPageCount, (count) => {
+  if (assetPage.value > count) assetPage.value = count
+})
+watch(() => modeHistory.value.length, () => {
+  historyPage.value = 1
+})
 
 const hasRealProgress = computed(() => {
   const value = task.value?.progress
@@ -948,11 +966,6 @@ onBeforeUnmount(() => {
 })
 
 /* ------------------------------------------------------------- 模型切换 */
-
-function setPageMode(mode: PageMode) {
-  const target = PAGE_MODES.find((item) => item.value === mode)
-  if (target && route.path !== target.path) router.push(target.path)
-}
 
 watch(pageMode, () => {
   if (model.value.kind !== pageMode.value) modelId.value = modeModels.value[0].id
@@ -1403,7 +1416,6 @@ async function copyTaskId() {
 
 function restoreTask(entry: Model3DHistoryEntry) {
   if (isRunning.value) stopPolling(false)
-  setPageMode(entry.kind)
   modelId.value = entry.modelId
   taskKind.value = entry.kind
   task.value = {
@@ -1460,6 +1472,27 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
   min-height: 0;
 }
 
+/* 右栏（任务 / 产物 / 历史）内容较高时在栏内滚动，避免最后一页被页面裁掉 */
+.model3d-rail--right {
+  gap: 8px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+/* 右栏比左栏更紧凑：任务 + 产物 + 三条历史要能在一屏内放下 */
+.model3d-rail--right .studio-panel-head {
+  padding: 12px 18px;
+}
+
+.model3d-rail--right .panel-body {
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.model3d-rail--right .empty-block {
+  padding: 12px;
+}
+
 /* 只有面板列表滚动，提交按钮固定为左栏页脚 */
 .rail-scroll {
   display: flex;
@@ -1490,10 +1523,6 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
   flex-direction: column;
   gap: 8px;
   padding: 12px 14px 14px;
-}
-
-.mode-switch {
-  margin: 12px 14px 0;
 }
 
 .model-card {
@@ -3171,7 +3200,32 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
 }
 
 .rail-panel--history {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
   min-height: 0;
+}
+
+/* 历史列表在面板内部滚动，翻页器固定在面板底部，不会被页面裁掉 */
+.rail-panel--history .panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.rail-panel--history .history-list {
+  flex: 1 1 auto;
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.rail-panel--history .history-item {
+  gap: 2px;
+  padding: 7px 10px;
+}
+
+.rail-panel--history .rail-pager {
+  flex: 0 0 auto;
 }
 
 .hidden-input {
