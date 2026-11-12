@@ -12,6 +12,8 @@ export interface Model3DHistoryEntry {
   kind: 'mesh' | 'motion'
   modelId: string
   prompt: string
+  /** 用户自定义的项目名称；为空时回落到描述 / 模型名。 */
+  name?: string
   createdAt: number
   status: TaskStatus | 'RUNNING'
 }
@@ -57,6 +59,24 @@ export function updateHistoryStatus(taskId: string, status: Model3DHistoryEntry[
   const next = loadHistory().map((item) => (item.taskId === taskId ? { ...item, status } : item))
   persist(next)
   return next
+}
+
+/** 重命名项目：只改本地展示名，不影响上游任务。传空字符串则回落为自动命名。 */
+export function renameHistoryEntry(taskId: string, name: string): Model3DHistoryEntry[] {
+  const trimmed = name.trim().slice(0, 40)
+  const next = loadHistory().map((item) => (item.taskId === taskId ? { ...item, name: trimmed } : item))
+  persist(next)
+  return next
+}
+
+/** 历史项的统一展示名：自定义名称优先，其次描述，最后是任务短 ID。 */
+export function historyDisplayName(entry: Model3DHistoryEntry | null | undefined): string {
+  if (!entry) return ''
+  const custom = entry.name?.trim()
+  if (custom) return custom
+  const prompt = entry.prompt.trim()
+  if (prompt) return prompt.length > 28 ? `${prompt.slice(0, 28)}…` : prompt
+  return `任务 ${entry.taskId.slice(0, 8)}`
 }
 
 export function clearHistory(): Model3DHistoryEntry[] {

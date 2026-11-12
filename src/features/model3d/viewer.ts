@@ -51,6 +51,18 @@ export interface ScreenshotOptions {
   quality?: number
 }
 
+export interface TurntableOptions {
+  /** 输出边长（正方形），同时也是采集时的绘制缓冲尺寸。 */
+  size: number
+  /** 一整圈的帧数。 */
+  frames: number
+  /** GIF 不支持半透明，只有 solid / scene 两种背景。 */
+  background?: 'solid' | 'scene'
+  color?: string
+  /** 每帧的回调：拿到 RGBA 像素后交给编码器；返回 Promise 可以限速。 */
+  onFrame: (rgba: Uint8ClampedArray, index: number, total: number) => void | Promise<void>
+}
+
 const VIEW_DIRECTIONS: Record<ViewerView, THREE.Vector3> = {
   iso: new THREE.Vector3(0.31, 0.18, 0.9).normalize(),
   front: new THREE.Vector3(0, 0, 1),
@@ -918,23 +930,7 @@ export class HologramViewer {
       const ctx = canvas.getContext('2d')
       if (!ctx) return null
 
-      if (mode === 'solid') {
-        ctx.fillStyle = options.color || '#0b1626'
-        ctx.fillRect(0, 0, canvas.width, canvas.height)
-      } else if (mode === 'scene') {
-        if (this.backdropImage?.complete && this.backdropImage.naturalWidth) {
-          drawCover(ctx, this.backdropImage, canvas.width, canvas.height)
-          // 很浅的暗角，和舞台里的可读性处理保持一致。
-          ctx.fillStyle = 'rgba(3, 8, 14, 0.16)'
-          ctx.fillRect(0, 0, canvas.width, canvas.height)
-        } else {
-          fillStageGradient(ctx, canvas.width, canvas.height)
-        }
-      } else if (format === 'jpeg') {
-        // JPEG 没有 alpha 通道，透明背景会变成黑底，统一回落为白底。
-        ctx.fillStyle = '#ffffff'
-        ctx.fillRect(0, 0, canvas.width, canvas.height)
-      }
+      paintBackdrop(ctx, canvas.width, canvas.height, mode, options.color, format, this.backdropImage)
 
       ctx.drawImage(source, 0, 0)
       const mime = format === 'jpeg' ? 'image/jpeg' : format === 'webp' ? 'image/webp' : 'image/png'
@@ -946,6 +942,119 @@ export class HologramViewer {
       this.placeholder.visible = placeholderVisible
       this.scanRing.visible = ringVisible
     }
+  }
+
+  /**
+   * 转台动画：绕模型转满一圈，逐帧把 RGBA 交给调用方编码（GIF 用）。
+   * 采集期间把绘制缓冲临时改成正方形并隐藏画布，结束后完整还原相机与渲染状态。
+   */
+  async captureTurntable(options: TurntableOptions): Promise<void> {
+    const size = Math.max(64, Math.round(options.size))
+    const frames = Math.max(2, Math.round(options.frames))
+    const canvas = this.renderer.domElement
+    const previousSize = this.renderer.getSize(new THREE.Vector2())
+    const previousRatio = this.renderer.getPixelRatio()
+    const previousAspect = this.camera.aspect
+    const previousPosition = this.camera.position.clone()
+    const previousTarget = this.controls.target.clone()
+    const previousDamping = this.controls.enableDamping
+    const previousAutoRotate = this.controls.autoRotate
+    const previousVisibility = canvas.style.visibility
+    const previous = {
+      rig: this.rig.visible,
+      placeholder: this.placeholder.visible,
+      ring: this.scanRing.visible,
+      scale: this.modelGroup.scale.x,
+      bob: this.modelGroup.position.y,
+      splatOpacity: this.splat?.opacity ?? 1,
+    }
+
+    const output = document.createElement('canvas')
+    output.width = size
+    output.height = size
+    const ctx = output.getContext('2d', { willReadFrequently: true })
+    if (!ctx) throw new AssetError('动图导出失败：当前浏览器不支持画布导出', 'format')
+
+    // 采集期间冻结显影动画与自动旋转，避免帧与帧之间出现漂移。
+    this.viewTween = null
+    this.revealActive = false
+    this.modelGroup.scale.setScalar(1)
+    this.modelGroup.position.y = 0
+    if (this.splat) this.splat.opacity = this.splatTargetOpacity()
+    this.rig.visible = false
+    this.placeholder.visible = false
+    this.scanRing.visible = false
+    this.controls.enableDamping = false
+    this.controls.autoRotate = false
+    canvas.style.visibility = 'hidden'
+
+    try {
+      this.renderer.setPixelRatio(1)
+      this.renderer.setSize(size, size, false)
+      this.camera.aspect = 1
+      this.camera.updateProjectionMatrix()
+
+      const target = this.controls.target.clone()
+      const offset = previousPosition.clone().sub(target)
+      const axis = new THREE.Vector3(0, 1, 0)
+      for (let index = 0; index < frames; index += 1) {
+        const angle = (index / frames) * Math.PI * 2
+        this.camera.position.copy(target).add(offset.clone().applyAxisAngle(axis, angle))
+        this.camera.lookAt(target)
+        this.camera.updateMatrixWorld()
+        this.renderer.render(this.scene, this.camera)
+        paintBackdrop(ctx, size, size, options.background ?? 'solid', options.color, 'png', this.backdropImage)
+        ctx.drawImage(canvas, 0, 0)
+        await options.onFrame(ctx.getImageData(0, 0, size, size).data, index, frames)
+      }
+    } finally {
+      this.renderer.setPixelRatio(previousRatio)
+      this.renderer.setSize(previousSize.x, previousSize.y, false)
+      this.camera.aspect = previousAspect
+      this.camera.updateProjectionMatrix()
+      this.camera.position.copy(previousPosition)
+      this.controls.target.copy(previousTarget)
+      this.controls.enableDamping = previousDamping
+      this.controls.autoRotate = previousAutoRotate
+      this.controls.update()
+      this.modelGroup.scale.setScalar(previous.scale)
+      this.modelGroup.position.y = previous.bob
+      if (this.splat) this.splat.opacity = previous.splatOpacity
+      this.rig.visible = previous.rig
+      this.placeholder.visible = previous.placeholder
+      this.scanRing.visible = previous.ring
+      canvas.style.visibility = previousVisibility
+      this.resize()
+    }
+  }
+}
+
+/** 截图 / 动图共用的背景合成：透明模式不铺底，交给画布 alpha。 */
+function paintBackdrop(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  mode: 'transparent' | 'solid' | 'scene',
+  color: string | undefined,
+  format: 'png' | 'jpeg' | 'webp',
+  backdrop: HTMLImageElement | null,
+) {
+  if (mode === 'solid') {
+    ctx.fillStyle = color || '#0b1626'
+    ctx.fillRect(0, 0, width, height)
+  } else if (mode === 'scene') {
+    if (backdrop?.complete && backdrop.naturalWidth) {
+      drawCover(ctx, backdrop, width, height)
+      // 很浅的暗角，和舞台里的可读性处理保持一致。
+      ctx.fillStyle = 'rgba(3, 8, 14, 0.16)'
+      ctx.fillRect(0, 0, width, height)
+    } else {
+      fillStageGradient(ctx, width, height)
+    }
+  } else if (format === 'jpeg') {
+    // JPEG 没有 alpha 通道，透明背景会变成黑底，统一回落为白底。
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, width, height)
   }
 }
 

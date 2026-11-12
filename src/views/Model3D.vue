@@ -320,6 +320,20 @@
             </header>
 
             <div class="panel-body">
+              <label class="project-name-field">
+                <span class="project-name-label">项目名称</span>
+                <input
+                  v-model.trim="projectName"
+                  class="studio-field text-field project-name-input"
+                  type="text"
+                  maxlength="40"
+                  placeholder="默认用描述 / 素材名自动命名"
+                  spellcheck="false"
+                  @change="commitProjectName"
+                  @keydown.enter.prevent="commitProjectName"
+                />
+              </label>
+
               <template v-if="!isMotion">
                 <label class="switch-row">
                   <span class="switch-copy">
@@ -614,6 +628,21 @@
           </header>
 
           <div class="panel-body">
+            <button
+              v-if="task?.task_uuid"
+              class="project-strip"
+              type="button"
+              title="点击重命名项目"
+              @click="focusProjectName"
+            >
+              <span class="project-strip-label">项目</span>
+              <span class="project-strip-name" :title="displayProjectName">{{ displayProjectName }}</span>
+              <svg class="project-strip-pen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 20h4.2L19 9.2 14.8 5 4 15.8z" />
+                <path d="M13.6 6.2 17.8 10.4" />
+              </svg>
+            </button>
+
             <div v-if="!assets.length" class="empty-block">
               <span>任务完成后，模型文件与预览视频会出现在这里。</span>
             </div>
@@ -666,17 +695,51 @@
               <span>还没有任务。提交后会保留任务 ID，方便随时回看。</span>
             </div>
             <ul v-else class="history-list">
-              <li v-for="entry in pagedHistory" :key="entry.taskId">
-                <button class="history-item" :class="{ active: task?.task_uuid === entry.taskId }" type="button" @click="restoreTask(entry)">
-                  <span class="history-head">
-                    <span class="history-model">{{ getModel3D(entry.modelId).shortName }}</span>
-                    <span class="history-head-right">
-                      <span class="history-time">{{ formatRelativeTime(entry.createdAt) }}</span>
-                      <span class="history-status" :class="`hs-${entry.status}`">{{ historyStatusText(entry.status) }}</span>
+              <li v-for="entry in pagedHistory" :key="entry.taskId" class="history-row">
+                <input
+                  v-if="renamingId === entry.taskId"
+                  v-model.trim="renameDraft"
+                  class="history-rename-input"
+                  type="text"
+                  maxlength="40"
+                  spellcheck="false"
+                  aria-label="项目名称"
+                  @keydown.enter.prevent="commitRename(entry)"
+                  @keydown.esc.prevent="cancelRename()"
+                  @blur="commitRename(entry)"
+                />
+                <template v-else>
+                  <button
+                    class="history-item"
+                    :class="{ active: task?.task_uuid === entry.taskId }"
+                    type="button"
+                    @click="restoreTask(entry)"
+                  >
+                    <span class="history-head">
+                      <span class="history-name">{{ historyDisplayName(entry) }}</span>
+                      <span class="history-head-right">
+                        <span class="history-time">{{ formatRelativeTime(entry.createdAt) }}</span>
+                        <span class="history-status" :class="`hs-${entry.status}`">{{ historyStatusText(entry.status) }}</span>
+                      </span>
                     </span>
-                  </span>
-                  <span class="history-prompt">{{ entry.prompt || '（未填写描述）' }}</span>
-                </button>
+                    <span class="history-prompt">
+                      <span class="history-model">{{ getModel3D(entry.modelId).shortName }}</span>
+                      {{ entry.prompt || '（未填写描述）' }}
+                    </span>
+                  </button>
+                  <button
+                    class="history-rename"
+                    type="button"
+                    title="重命名项目"
+                    aria-label="重命名项目"
+                    @click="startRename(entry)"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M4 20h4.2L19 9.2 14.8 5 4 15.8z" />
+                      <path d="M13.6 6.2 17.8 10.4" />
+                    </svg>
+                  </button>
+                </template>
               </li>
             </ul>
 
@@ -696,8 +759,8 @@
       <div class="modal-card">
         <header class="modal-head">
           <div class="modal-headings">
-            <span class="modal-kicker">Export · {{ exportKind === 'image' ? 'IMAGE' : 'MODEL' }}</span>
-            <h3 class="modal-title">{{ exportKind === 'image' ? '导出静态图' : '导出 3D 模型' }}</h3>
+            <span class="modal-kicker">Export · {{ exportKind === 'image' ? 'IMAGE' : exportKind === 'gif' ? 'GIF' : 'MODEL' }}</span>
+            <h3 class="modal-title">{{ exportKind === 'image' ? '导出静态图' : exportKind === 'gif' ? '导出旋转动图' : '导出 3D 模型' }}</h3>
           </div>
           <button class="modal-close" type="button" aria-label="关闭" @click="exportOpen = false">×</button>
         </header>
@@ -710,15 +773,23 @@
                 class="segmented-item"
                 :class="{ active: exportKind === 'image' }"
                 type="button"
-                @click="exportKind = 'image'"
+                @click="setExportKind('image')"
               >
                 图片
               </button>
               <button
                 class="segmented-item"
+                :class="{ active: exportKind === 'gif' }"
+                type="button"
+                @click="setExportKind('gif')"
+              >
+                动图 GIF
+              </button>
+              <button
+                class="segmented-item"
                 :class="{ active: exportKind === 'model' }"
                 type="button"
-                @click="exportKind = 'model'"
+                @click="setExportKind('model')"
               >
                 3D 模型
               </button>
@@ -793,6 +864,84 @@
             <p class="field-hint">导出会自动隐藏栅格、地面与扫描环，只保留模型本体。</p>
           </template>
 
+          <template v-else-if="exportKind === 'gif'">
+            <div class="modal-field">
+              <span class="modal-label">尺寸</span>
+              <div class="segmented">
+                <button
+                  v-for="item in GIF_SIZES"
+                  :key="item.value"
+                  class="segmented-item"
+                  :class="{ active: gifSize === item.value }"
+                  type="button"
+                  @click="gifSize = item.value"
+                >
+                  {{ item.label }}
+                </button>
+              </div>
+            </div>
+
+            <div class="modal-field">
+              <span class="modal-label">转一圈</span>
+              <div class="segmented">
+                <button
+                  v-for="item in GIF_DURATIONS"
+                  :key="item.value"
+                  class="segmented-item"
+                  :class="{ active: gifSeconds === item.value }"
+                  type="button"
+                  @click="gifSeconds = item.value"
+                >
+                  {{ item.label }}
+                </button>
+              </div>
+            </div>
+
+            <div class="modal-field">
+              <span class="modal-label">背景</span>
+              <div class="segmented">
+                <button
+                  v-for="item in GIF_BACKGROUNDS"
+                  :key="item.value"
+                  class="segmented-item"
+                  :class="{ active: gifBackground === item.value }"
+                  type="button"
+                  @click="gifBackground = item.value"
+                >
+                  {{ item.label }}
+                </button>
+              </div>
+            </div>
+
+            <div v-if="gifBackground === 'solid'" class="modal-field">
+              <span class="modal-label">纯色</span>
+              <div class="color-row">
+                <input v-model="exportColor" class="color-input" type="color" aria-label="动图背景颜色" />
+                <span class="color-value">{{ exportColor.toUpperCase() }}</span>
+                <div class="swatch-row">
+                  <button
+                    v-for="color in EXPORT_COLORS"
+                    :key="color"
+                    class="swatch"
+                    :class="{ active: exportColor.toLowerCase() === color.toLowerCase() }"
+                    type="button"
+                    :style="{ background: color }"
+                    :aria-label="color"
+                    @click="exportColor = color"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <p v-if="gifBackground === 'scene' && !bgImage" class="field-hint">
+              还没有 AI 背景，本次会回落到蓝色舞台渐变。
+            </p>
+            <p class="field-hint">
+              自动绕模型转一整圈：{{ gifFrames }} 帧 · {{ (gifFrames * GIF_DELAY_MS / 1000).toFixed(1) }} 秒 · 循环播放。
+              GIF 只有 256 色，渐变背景可能出现轻微色带。
+            </p>
+          </template>
+
           <template v-else>
             <div class="modal-field">
               <span class="modal-label">模型格式</span>
@@ -827,7 +976,17 @@
             :disabled="exportBusy || (exportKind === 'model' && stats?.kind === 'splat')"
             @click="runExport"
           >
-            {{ exportBusy ? '正在导出…' : exportKind === 'image' ? '导出图片' : `导出 ${exportModelFormat.toUpperCase()}` }}
+            {{
+              exportBusy
+                ? exportKind === 'gif'
+                  ? `正在编码 ${gifProgress}/${gifFrames} 帧…`
+                  : '正在导出…'
+                : exportKind === 'image'
+                  ? '导出图片'
+                  : exportKind === 'gif'
+                    ? '导出 GIF'
+                    : `导出 ${exportModelFormat.toUpperCase()}`
+            }}
           </button>
         </footer>
       </div>
@@ -932,7 +1091,9 @@ import {
   addHistoryEntry,
   clearHistory,
   formatRelativeTime,
+  historyDisplayName,
   loadHistory,
+  renameHistoryEntry,
   updateHistoryStatus,
   type Model3DHistoryEntry,
 } from '@/features/model3d/history'
@@ -991,6 +1152,25 @@ const EXPORT_MODEL_FORMATS: { value: ModelExportFormat; label: string; hint: str
 ]
 
 const EXPORT_COLORS = ['#0b1626', '#ffffff', '#000000', '#38bdf8', '#f5e7d0', '#1d2b36']
+
+/** 动图导出：GIF 只有 256 色，尺寸和帧数都要控制，否则几分钟都编不完。 */
+const GIF_SIZES = [
+  { value: 360, label: '360' },
+  { value: 480, label: '480' },
+  { value: 640, label: '640' },
+]
+const GIF_DURATIONS = [
+  { value: 3, label: '3 秒' },
+  { value: 4, label: '4 秒' },
+  { value: 6, label: '6 秒' },
+]
+const GIF_DELAY_MS = 60
+const GIF_BACKGROUNDS: { value: 'scene' | 'solid'; label: string }[] = [
+  { value: 'scene', label: 'AI 场景' },
+  { value: 'solid', label: '纯色' },
+]
+
+type ExportKind = 'image' | 'gif' | 'model'
 
 const AI_BG_MODEL = 'Doubao-Seedream-5.0-lite'
 
@@ -1069,6 +1249,17 @@ const historyPageCount = computed(() => Math.max(1, Math.ceil(modeHistory.value.
 const pagedHistory = computed(() =>
   modeHistory.value.slice((historyPage.value - 1) * RAIL_PAGE_SIZE, historyPage.value * RAIL_PAGE_SIZE),
 )
+
+/** 当前任务对应的历史项（项目名称就存在这条记录里）。 */
+const currentEntry = computed(
+  () => historyEntries.value.find((entry) => entry.taskId === task.value?.task_uuid) ?? null,
+)
+/** 右栏 / 导出用的展示名：历史记录优先，输入框次之。 */
+const displayProjectName = computed(
+  () => historyDisplayName(currentEntry.value) || projectName.value.trim() || '未命名项目',
+)
+
+const gifFrames = computed(() => Math.max(20, Math.round((gifSeconds.value * 1000) / GIF_DELAY_MS)))
 
 // 切换任务后产物整体变化，回到第一页；任务变少时把页码收回到最后一页。
 watch(() => task.value?.task_uuid, () => {
@@ -1212,14 +1403,23 @@ const materialPreset = ref<ViewerMaterial>('original')
 const materialThickness = ref(0.6)
 const viewPreset = ref<ViewerView>('iso')
 
-/** PNG / JPG / WebP 导出与 AI 背景。 */
+/** 项目名称：新建时随任务写入历史，之后可随时改名。 */
+const projectName = ref('')
+const renamingId = ref('')
+const renameDraft = ref('')
+
+/** PNG / JPG / WebP / GIF 导出与 AI 背景。 */
 const exportOpen = ref(false)
-const exportKind = ref<'image' | 'model'>('image')
+const exportKind = ref<ExportKind>('image')
 const exportImageFormat = ref<'png' | 'jpeg' | 'webp'>('png')
 const exportModelFormat = ref<ModelExportFormat>('glb')
 const exportBusy = ref(false)
 const exportBackground = ref<ExportBackground>('transparent')
 const exportColor = ref('#0b1626')
+const gifSize = ref(480)
+const gifSeconds = ref(4)
+const gifBackground = ref<'scene' | 'solid'>('scene')
+const gifProgress = ref(0)
 const bgOpen = ref(false)
 const bgPrompt = ref('')
 const bgBusy = ref(false)
@@ -1520,14 +1720,17 @@ async function submit() {
       beginTask(response.task_uuid, 'mesh', response)
     }
 
+    const name = projectName.value.trim() || deriveProjectName()
     historyEntries.value = addHistoryEntry({
       taskId: task.value?.task_uuid || '',
       kind: taskKind.value,
       modelId: modelId.value,
       prompt: historyPrompt(),
+      name,
       createdAt: Date.now(),
       status: 'RUNNING',
     })
+    projectName.value = name
   } catch (error) {
     if (import.meta.env.DEV) {
       const response = (error as { response?: { status?: number; data?: unknown } })?.response
@@ -1545,6 +1748,82 @@ function historyPrompt(): string {
   if (meshMode.value === 'text') return prompt.value.trim()
   if (meshMode.value === 'image') return `图生 3D · ${singleImage.value?.name || '参考图'}`
   return `多视角 3D · ${views.front?.name || '正视图'}`
+}
+
+/** 没有手动命名时，用描述 / 素材文件名自动生成一个可读的项目名。 */
+function deriveProjectName(): string {
+  const base = (() => {
+    if (isMotion.value) {
+      if (videoSource.value === 'file' && videoFile.value?.name) return videoFile.value.name
+      const fromUrl = videoUrl.value.trim().split(/[?#]/)[0].split('/').pop() || ''
+      return fromUrl || '动作捕捉'
+    }
+    if (meshMode.value === 'text') return prompt.value.trim()
+    if (meshMode.value === 'image') return singleImage.value?.name || '图生 3D'
+    return views.front?.name || '多视角 3D'
+  })()
+  const cleaned = base.replace(/\.[a-z0-9]+$/i, '').trim()
+  if (!cleaned) return '未命名项目'
+  return cleaned.length > 32 ? `${cleaned.slice(0, 32)}…` : cleaned
+}
+
+/** 导出文件名里不能出现的字符统一替换掉，保证跨系统可落盘。 */
+function fileNameBase(): string {
+  const raw = (currentEntry.value?.name?.trim() || projectName.value.trim() || deriveProjectName()).slice(0, 40)
+  const safe = raw
+    // 自动命名常来自「图生 3D · xxx.png」这类描述，去掉尾部文件扩展名。
+    .replace(/\.(png|jpe?g|webp|bmp|gif|tga|mp4|mov|webm|glb|gltf|obj|fbx|ply|stl)$/i, '')
+    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return safe || 'artrealm-3d'
+}
+
+function setExportKind(kind: ExportKind) {
+  exportKind.value = kind
+  if (kind === 'gif' && exportBackground.value === 'transparent') exportBackground.value = 'solid'
+}
+
+/** 左栏输入框 / 历史项共用：改名并同步当前任务的展示。 */
+function applyProjectName(taskId: string, name: string) {
+  historyEntries.value = renameHistoryEntry(taskId, name)
+  if (taskId === task.value?.task_uuid) projectName.value = name.trim()
+}
+
+function commitProjectName() {
+  const entry = currentEntry.value
+  if (!entry) return
+  applyProjectName(entry.taskId, projectName.value)
+}
+
+/** 产物面板里的项目名可点：直接跳到左栏输入框改名。 */
+function focusProjectName() {
+  const input = document.querySelector<HTMLInputElement>('.project-name-input')
+  if (!input) return
+  input.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  input.focus()
+  input.select()
+}
+
+function startRename(entry: Model3DHistoryEntry) {
+  renamingId.value = entry.taskId
+  renameDraft.value = historyDisplayName(entry)
+  void nextTick(() => {
+    const input = document.querySelector<HTMLInputElement>('.history-rename-input')
+    input?.focus()
+    input?.select()
+  })
+}
+
+function commitRename(entry: Model3DHistoryEntry) {
+  if (renamingId.value !== entry.taskId) return
+  const name = renameDraft.value.trim()
+  renamingId.value = ''
+  applyProjectName(entry.taskId, name)
+}
+
+function cancelRename() {
+  renamingId.value = ''
 }
 
 function beginTask(taskId: string, kind: 'mesh' | 'motion', response: { status?: string; model?: string; task_type?: string; created_at?: number }) {
@@ -1763,6 +2042,10 @@ async function runExport() {
     await exportModelFile()
     return
   }
+  if (exportKind.value === 'gif') {
+    await exportGif()
+    return
+  }
   if (exportBackground.value === 'scene' && bgImage.value && !bgExportable.value) {
     showDownloadNotice('AI 背景未走同源反代，无法合成导出；请配置 /ai-image-assets 后重试。')
     return
@@ -1777,14 +2060,20 @@ async function runExport() {
     return
   }
   const ext = exportImageFormat.value === 'jpeg' ? 'jpg' : exportImageFormat.value
-  const short = (task.value?.task_uuid || 'model').slice(0, 8)
-  const anchor = document.createElement('a')
-  anchor.href = dataUrl
-  anchor.download = `artrealm-3d-${short}-${viewPreset.value}-${exportBackground.value}.${ext}`
-  anchor.click()
+  triggerDownload(dataUrl, `${fileNameBase()}-${viewPreset.value}-${exportBackground.value}.${ext}`)
   exportOpen.value = false
   const label = EXPORT_IMAGE_FORMATS.find((item) => item.value === exportImageFormat.value)?.label || 'PNG'
   showDownloadNotice(`已导出 ${label} 图片`)
+}
+
+/** dataUrl / blob 统一下载，Windows 与 macOS 的文件名都按当前项目名生成。 */
+function triggerDownload(href: string, filename: string) {
+  const anchor = document.createElement('a')
+  anchor.href = href
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
 }
 
 async function exportModelFile() {
@@ -1792,14 +2081,8 @@ async function exportModelFile() {
   exportBusy.value = true
   try {
     const blob = await viewer.exportModel(exportModelFormat.value)
-    const short = (task.value?.task_uuid || 'model').slice(0, 8)
     const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `artrealm-3d-${short}.${exportModelFormat.value}`
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
+    triggerDownload(url, `${fileNameBase()}.${exportModelFormat.value}`)
     // 大模型（几十 MB）落盘可能超过 5 秒，过早释放 Blob URL 会让下载失败。
     window.setTimeout(() => URL.revokeObjectURL(url), 60000)
     exportOpen.value = false
@@ -1809,6 +2092,92 @@ async function exportModelFile() {
     showDownloadNotice(error instanceof AssetError ? error.message : '模型导出失败，请稍后重试。')
   } finally {
     exportBusy.value = false
+  }
+}
+
+/**
+ * 自动旋转 GIF：主线程逐帧渲染，Worker 逐帧量化编码。
+ * 每帧等 Worker 回执再渲染下一帧，既能显示进度也不会把内存堆满。
+ */
+async function exportGif() {
+  if (!viewer) return
+  if (gifBackground.value === 'scene' && bgImage.value && !bgExportable.value) {
+    showDownloadNotice('AI 背景未走同源反代，无法合成动图；请配置 /ai-image-assets 后重试。')
+    return
+  }
+  const size = gifSize.value
+  const frames = gifFrames.value
+  exportBusy.value = true
+  gifProgress.value = 0
+  const worker = new Worker(new URL('../features/model3d/gifWorker.ts', import.meta.url), { type: 'module' })
+  try {
+    let resolveFrame: (() => void) | null = null
+    let rejectFrame: ((error: Error) => void) | null = null
+    let resolveDone: ((buffer: ArrayBuffer) => void) | null = null
+    let rejectDone: ((error: Error) => void) | null = null
+
+    const finished = new Promise<ArrayBuffer>((resolve, reject) => {
+      resolveDone = resolve
+      rejectDone = reject
+    })
+    // 错误路径下 captureTurntable 先抛错，避免 finished 变成未处理的 rejection。
+    finished.catch(() => {})
+    // 单帧编码失败时也要把 captureTurntable 的 await 放出来，否则会一直挂着。
+    const fail = (message: string) => {
+      const error = new Error(message)
+      rejectFrame?.(error)
+      rejectDone?.(error)
+      resolveFrame = null
+      rejectFrame = null
+    }
+
+    worker.onmessage = (event: MessageEvent<{ type: string; index?: number; buffer?: ArrayBuffer; message?: string }>) => {
+      const message = event.data
+      if (message.type === 'progress') {
+        gifProgress.value = message.index ?? 0
+        const resume = resolveFrame
+        resolveFrame = null
+        rejectFrame = null
+        resume?.()
+      } else if (message.type === 'done' && message.buffer) {
+        resolveDone?.(message.buffer)
+        resolveDone = null
+      } else if (message.type === 'error') {
+        fail(message.message || '动图编码失败')
+      }
+    }
+    worker.onerror = () => fail('动图编码线程异常，请重试')
+
+    worker.postMessage({ type: 'start', width: size, height: size, delay: GIF_DELAY_MS })
+
+    await viewer.captureTurntable({
+      size,
+      frames,
+      background: gifBackground.value,
+      color: exportColor.value,
+      onFrame: (rgba) =>
+        new Promise<void>((resolve, reject) => {
+          resolveFrame = resolve
+          rejectFrame = reject
+          const buffer = rgba.buffer as ArrayBuffer
+          worker.postMessage({ type: 'frame', buffer }, [buffer])
+        }),
+    })
+
+    worker.postMessage({ type: 'finish' })
+    const buffer = await finished
+    const blob = new Blob([buffer], { type: 'image/gif' })
+    const url = URL.createObjectURL(blob)
+    triggerDownload(url, `${fileNameBase()}-turntable.gif`)
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000)
+    exportOpen.value = false
+    showDownloadNotice(`已导出 GIF 动图（${frames} 帧 · ${formatBytes(blob.size)}）`)
+  } catch (error) {
+    showDownloadNotice(error instanceof Error ? error.message : '动图导出失败，请稍后重试。')
+  } finally {
+    worker.terminate()
+    exportBusy.value = false
+    gifProgress.value = 0
   }
 }
 
@@ -1938,9 +2307,8 @@ const ASSET_FILE_LABELS: Record<TaskAsset['kind'], string> = {
 }
 
 function fileNameOf(asset: TaskAsset): string {
-  const short = (task.value?.task_uuid || 'task').slice(0, 8)
   const ext = asset.ext || '.bin'
-  return `artrealm-3d-${short}-${ASSET_FILE_LABELS[asset.kind] || 'asset'}${ext}`
+  return `${fileNameBase()}-${ASSET_FILE_LABELS[asset.kind] || 'asset'}${ext}`
 }
 
 async function handleDownload(asset: TaskAsset) {
@@ -1991,6 +2359,8 @@ function restoreTask(entry: Model3DHistoryEntry) {
   if (isRunning.value) stopPolling(false)
   modelId.value = entry.modelId
   taskKind.value = entry.kind
+  projectName.value = entry.name?.trim() || entry.prompt.trim().slice(0, 40)
+  renamingId.value = ''
   task.value = {
     task_uuid: entry.taskId,
     status: 'PROCESSING',
@@ -3877,9 +4247,13 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
 }
 
 .history-model {
-  font-size: 11px;
+  margin-right: 4px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(56, 189, 248, 0.12);
+  color: rgba(159, 228, 255, 0.82);
+  font-size: 9px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.8);
 }
 
 .history-status {
@@ -3939,6 +4313,157 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
   align-items: center;
   gap: 6px;
   flex: 0 0 auto;
+}
+
+/* ---------- 项目命名 ---------- */
+
+.project-name-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.project-name-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.36);
+}
+
+.project-name-input {
+  height: 34px;
+  font-size: 12px;
+}
+
+/* 产物面板顶部的项目名：让「这堆文件属于哪个项目」一眼可见 */
+.project-strip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 9px;
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  border-radius: 10px;
+  background: rgba(56, 189, 248, 0.06);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.project-strip:hover {
+  border-color: rgba(125, 211, 252, 0.38);
+  background: rgba(56, 189, 248, 0.11);
+}
+
+.project-strip-pen {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  color: rgba(125, 211, 252, 0.46);
+}
+
+.project-strip-label {
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: rgba(125, 211, 252, 0.62);
+}
+
+.project-strip-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.history-row {
+  position: relative;
+}
+
+.history-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.rail-panel--history .history-name {
+  font-size: 11px;
+}
+
+.history-rename {
+  position: absolute;
+  right: 5px;
+  bottom: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 19px;
+  height: 19px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.26);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 140ms ease,
+    color 140ms ease,
+    background 140ms ease;
+}
+
+.history-row:hover .history-rename,
+.history-rename:focus-visible {
+  opacity: 1;
+}
+
+.history-rename:hover {
+  background: rgba(56, 189, 248, 0.14);
+  color: #c7efff;
+}
+
+.history-rename svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* 触屏设备没有 hover，重命名按钮常驻显示 */
+@media (hover: none) {
+  .history-rename {
+    opacity: 1;
+  }
+}
+
+.history-rename-input {
+  width: 100%;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid rgba(125, 211, 252, 0.45);
+  border-radius: 10px;
+  background: rgba(8, 20, 32, 0.9);
+  color: rgba(255, 255, 255, 0.92);
+  font: inherit;
+  font-size: 11.5px;
+  outline: none;
+}
+
+.history-prompt {
+  padding-right: 18px;
 }
 
 .rail-panel--history .rail-pager {
