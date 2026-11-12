@@ -37,6 +37,10 @@
           <path d="M10.4 9.6 15 12l-4.6 2.4z" fill="currentColor" stroke="none" />
           <circle cx="7.3" cy="8.6" r="0.9" fill="currentColor" stroke="none" />
         </svg>
+        <svg v-else-if="item.key === 'model3d'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round">
+          <path d="M12 2.9 20.1 7v10L12 21.1 3.9 17V7z" />
+          <path d="M3.9 7 12 11.2 20.1 7M12 11.2v9.9" opacity="0.6" />
+        </svg>
         <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round">
           <rect x="9" y="3.2" width="6" height="11" rx="3" />
           <path d="M5.6 11.4a6.4 6.4 0 0 0 12.8 0" />
@@ -78,6 +82,13 @@ const items = [
     label: '配音创作',
     accent: '#fb923c',
     accentSoft: 'rgba(251, 146, 60, 0.22)',
+  },
+  {
+    path: '/model3d',
+    key: 'model3d',
+    label: '3D 建模',
+    accent: '#38bdf8',
+    accentSoft: 'rgba(56, 189, 248, 0.22)',
   },
 ]
 

@@ -32,6 +32,12 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/model3d',
+    name: 'Model3D',
+    component: () => import('@/views/Model3D.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/skill',
     name: 'SkillCreate',
     component: () => import('@/views/SkillCreate.vue'),

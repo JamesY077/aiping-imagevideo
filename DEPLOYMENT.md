@@ -131,6 +131,24 @@ server {
         proxy_set_header Host $host;
     }
 
+    # —— /v2fun-assets 反代：3D 建模读取 V2Fun OSS 上的 .ply 高斯点云。
+    # 该 OSS 桶不返回 CORS 头，浏览器直接 fetch 会被拦截（<video> 不受限制，
+    # 但 Three.js 解析几何体必须拿到字节），因此统一走同源代理。
+    # 没有这段时页面会自动退化为「官方预览视频」，3D 模型无法在浏览器里旋转查看。
+    location /v2fun-assets/ {
+        proxy_pass https://oss-cn-1.v2fun.art/;
+        proxy_ssl_server_name on;
+        proxy_set_header Host oss-cn-1.v2fun.art;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # 单个 .ply 约 17MB；浏览器按 Range 分段拉取，Nginx 默认会透传 Range。
+        proxy_buffering off;
+        proxy_http_version 1.1;
+        proxy_read_timeout 300s;
+    }
+
     location /api/ {
         proxy_pass https://aiping.cn;
         proxy_ssl_server_name on;
@@ -203,6 +221,9 @@ VITE_CDN_ASSET_BASE=https://artrealm-image-1314455608.cos.ap-beijing.myqcloud.co
 - 本地参考图会先尝试经 `/upload` 换公网 URL；上传服务不可用时自动降级为压缩后的 dataURI
   直传（Seedance 2.0 与 MiniMax-H3 均已验证支持），因此**图片生成不依赖上传服务**
 - **参考音频**同样以 dataURI 直传（Seedance 与 MiniMax-H3 均实测通过），**不依赖上传服务**
+- **3D 建模（`/model3d`）** 的产物 `.ply` / 预览视频存在 `oss-cn-1.v2fun.art`，该 OSS **不返回 CORS 头**，
+  浏览器直接 fetch 会被拦截。因此需要在 Nginx 增加 `location /v2fun-assets/` 同源反代（见第四节）。
+  未配置时页面会自动退化为「官方预览视频」展示并给出提示，3D 模型无法旋转查看（本地开发由 Vite 代理覆盖，不受影响）。
 - **唯一需要公网 URL 的是 Seedance 2 系列的本地参考视频**：上游只接受 web url，需要部署
   `server/upload-service` 并给 Nginx 加 `/upload` 反代（见第四节与第七节）
 - 只发前端、不部署上传服务时：图片、音频、文生视频、图生视频、MiniMax-H3 多模态全部正常；

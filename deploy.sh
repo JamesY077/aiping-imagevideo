@@ -70,3 +70,9 @@ if [ -n "$LOCAL_HASH" ] && [ "$REMOTE_HASH" = "$LOCAL_HASH" ]; then
 else
   echo "⚠️  指纹不一致，请检查日志；浏览器访问时用 Cmd+Shift+R 强制刷新。"
 fi
+
+# 3D 建模依赖 OSS 同源反代；首次上线或用新服务器时检查一次即可。
+if ! curl -sI "https://$DOMAIN/v2fun-assets/" | grep -qi 'aliyunoss'; then
+  echo "⚠️  未检测到 /v2fun-assets/ 反代，3D 建模将退化为只看预览视频。"
+  echo "    请按 DEPLOYMENT.md 第四节在 Nginx 增加 location /v2fun-assets/ 后 reload。"
+fi
