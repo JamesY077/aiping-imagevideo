@@ -44,6 +44,44 @@ function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - clamp01(t), 3)
 }
 
+/**
+ * 栅格贴图：中心镂空（模型脚下）并向边缘淡出。
+ * 高斯泼溅是半透明叠加的，栅格线如果铺到模型脚下会从模型里透出来。
+ */
+function makeGridTexture(): THREE.Texture {
+  const size = 1024
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')
+  if (ctx) {
+    const step = size / 32
+    ctx.strokeStyle = '#4c93b8'
+    ctx.lineWidth = 1.6
+    ctx.beginPath()
+    for (let i = 0; i <= 32; i += 1) {
+      const p = i * step
+      ctx.moveTo(p, 0)
+      ctx.lineTo(p, size)
+      ctx.moveTo(0, p)
+      ctx.lineTo(size, p)
+    }
+    ctx.stroke()
+
+    ctx.globalCompositeOperation = 'destination-in'
+    const mask = ctx.createRadialGradient(size / 2, size / 2, size * 0.13, size / 2, size / 2, size * 0.5)
+    mask.addColorStop(0, 'rgba(0, 0, 0, 0)')
+    mask.addColorStop(0.16, 'rgba(0, 0, 0, 1)')
+    mask.addColorStop(0.8, 'rgba(0, 0, 0, 0.45)')
+    mask.addColorStop(1, 'rgba(0, 0, 0, 0)')
+    ctx.fillStyle = mask
+    ctx.fillRect(0, 0, size, size)
+  }
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  return texture
+}
+
 function makeGlowTexture(): THREE.Texture {
   const size = 256
   const canvas = document.createElement('canvas')
@@ -74,7 +112,7 @@ export class HologramViewer {
   private placeholder = new THREE.Group()
   private floor = new THREE.Group()
   private scanRing: THREE.Mesh
-  private grid: THREE.GridHelper
+  private grid: THREE.Mesh
   private raf = 0
   private clock = new THREE.Clock()
   private resizeObserver: ResizeObserver | null = null
@@ -82,6 +120,7 @@ export class HologramViewer {
 
   private spark: SparkRenderer
   private glowTexture = makeGlowTexture()
+  private gridTexture = makeGridTexture()
   private state: ViewerState = 'idle'
   private splat: SplatMesh | null = null
   private revealStart = 0
@@ -154,14 +193,26 @@ export class HologramViewer {
     this.scanRing.rotation.x = -Math.PI / 2
     this.scanRing.position.y = 0.02
     this.scanRing.visible = false
-    this.rig.add(this.scanRing)
+    // 扫描环属于「叠加特效」，必须画在模型之后。
+    this.scanRing.renderOrder = 2
+    this.scene.add(this.scanRing)
 
-    this.grid = new THREE.GridHelper(8, 32, 0x1f5f7c, 0x0d2634)
-    const gridMaterial = this.grid.material as THREE.Material
-    gridMaterial.transparent = true
-    gridMaterial.opacity = 0.5
-    this.grid.position.y = 0.001
+    this.grid = new THREE.Mesh(
+      new THREE.PlaneGeometry(8, 8),
+      new THREE.MeshBasicMaterial({
+        map: this.gridTexture,
+        transparent: false,
+        opacity: 0.62,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      }),
+    )
+    this.grid.rotation.x = -Math.PI / 2
+    this.grid.position.y = 0.002
     this.rig.add(this.grid)
+    // 高斯泼溅从自己的通道合成，若地面留在透明队列里会盖到模型上面；
+    // 因此地面类材质走不透明队列 + renderOrder=-1，永远先画、且不写深度。
+    this.rig.renderOrder = -1
 
     this.scene.add(this.rig, this.modelGroup, this.placeholder)
 
@@ -185,7 +236,7 @@ export class HologramViewer {
       new THREE.CircleGeometry(3.1, 64),
       new THREE.MeshBasicMaterial({
         map: this.glowTexture,
-        transparent: true,
+        transparent: false,
         opacity: 0.5,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
@@ -200,7 +251,7 @@ export class HologramViewer {
         new THREE.RingGeometry(radius - 0.006, radius + 0.006, 160),
         new THREE.MeshBasicMaterial({
           color: index % 2 === 0 ? CYAN : 0x1d6d8f,
-          transparent: true,
+          transparent: false,
           opacity: index === 0 ? 0.75 : 0.3,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
@@ -226,7 +277,7 @@ export class HologramViewer {
         spokeGeometry,
         new THREE.LineBasicMaterial({
           color: 0x2a7a9c,
-          transparent: true,
+          transparent: false,
           opacity: 0.4,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
@@ -337,6 +388,7 @@ export class HologramViewer {
       else material?.dispose?.()
     })
     this.glowTexture.dispose()
+    this.gridTexture.dispose()
     this.renderer.dispose()
     this.renderer.domElement.remove()
   }
@@ -485,11 +537,33 @@ export class HologramViewer {
     this.controls.update()
   }
 
-  /** 截图：先同步渲染一帧，再读画布，避免开启 preserveDrawingBuffer 拖慢渲染。 */
+  /**
+   * 截图：先同步渲染一帧，再读画布，避免开启 preserveDrawingBuffer 拖慢渲染。
+   * 画布本身是透明的，导出前合成一层深色背景，否则 PNG 在多数看图器里是白底。
+   */
   screenshot(): string | null {
     try {
       this.renderer.render(this.scene, this.camera)
-      return this.renderer.domElement.toDataURL('image/png')
+      const source = this.renderer.domElement
+      const canvas = document.createElement('canvas')
+      canvas.width = source.width
+      canvas.height = source.height
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return null
+      const gradient = ctx.createRadialGradient(
+        canvas.width / 2,
+        canvas.height * 0.38,
+        0,
+        canvas.width / 2,
+        canvas.height * 0.38,
+        Math.max(canvas.width, canvas.height) * 0.8,
+      )
+      gradient.addColorStop(0, '#0b1626')
+      gradient.addColorStop(1, '#04060b')
+      ctx.fillStyle = gradient
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      ctx.drawImage(source, 0, 0)
+      return canvas.toDataURL('image/png')
     } catch {
       return null
     }
