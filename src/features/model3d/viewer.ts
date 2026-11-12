@@ -211,10 +211,11 @@ export class HologramViewer {
     this.renderer.toneMappingExposure = 1.12
 
     // 金属 / 玻璃需要环境反射才不发黑：用程序化房间贴图生成一份 PMREM，
-    // 只在覆盖材质上引用，不影响原始模型。
+    // 同时作为场景环境光，让 glTF 自带的 metallicRoughness 材质也能正确反射。
     const pmrem = new THREE.PMREMGenerator(this.renderer)
     this.envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
     pmrem.dispose()
+    this.scene.environment = this.envTexture
     const canvas = this.renderer.domElement
     canvas.className = 'hologram-canvas'
     canvas.style.width = '100%'
@@ -245,7 +246,12 @@ export class HologramViewer {
     })
 
     // Spark 负责所有高斯点云的排序与泼溅渲染，跟随普通 three 场景一起绘制。
-    this.spark = new SparkRenderer({ renderer: this.renderer })
+    // 略微扩大高斯覆盖范围，减轻放大查看时点与点之间的颗粒感。
+    this.spark = new SparkRenderer({
+      renderer: this.renderer,
+      maxStdDev: Math.sqrt(9),
+      preBlurAmount: 0.25,
+    })
     this.scene.add(this.spark)
     this.scene.add(new THREE.HemisphereLight(0xbfe9ff, 0x0a111c, 1.15))
     this.addDirectionalLight(0xffffff, 2.1, [3.4, 5.2, 4.2])
@@ -409,6 +415,12 @@ export class HologramViewer {
   private resize() {
     const width = Math.max(1, this.container.clientWidth)
     const height = Math.max(1, this.container.clientHeight)
+    // Retina 基础上再做一点超采样，缩回 CSS 尺寸时能减轻点云颗粒与网格锯齿；
+    // 同时把绘制缓冲限制在约 8MP，避免全屏 4K 时帧率崩掉。
+    const base = Math.min(window.devicePixelRatio || 1, 2)
+    const areaRatio = Math.sqrt(8_000_000 / Math.max(width * height, 1))
+    const pixelRatio = Math.max(1, Math.min(base * 1.25, 3, areaRatio))
+    this.renderer.setPixelRatio(pixelRatio)
     this.renderer.setSize(width, height, false)
     this.camera.aspect = width / height
     this.camera.updateProjectionMatrix()
@@ -610,14 +622,25 @@ export class HologramViewer {
       // V2Fun 的 GLB 只有 POSITION / TEXCOORD，没有法线；不补算法线的话
       // 所有光照项都会变成 0，模型在深色背景里就是一团黑剪影。
       if (!geometry.getAttribute('normal')) geometry.computeVertexNormals()
-      const source = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshStandardMaterial
-      const material = new THREE.MeshStandardMaterial({
-        color: source?.color?.clone() ?? new THREE.Color(0xbfe6f7),
-        map: source?.map ?? null,
-        metalness: 0.12,
-        roughness: 0.62,
-        side: THREE.DoubleSide,
-      })
+      const source = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshStandardMaterial | undefined
+      // 直接保留 glTF 自带材质：baseColor / metallicRoughness / normal 等贴图都是上游烘焙好的，
+      // 之前重新 new 一个基础材质会把金属度、粗糙度贴图丢掉，模型看起来就“材质不对”。
+      let material: THREE.MeshStandardMaterial
+      if (source?.isMeshStandardMaterial) {
+        material = source
+        material.side = THREE.DoubleSide
+        material.envMap = this.envTexture
+        material.envMapIntensity = 0.9
+        material.needsUpdate = true
+      } else {
+        material = new THREE.MeshStandardMaterial({
+          color: source?.color?.clone() ?? new THREE.Color(0xbfe6f7),
+          map: source?.map ?? null,
+          metalness: 0.12,
+          roughness: 0.62,
+          side: THREE.DoubleSide,
+        })
+      }
       mesh.material = material
       this.meshEntries.push({ mesh, base: material })
     })
