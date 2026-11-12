@@ -150,6 +150,23 @@ server {
         proxy_read_timeout 300s;
     }
 
+    # —— /ai-image-assets 反代：3D 工作台「AI 背景」的 Seedream 生成图。
+    # 图片在 volces TOS 上且不返回 CORS 头；前端需要拿到字节换成 Blob URL，
+    # 否则把背景合成进导出 PNG 时画布会被跨域污染（toDataURL 抛错）。
+    # 未配置时背景仍能显示，但「AI 背景」模式的 PNG 导出不可用。
+    location /ai-image-assets/ {
+        proxy_pass https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/;
+        proxy_ssl_server_name on;
+        proxy_set_header Host ark-acg-cn-beijing.tos-cn-beijing.volces.com;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_buffering off;
+        proxy_http_version 1.1;
+        proxy_read_timeout 120s;
+    }
+
     location /api/ {
         proxy_pass https://aiping.cn;
         proxy_ssl_server_name on;
@@ -226,6 +243,9 @@ VITE_CDN_ASSET_BASE=https://artrealm-image-1314455608.cos.ap-beijing.myqcloud.co
   浏览器直接 fetch 会被拦截。因此需要在 Nginx 增加 `location /v2fun-assets/` 同源反代（见第四节）。
   未配置时页面会自动退化为「官方预览视频」展示并给出提示，3D 模型无法旋转查看、下载按钮会降级为
   新窗口打开原始链接（本地开发由 Vite 代理覆盖，不受影响）。
+- **3D 工作台的「AI 背景」** 由 Seedream 生成，图片存放在 volces TOS 且不返回 CORS 头；为了让背景能合成进
+  导出的 PNG，需要再加一条 `location /ai-image-assets/` 同源反代（见第四节）。未配置时背景仍能显示，
+  但「AI 背景」模式的导出会被浏览器画布安全策略拦截，页面会给出提示（本地开发由 Vite 代理覆盖）。
 - **唯一需要公网 URL 的是 Seedance 2 系列的本地参考视频**：上游只接受 web url，需要部署
   `server/upload-service` 并给 Nginx 加 `/upload` 反代（见第四节与第七节）
 - 只发前端、不部署上传服务时：图片、音频、文生视频、图生视频、MiniMax-H3 多模态全部正常；

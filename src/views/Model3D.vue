@@ -99,6 +99,38 @@
                 </button>
               </div>
 
+              <!-- 预览材质：本地渲染效果，不改变上游模型文件 -->
+              <div class="material-block">
+                <div class="material-head">
+                  <span class="material-title">预览材质</span>
+                  <span class="material-hint">仅影响预览 / 导出</span>
+                </div>
+                <div class="segmented segmented--compact" role="tablist" aria-label="预览材质">
+                  <button
+                    v-for="item in MATERIAL_PRESETS"
+                    :key="item.value"
+                    class="segmented-item"
+                    :class="{ active: materialPreset === item.value }"
+                    type="button"
+                    role="tab"
+                    :aria-selected="materialPreset === item.value"
+                    @click="materialPreset = item.value"
+                  >
+                    {{ item.label }}
+                  </button>
+                </div>
+
+                <div v-if="materialPreset === 'glass'" class="material-thickness">
+                  <div class="material-thickness-head">
+                    <span>玻璃厚度</span>
+                    <span>{{ Math.round(materialThickness * 100) }}%</span>
+                  </div>
+                  <input v-model.number="materialThickness" class="time-range" type="range" min="0" max="1" step="0.01" />
+                </div>
+
+                <p class="field-hint">金属 / 玻璃是高光预览效果；高斯点云 PLY 不支持材质替换，GLB / GLTF 模型生效。</p>
+              </div>
+
               <!-- 文本 -->
               <div v-if="meshMode === 'text'" class="input-block">
                 <textarea
@@ -368,7 +400,7 @@
                   <path d="M4 5.5V11h5.4" />
                 </svg>
               </button>
-              <button class="stage-action" type="button" :disabled="!viewerReady" title="保存截图" @click="takeScreenshot">
+              <button class="stage-action" type="button" :disabled="!viewerReady" title="导出 PNG" @click="openExport">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M4 8.3h3.2L9 5.6h6l1.8 2.7H20v10.1H4z" />
                   <circle cx="12" cy="13.2" r="3.1" />
@@ -383,6 +415,14 @@
           </div>
 
           <div class="stage-viewport">
+            <!-- AI 生成背景（位于透明画布之后，模型浮在场景上） -->
+            <div
+              v-if="bgImage && !showVideoStage"
+              class="stage-backdrop"
+              :style="{ backgroundImage: `url(${bgImage})` }"
+              aria-hidden="true"
+            />
+
             <!-- Three.js 画布 -->
             <div ref="stageRef" class="stage-canvas" v-show="!showVideoStage" />
 
@@ -462,6 +502,35 @@
               </button>
               <button class="tool-chip" :class="{ active: showGrid }" type="button" :disabled="!viewerReady" @click="toggleGrid">栅格</button>
             </div>
+
+            <div class="tool-group tool-group--views">
+              <span class="tool-group-label">机位</span>
+              <button
+                v-for="preset in VIEW_PRESETS"
+                :key="preset.value"
+                class="tool-chip tool-chip--compact"
+                :class="{ active: viewPreset === preset.value }"
+                type="button"
+                :disabled="!viewerReady"
+                :title="`${preset.label}视图`"
+                @click="setView(preset.value)"
+              >
+                {{ preset.label }}
+              </button>
+            </div>
+
+            <div class="tool-group">
+              <button
+                class="tool-chip tool-chip--bg"
+                :class="{ active: Boolean(bgImage) }"
+                type="button"
+                :disabled="!viewerReady"
+                @click="openBackground"
+              >
+                <span class="chip-dot" aria-hidden="true" />AI 背景
+              </button>
+            </div>
+
             <span class="tool-tip">拖拽旋转 · 滚轮缩放 · 右键平移</span>
           </div>
         </div>
@@ -606,6 +675,117 @@
       </aside>
     </main>
 
+    <!-- ============================ 导出 PNG ============================ -->
+    <div v-if="exportOpen" class="studio-modal" role="dialog" aria-modal="true" aria-label="导出 PNG" @click.self="exportOpen = false">
+      <div class="modal-card">
+        <header class="modal-head">
+          <div class="modal-headings">
+            <span class="modal-kicker">Export · PNG</span>
+            <h3 class="modal-title">导出静态图</h3>
+          </div>
+          <button class="modal-close" type="button" aria-label="关闭" @click="exportOpen = false">×</button>
+        </header>
+
+        <div class="modal-body">
+          <div class="modal-field">
+            <span class="modal-label">背景</span>
+            <div class="segmented">
+              <button
+                v-for="item in EXPORT_BACKGROUNDS"
+                :key="item.value"
+                class="segmented-item"
+                :class="{ active: exportBackground === item.value }"
+                type="button"
+                @click="exportBackground = item.value"
+              >
+                {{ item.label }}
+              </button>
+            </div>
+          </div>
+
+          <div v-if="exportBackground === 'solid'" class="modal-field">
+            <span class="modal-label">纯色</span>
+            <div class="color-row">
+              <input v-model="exportColor" class="color-input" type="color" aria-label="导出背景颜色" />
+              <span class="color-value">{{ exportColor.toUpperCase() }}</span>
+              <div class="swatch-row">
+                <button
+                  v-for="color in EXPORT_COLORS"
+                  :key="color"
+                  class="swatch"
+                  :class="{ active: exportColor.toLowerCase() === color.toLowerCase() }"
+                  type="button"
+                  :style="{ background: color }"
+                  :aria-label="color"
+                  @click="exportColor = color"
+                />
+              </div>
+            </div>
+          </div>
+
+          <p v-if="exportBackground === 'scene' && !bgImage" class="field-hint">
+            还没有 AI 背景，本次会回落到蓝色舞台渐变。
+          </p>
+          <p v-else-if="exportBackground === 'scene' && !bgExportable" class="field-hint">
+            当前背景图未走同源反代，直接导出会被浏览器拦截；请配置 /ai-image-assets 反代后重试。
+          </p>
+          <p class="field-hint">导出会自动隐藏栅格、地面与扫描环，只保留模型本体；透明背景输出带 alpha 通道的 PNG。</p>
+        </div>
+
+        <footer class="modal-foot">
+          <button class="studio-btn" type="button" @click="exportOpen = false">取消</button>
+          <button class="studio-btn studio-btn--primary" type="button" @click="exportPng">导出 PNG</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ============================ AI 背景 ============================ -->
+    <div v-if="bgOpen" class="studio-modal" role="dialog" aria-modal="true" aria-label="AI 背景" @click.self="bgOpen = false">
+      <div class="modal-card modal-card--wide">
+        <header class="modal-head">
+          <div class="modal-headings">
+            <span class="modal-kicker">Scene · AI</span>
+            <h3 class="modal-title">一句话补充背景</h3>
+          </div>
+          <button class="modal-close" type="button" aria-label="关闭" @click="bgOpen = false">×</button>
+        </header>
+
+        <div class="modal-body">
+          <div v-if="bgImage" class="bg-preview">
+            <img :src="bgImage" alt="当前 AI 背景预览" />
+            <button class="thumb-clear" type="button" aria-label="移除背景" @click="removeBackground">×</button>
+          </div>
+
+          <label class="modal-field">
+            <span class="modal-label">背景描述</span>
+            <input
+              v-model.trim="bgPrompt"
+              class="studio-field text-field"
+              type="text"
+              maxlength="200"
+              placeholder="例如：月球表面，远处是蓝色地球，冷色调星空"
+              spellcheck="false"
+              @keydown.enter.prevent="generateBackground"
+            />
+          </label>
+
+          <p class="field-hint">
+            调用 {{ AI_BG_MODEL }} 生成 4:3 背景图，仅用于当前预览与 PNG 导出，不会改写模型文件。
+          </p>
+          <p v-if="bgError" class="inline-error">{{ bgError }}</p>
+        </div>
+
+        <footer class="modal-foot">
+          <button v-if="bgImage" class="studio-btn" type="button" @click="removeBackground">移除背景</button>
+          <span class="modal-spacer" />
+          <button class="studio-btn" type="button" @click="bgOpen = false">取消</button>
+          <button class="studio-btn studio-btn--primary" type="button" :disabled="bgBusy || !bgPrompt" @click="generateBackground">
+            {{ bgBusy ? '生成中…' : '生成背景' }}
+          </button>
+        </footer>
+      </div>
+    </div>
+
     <input ref="imageInputRef" class="hidden-input" type="file" accept="image/png,image/jpeg,image/webp,image/bmp" @change="onImageInputChange" />
     <input ref="videoInputRef" class="hidden-input" type="file" accept="video/mp4,video/quicktime,video/webm" @change="onVideoInputChange" />
 
@@ -647,7 +827,12 @@ import {
 } from '@/api/model3d'
 import { AssetError, downloadAsset, formatBytes, mediaUrl } from '@/features/model3d/assets'
 import { normalizeMultiViewImages } from '@/features/model3d/multiView'
-import { HologramViewer, type ViewerStats } from '@/features/model3d/viewer'
+import {
+  HologramViewer,
+  type ViewerMaterial,
+  type ViewerStats,
+  type ViewerView,
+} from '@/features/model3d/viewer'
 import {
   addHistoryEntry,
   clearHistory,
@@ -658,6 +843,8 @@ import {
 } from '@/features/model3d/history'
 import { prepareLocalImageDataUri } from '@/features/generate/localImage'
 import { fileToBase64 } from '@/features/generate/files'
+import { generateImage } from '@/api/aiping'
+import { aspectRatioToImageSize } from '@/features/generate/aspectRatio'
 
 type PageMode = 'mesh' | 'motion'
 
@@ -666,6 +853,32 @@ const MESH_MODES: { value: MeshInputMode; label: string }[] = [
   { value: 'image', label: '图生 3D' },
   { value: 'multi', label: '多视角' },
 ]
+
+const MATERIAL_PRESETS: { value: ViewerMaterial; label: string }[] = [
+  { value: 'original', label: '原始' },
+  { value: 'metal', label: '金属' },
+  { value: 'glass', label: '玻璃' },
+]
+
+const VIEW_PRESETS: { value: ViewerView; label: string }[] = [
+  { value: 'iso', label: '等轴' },
+  { value: 'front', label: '前视' },
+  { value: 'back', label: '后视' },
+  { value: 'left', label: '左视' },
+  { value: 'right', label: '右视' },
+]
+
+const EXPORT_BACKGROUNDS: { value: ExportBackground; label: string }[] = [
+  { value: 'transparent', label: '透明' },
+  { value: 'solid', label: '纯色' },
+  { value: 'scene', label: 'AI 场景' },
+]
+
+type ExportBackground = 'transparent' | 'solid' | 'scene'
+
+const EXPORT_COLORS = ['#0b1626', '#ffffff', '#000000', '#38bdf8', '#f5e7d0', '#1d2b36']
+
+const AI_BG_MODEL = 'Doubao-Seedream-5.0-lite'
 
 /* ------------------------------------------------------------- 表单状态 */
 
@@ -880,6 +1093,28 @@ const completedVideoUrl = ref('')
 const autoRotate = ref(true)
 const showGrid = ref(true)
 
+/** 预览材质与机位（本地状态，换模型后保留用户选择）。 */
+const materialPreset = ref<ViewerMaterial>('original')
+const materialThickness = ref(0.6)
+const viewPreset = ref<ViewerView>('iso')
+
+/** PNG 导出与 AI 背景。 */
+const exportOpen = ref(false)
+const exportBackground = ref<ExportBackground>('transparent')
+const exportColor = ref('#0b1626')
+const bgOpen = ref(false)
+const bgPrompt = ref('')
+const bgBusy = ref(false)
+const bgError = ref('')
+const bgImage = ref('')
+/** 背景图是否已换成同源 Blob（跨域原图会污染画布，导致 PNG 导出失败）。 */
+const bgExportable = ref(true)
+let bgObjectUrl = ''
+
+watch([materialPreset, materialThickness], () => {
+  viewer?.setMaterial(materialPreset.value, materialThickness.value)
+})
+
 const viewerReady = computed(() => viewerState.value === 'ready')
 const showVideoStage = computed(() => {
   if (isMotion.value) return Boolean(stageVideoSrc.value)
@@ -946,6 +1181,7 @@ onMounted(async () => {
       loadProgress.value = total > 0 ? Math.min(1, loaded / total) : 0
     }
     viewer.setAutoRotate(autoRotate.value)
+    viewer.setMaterial(materialPreset.value, materialThickness.value)
   }
 
   // 刷新页面 / 重新进入时，自动续接上一次未结束的任务，避免历史记录一直停在「进行中」。
@@ -958,6 +1194,8 @@ onBeforeUnmount(() => {
   viewer?.dispose()
   viewer = null
   if (videoObjectUrl.value) URL.revokeObjectURL(videoObjectUrl.value)
+  if (bgObjectUrl) URL.revokeObjectURL(bgObjectUrl)
+  bgObjectUrl = ''
   if (noticeTimer) window.clearTimeout(noticeTimer)
   noticeTimer = null
 })
@@ -1367,16 +1605,141 @@ function toggleGrid() {
 }
 
 function resetView() {
+  viewPreset.value = 'iso'
   viewer?.resetView()
 }
 
-function takeScreenshot() {
-  const dataUrl = viewer?.screenshot()
-  if (!dataUrl) return
+function setView(view: ViewerView) {
+  viewPreset.value = view
+  // 切机位时关掉自动旋转，否则相机会立刻被转走。
+  autoRotate.value = false
+  viewer?.setAutoRotate(false)
+  viewer?.setView(view)
+}
+
+function openExport() {
+  if (!viewerReady.value) {
+    showDownloadNotice('模型装配完成后才能导出 PNG。')
+    return
+  }
+  exportOpen.value = true
+}
+
+function exportPng() {
+  if (!viewerReady.value) {
+    showDownloadNotice('模型装配完成后才能导出 PNG。')
+    return
+  }
+  if (exportBackground.value === 'scene' && bgImage.value && !bgExportable.value) {
+    showDownloadNotice('AI 背景未走同源反代，无法合成导出；请配置 /ai-image-assets 后重试。')
+    return
+  }
+  const dataUrl = viewer?.screenshot({ background: exportBackground.value, color: exportColor.value })
+  if (!dataUrl) {
+    showDownloadNotice('导出失败：当前浏览器不支持画布导出，请换用 Chrome / Edge。')
+    return
+  }
+  const short = (task.value?.task_uuid || 'model').slice(0, 8)
   const anchor = document.createElement('a')
   anchor.href = dataUrl
-  anchor.download = `artrealm-3d-${Date.now()}.png`
+  anchor.download = `artrealm-3d-${short}-${viewPreset.value}-${exportBackground.value}.png`
   anchor.click()
+  exportOpen.value = false
+  const label = EXPORT_BACKGROUNDS.find((item) => item.value === exportBackground.value)?.label || ''
+  showDownloadNotice(`已导出 PNG（${label}）`)
+}
+
+/* ------------------------------------------------------------- AI 背景 */
+
+function openBackground() {
+  if (!viewerReady.value) {
+    showDownloadNotice('模型装配完成后才能补充背景。')
+    return
+  }
+  bgError.value = ''
+  bgOpen.value = true
+}
+
+async function generateBackground() {
+  if (bgBusy.value) return
+  const phrase = bgPrompt.value.trim()
+  if (!phrase) {
+    bgError.value = '请先输入一句背景描述。'
+    return
+  }
+  bgBusy.value = true
+  bgError.value = ''
+  try {
+    const result = await generateImage({
+      model: AI_BG_MODEL,
+      // 明确要求「无主体、无文字」，避免生成的背景抢走模型焦点。
+      prompt: `${phrase}。纯背景场景：无人、无主体、无文字水印，画面干净，景深自然虚化，适合作为 3D 模型展示背景。`,
+      // Seedream 的尺寸分隔符是 x；用 * 会被上游判为非法参数。
+      size: aspectRatioToImageSize('4:3', 'seedream-5-lite', 'x'),
+      output_format: 'png',
+      watermark: false,
+      sequential_image_generation: 'disabled',
+    })
+    const item = result.data?.[0]
+    const raw = item?.b64_json ? `data:image/png;base64,${item.b64_json}` : item?.url
+    if (!raw) throw new Error('模型没有返回图片，请换一句描述重试。')
+    const resolved = await resolveBackgroundUrl(raw)
+    bgImage.value = resolved.display
+    bgExportable.value = resolved.exportable
+    await viewer?.setBackdrop(resolved.display)
+    // 生成背景后默认用它导出，用户仍可在导出弹层里改回透明 / 纯色。
+    if (exportBackground.value === 'transparent') exportBackground.value = 'scene'
+    bgOpen.value = false
+    bgPrompt.value = ''
+    showDownloadNotice(resolved.exportable ? 'AI 背景已应用到舞台' : '背景已应用，但当前缺少 /ai-image-assets 反代，场景导出不可用')
+  } catch (error) {
+    bgError.value = error instanceof Error ? error.message : '背景生成失败，请稍后重试。'
+  } finally {
+    bgBusy.value = false
+  }
+}
+
+/**
+ * Seedream 返回的图片在 volces TOS 上且没有 CORS 头，直接拿 URL 画进画布会污染导出。
+ * 走同源 /ai-image-assets 反代读取字节并转成 Blob URL；反代不可用时回退原图（仅预览）。
+ */
+async function resolveBackgroundUrl(raw: string): Promise<{ display: string; exportable: boolean }> {
+  if (raw.startsWith('data:')) return { display: raw, exportable: true }
+  const proxied = proxyAiImageUrl(raw)
+  if (proxied === raw) return { display: raw, exportable: false }
+  try {
+    const response = await fetch(proxied, { credentials: 'omit' })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const blob = await response.blob()
+    if (!blob.size) throw new Error('空响应')
+    if (bgObjectUrl) URL.revokeObjectURL(bgObjectUrl)
+    bgObjectUrl = URL.createObjectURL(blob)
+    return { display: bgObjectUrl, exportable: true }
+  } catch {
+    return { display: raw, exportable: false }
+  }
+}
+
+function proxyAiImageUrl(raw: string): string {
+  try {
+    const url = new URL(raw)
+    if (/(^|\.)volces\.com$/i.test(url.hostname)) {
+      return `/ai-image-assets${url.pathname}${url.search}`
+    }
+  } catch {
+    // 保持原样
+  }
+  return raw
+}
+
+function removeBackground() {
+  bgImage.value = ''
+  bgExportable.value = true
+  if (bgObjectUrl) URL.revokeObjectURL(bgObjectUrl)
+  bgObjectUrl = ''
+  void viewer?.setBackdrop(null)
+  if (exportBackground.value === 'scene') exportBackground.value = 'transparent'
+  bgOpen.value = false
 }
 
 function toggleFullscreen() {
@@ -2498,6 +2861,36 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
 .stage-canvas {
   position: absolute;
   inset: 0;
+  z-index: 1;
+}
+
+/* AI 背景层：透明画布叠在其上，模型像是站在生成场景里 */
+.stage-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.stage-backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 68%, rgba(3, 8, 14, 0) 32%, rgba(3, 8, 14, 0.46) 100%),
+    linear-gradient(180deg, rgba(3, 8, 14, 0.18), rgba(3, 8, 14, 0.3));
+}
+
+/* 画布是 z-index:1，HUD / 状态层统一抬到 2，避免被模型盖住。 */
+.hud,
+.stage-idle,
+.stage-loading,
+.stage-notice,
+.hud-readout,
+.stage-video-wrap {
+  z-index: 2;
 }
 
 .stage-video-wrap {
@@ -3376,6 +3769,272 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
 
   .stage-toolbar {
     gap: 8px;
+  }
+}
+/* ---------- 预览材质 ---------- */
+
+.material-block {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding-top: 13px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.material-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.material-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.material-hint {
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.segmented--compact {
+  padding: 3px;
+  border-radius: 11px;
+}
+
+.segmented--compact .segmented-item {
+  min-height: 26px;
+  border-radius: 8px;
+  font-size: 11.5px;
+}
+
+.material-thickness {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.material-thickness-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.material-thickness-head span:last-child {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: rgba(125, 211, 252, 0.78);
+}
+
+/* ---------- 机位快捷组 ---------- */
+
+.tool-group--views {
+  align-items: center;
+  gap: 4px;
+  padding-left: 12px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tool-group-label {
+  margin-right: 2px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: rgba(255, 255, 255, 0.26);
+}
+
+.tool-chip--compact {
+  padding: 5px 9px;
+}
+
+.tool-chip--bg {
+  border-color: rgba(125, 211, 252, 0.22);
+}
+
+/* ---------- 弹层：导出 / AI 背景 ---------- */
+
+.studio-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(3, 6, 11, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.modal-card {
+  display: flex;
+  flex-direction: column;
+  width: min(420px, 100%);
+  max-height: min(86dvh, 760px);
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(13, 22, 34, 0.98), rgba(7, 12, 20, 0.98));
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.modal-card--wide {
+  width: min(520px, 100%);
+}
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.modal-headings {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.modal-kicker {
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(125, 211, 252, 0.62);
+}
+
+.modal-title {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.modal-close {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.6);
+  font: inherit;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.modal-close:hover {
+  border-color: rgba(125, 211, 252, 0.35);
+  color: #fff;
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px;
+  overflow-y: auto;
+}
+
+.modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modal-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.color-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.color-input {
+  width: 38px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.color-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.swatch-row {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.swatch.active {
+  outline: 2px solid rgba(125, 211, 252, 0.7);
+  outline-offset: 1px;
+}
+
+.modal-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.modal-spacer {
+  flex: 1 1 auto;
+}
+
+.bg-preview {
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: #05070d;
+  overflow: hidden;
+}
+
+.bg-preview img {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+}
+
+@media (max-width: 560px) {
+  .studio-modal {
+    padding: 14px;
+  }
+
+  .tool-group--views {
+    padding-left: 0;
+    border-left: 0;
   }
 }
 </style>

@@ -14,11 +14,32 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark'
 import { AssetError, fetchAssetBytes, detectModelFormat } from './assets'
 
 const CYAN = 0x38bdf8
 const CYAN_SOFT = 0x7dd3fc
+
+/** 预览材质：只影响本地渲染与导出，不改变上游返回的模型文件。 */
+export type ViewerMaterial = 'original' | 'metal' | 'glass'
+
+/** 快捷机位：等轴 + 四个正交方向。 */
+export type ViewerView = 'iso' | 'front' | 'back' | 'left' | 'right'
+
+export interface ScreenshotOptions {
+  /** transparent：透明背景；solid：纯色；scene：当前 AI 背景 */
+  background?: 'transparent' | 'solid' | 'scene'
+  color?: string
+}
+
+const VIEW_DIRECTIONS: Record<ViewerView, THREE.Vector3> = {
+  iso: new THREE.Vector3(0.31, 0.18, 0.9).normalize(),
+  front: new THREE.Vector3(0, 0, 1),
+  back: new THREE.Vector3(0, 0, -1),
+  left: new THREE.Vector3(-1, 0, 0),
+  right: new THREE.Vector3(1, 0, 0),
+}
 
 /** V2Fun 的点云是「Y 轴朝下、正面朝 +X」，绕 (1,0,1) 转 180° 摆正成 Y-up。 */
 const AXIS_FIX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 1).normalize(), Math.PI)
@@ -128,6 +149,15 @@ export class HologramViewer {
   private modelHeight = 2.2
   private modelRadius = 1.4
 
+  /** GLB 网格与它们的原始材质，用于切换金属 / 玻璃预览。 */
+  private meshEntries: { mesh: THREE.Mesh; base: THREE.MeshStandardMaterial }[] = []
+  private overrideMaterials: THREE.Material[] = []
+  private envTexture: THREE.Texture | null = null
+  private materialPreset: ViewerMaterial = 'original'
+  private materialThickness = 0.6
+  private viewTween: { from: THREE.Vector3; to: THREE.Vector3; start: number; duration: number } | null = null
+  private backdropImage: HTMLImageElement | null = null
+
   onStateChange: ((state: ViewerState) => void) | null = null
   onProgress: ((loaded: number, total: number) => void) | null = null
 
@@ -144,6 +174,12 @@ export class HologramViewer {
     this.renderer.setClearAlpha(0)
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.renderer.toneMappingExposure = 1.12
+
+    // 金属 / 玻璃需要环境反射才不发黑：用程序化房间贴图生成一份 PMREM，
+    // 只在覆盖材质上引用，不影响原始模型。
+    const pmrem = new THREE.PMREMGenerator(this.renderer)
+    this.envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+    pmrem.dispose()
     const canvas = this.renderer.domElement
     canvas.className = 'hologram-canvas'
     canvas.style.width = '100%'
@@ -167,6 +203,11 @@ export class HologramViewer {
     this.controls.autoRotate = true
     this.controls.zoomSpeed = 0.85
     this.controls.update()
+
+    // 用户一旦手动拖拽，就中断机位补间，避免和手势抢相机。
+    this.controls.addEventListener('start', () => {
+      this.viewTween = null
+    })
 
     // Spark 负责所有高斯点云的排序与泼溅渲染，跟随普通 three 场景一起绘制。
     this.spark = new SparkRenderer({ renderer: this.renderer })
@@ -342,6 +383,13 @@ export class HologramViewer {
     if (this.disposed) return
     this.raf = requestAnimationFrame(this.animate)
     const elapsed = this.clock.getElapsedTime()
+
+    if (this.viewTween) {
+      const progress = clamp01((performance.now() - this.viewTween.start) / this.viewTween.duration)
+      this.camera.position.lerpVectors(this.viewTween.from, this.viewTween.to, easeOutCubic(progress))
+      if (progress >= 1) this.viewTween = null
+    }
+
     this.controls.update()
 
     if (this.state !== 'ready') {
@@ -389,6 +437,8 @@ export class HologramViewer {
     })
     this.glowTexture.dispose()
     this.gridTexture.dispose()
+    this.envTexture?.dispose()
+    this.envTexture = null
     this.renderer.dispose()
     this.renderer.domElement.remove()
   }
@@ -399,6 +449,13 @@ export class HologramViewer {
       this.splat.dispose()
       this.splat = null
     }
+    // 先把覆盖材质换回原始材质，再统一释放，避免重复 dispose。
+    this.meshEntries.forEach(({ mesh, base }) => {
+      mesh.material = base
+    })
+    this.overrideMaterials.forEach((material) => material.dispose())
+    this.overrideMaterials = []
+    this.meshEntries = []
     // GLB / GLTF 分支自己创建材质，换模型时一并释放显存。
     this.modelGroup.traverse((object) => {
       const mesh = object as THREE.Mesh
@@ -488,11 +545,15 @@ export class HologramViewer {
 
     const root = gltf.scene
     let triangles = 0
+    this.meshEntries = []
     root.traverse((child) => {
       const mesh = child as THREE.Mesh
       if (!mesh.isMesh) return
       const geometry = mesh.geometry as THREE.BufferGeometry
       triangles += (geometry.getIndex()?.count ?? geometry.getAttribute('position').count) / 3
+      // V2Fun 的 GLB 只有 POSITION / TEXCOORD，没有法线；不补算法线的话
+      // 所有光照项都会变成 0，模型在深色背景里就是一团黑剪影。
+      if (!geometry.getAttribute('normal')) geometry.computeVertexNormals()
       const source = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshStandardMaterial
       const material = new THREE.MeshStandardMaterial({
         color: source?.color?.clone() ?? new THREE.Color(0xbfe6f7),
@@ -502,13 +563,100 @@ export class HologramViewer {
         side: THREE.DoubleSide,
       })
       mesh.material = material
+      this.meshEntries.push({ mesh, base: material })
     })
 
     const box = new THREE.Box3().setFromObject(root)
     this.placeModel(root, box)
     this.modelGroup.add(root)
+    // 模型就绪后应用当前选中的预览材质（换任务时保持用户的选择）。
+    this.applyMaterialToMeshes()
 
     return { kind: 'mesh', count: Math.round(triangles), bytes: buffer.byteLength }
+  }
+
+  /* ---------------------------------------------------------------- 材质与机位 */
+
+  setMaterial(preset: ViewerMaterial, thickness = this.materialThickness) {
+    this.materialPreset = preset
+    this.materialThickness = Math.min(2, Math.max(0.05, thickness))
+    this.applyMaterialToMeshes()
+  }
+
+  private applyMaterialToMeshes() {
+    if (!this.meshEntries.length) return
+    this.overrideMaterials.forEach((material) => material.dispose())
+    this.overrideMaterials = []
+
+    this.meshEntries.forEach(({ mesh, base }) => {
+      if (this.materialPreset === 'original') {
+        mesh.material = base
+        return
+      }
+      const material = this.materialPreset === 'metal' ? this.buildMetalMaterial(base) : this.buildGlassMaterial()
+      this.overrideMaterials.push(material)
+      mesh.material = material
+    })
+  }
+
+  private buildMetalMaterial(base: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
+    return new THREE.MeshStandardMaterial({
+      color: base.color?.clone() ?? new THREE.Color(0xc9d6e3),
+      map: base.map ?? null,
+      metalness: 0.96,
+      roughness: 0.22,
+      envMap: this.envTexture,
+      envMapIntensity: 1.15,
+      side: THREE.DoubleSide,
+    })
+  }
+
+  private buildGlassMaterial(): THREE.MeshPhysicalMaterial {
+    return new THREE.MeshPhysicalMaterial({
+      color: 0xdff2ff,
+      metalness: 0,
+      roughness: 0.06,
+      transmission: 1,
+      // 归一化后模型最长边约 2.05，厚度 0.15–2 在观感上跨度合适。
+      thickness: 0.15 + this.materialThickness * 1.85,
+      ior: 1.46,
+      envMap: this.envTexture,
+      envMapIntensity: 1.2,
+      clearcoat: 0.7,
+      clearcoatRoughness: 0.06,
+      transparent: true,
+      side: THREE.DoubleSide,
+    })
+  }
+
+  /** 快捷机位：围绕当前目标点做 420ms 缓动，不会跳变。 */
+  setView(view: ViewerView) {
+    this.controls.autoRotate = false
+    const target = this.controls.target.clone()
+    const distance = Math.max(2.8, this.camera.position.distanceTo(target))
+    const to = target.clone().addScaledVector(VIEW_DIRECTIONS[view] ?? VIEW_DIRECTIONS.iso, distance)
+    this.viewTween = {
+      from: this.camera.position.clone(),
+      to,
+      start: performance.now(),
+      duration: 420,
+    }
+  }
+
+  /** 预载 AI 背景图，导出时同步绘制到画布上。 */
+  async setBackdrop(url: string | null): Promise<void> {
+    if (!url) {
+      this.backdropImage = null
+      return
+    }
+    const image = new Image()
+    image.src = url
+    try {
+      await image.decode()
+      this.backdropImage = image
+    } catch {
+      this.backdropImage = null
+    }
   }
 
   /* ---------------------------------------------------------------- 状态与交互 */
@@ -529,6 +677,7 @@ export class HologramViewer {
 
   /** 按包围球自动取景，保持 3/4 侧前方视角。 */
   resetView() {
+    this.viewTween = null
     const target = new THREE.Vector3(0, Math.max(this.modelHeight * 0.52, 0.2), 0)
     const distance = Math.min(12, Math.max(3.2, this.modelRadius * 3.7))
     const direction = new THREE.Vector3(0.31, 0.18, 0.9).normalize()
@@ -539,9 +688,17 @@ export class HologramViewer {
 
   /**
    * 截图：先同步渲染一帧，再读画布，避免开启 preserveDrawingBuffer 拖慢渲染。
-   * 画布本身是透明的，导出前合成一层深色背景，否则 PNG 在多数看图器里是白底。
+   * 画布本身是透明的，按需合成纯色 / AI 背景；透明模式直接输出带 alpha 的 PNG。
    */
-  screenshot(): string | null {
+  screenshot(options: ScreenshotOptions = {}): string | null {
+    const mode = options.background ?? 'solid'
+    const rigVisible = this.rig.visible
+    const placeholderVisible = this.placeholder.visible
+    const ringVisible = this.scanRing.visible
+    // 导出画面里不要台面栅格、占位球与扫描环，只保留模型本身。
+    this.rig.visible = false
+    this.placeholder.visible = false
+    this.scanRing.visible = false
     try {
       this.renderer.render(this.scene, this.camera)
       const source = this.renderer.domElement
@@ -550,22 +707,50 @@ export class HologramViewer {
       canvas.height = source.height
       const ctx = canvas.getContext('2d')
       if (!ctx) return null
-      const gradient = ctx.createRadialGradient(
-        canvas.width / 2,
-        canvas.height * 0.38,
-        0,
-        canvas.width / 2,
-        canvas.height * 0.38,
-        Math.max(canvas.width, canvas.height) * 0.8,
-      )
-      gradient.addColorStop(0, '#0b1626')
-      gradient.addColorStop(1, '#04060b')
-      ctx.fillStyle = gradient
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+      if (mode === 'solid') {
+        ctx.fillStyle = options.color || '#0b1626'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+      } else if (mode === 'scene') {
+        if (this.backdropImage?.complete && this.backdropImage.naturalWidth) {
+          drawCover(ctx, this.backdropImage, canvas.width, canvas.height)
+          // 很浅的暗角，和舞台里的可读性处理保持一致。
+          ctx.fillStyle = 'rgba(3, 8, 14, 0.16)'
+          ctx.fillRect(0, 0, canvas.width, canvas.height)
+        } else {
+          fillStageGradient(ctx, canvas.width, canvas.height)
+        }
+      }
+
       ctx.drawImage(source, 0, 0)
       return canvas.toDataURL('image/png')
     } catch {
       return null
+    } finally {
+      this.rig.visible = rigVisible
+      this.placeholder.visible = placeholderVisible
+      this.scanRing.visible = ringVisible
     }
   }
+}
+
+/** 背景图按 cover 方式铺满画布。 */
+function drawCover(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  width: number,
+  height: number,
+) {
+  const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight)
+  const drawWidth = image.naturalWidth * scale
+  const drawHeight = image.naturalHeight * scale
+  ctx.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight)
+}
+
+function fillStageGradient(ctx: CanvasRenderingContext2D, width: number, height: number) {
+  const gradient = ctx.createRadialGradient(width / 2, height * 0.38, 0, width / 2, height * 0.38, Math.max(width, height) * 0.8)
+  gradient.addColorStop(0, '#0b1626')
+  gradient.addColorStop(1, '#04060b')
+  ctx.fillStyle = gradient
+  ctx.fillRect(0, 0, width, height)
 }

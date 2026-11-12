@@ -76,3 +76,9 @@ if ! curl -sI "https://$DOMAIN/v2fun-assets/" | grep -qi 'aliyunoss'; then
   echo "⚠️  未检测到 /v2fun-assets/ 反代，3D 建模将退化为只看预览视频。"
   echo "    请按 DEPLOYMENT.md 第四节在 Nginx 增加 location /v2fun-assets/ 后 reload。"
 fi
+
+# AI 背景图在 volces TOS，需同源反代才能参与 PNG 导出。
+if ! curl -sI "https://$DOMAIN/ai-image-assets/" | grep -qi 'tosserver'; then
+  echo "⚠️  未检测到 /ai-image-assets/ 反代，3D 工作台的 AI 背景导出将不可用（背景仍可预览）。"
+  echo "    请按 DEPLOYMENT.md 第四节在 Nginx 增加 location /ai-image-assets/ 后 reload。"
+fi

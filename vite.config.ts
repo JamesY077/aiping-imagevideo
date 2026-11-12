@@ -29,6 +29,15 @@ export default defineConfig({
         secure: true,
         rewrite: (path) => path.replace(/^\/v2fun-assets/, ''),
       },
+      // Seedream 生成图存放在 volces 的 TOS 桶，同样不返回 CORS 头。
+      // 前端把背景图换成 Blob URL 后才能参与画布导出（否则 PNG 会被跨域污染）。
+      // 生产环境对应 Nginx 的 location /ai-image-assets/（见 DEPLOYMENT.md）。
+      '/ai-image-assets': {
+        target: 'https://ark-acg-cn-beijing.tos-cn-beijing.volces.com',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/ai-image-assets/, ''),
+      },
     },
   },
   preview: {
