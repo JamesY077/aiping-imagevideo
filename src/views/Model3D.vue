@@ -1613,25 +1613,36 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
 .model-foot {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 5px 8px;
   margin-top: 3px;
   font-size: 10px;
   color: rgba(159, 228, 255, 0.8);
 }
 
+.model-price {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .model-tags {
   display: inline-flex;
+  flex: 0 0 auto;
   gap: 4px;
   margin-left: auto;
 }
 
+/* 单个 chip 不参与收缩，也不允许文字折行；放不下时整组换到下一行右对齐。 */
 .model-tags em {
+  flex: 0 0 auto;
   font-style: normal;
   font-size: 9px;
+  line-height: 1.4;
   padding: 1px 5px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
 }
 
 /* ---------- 分段控件 ---------- */
@@ -3180,7 +3191,8 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
 
 @media (max-width: 1360px) {
   .model3d-main {
-    grid-template-columns: minmax(280px, 310px) minmax(360px, 1fr) minmax(256px, 286px);
+    /* 左栏最多 328px：模型卡底部的价格 + 三个 tag 才放得下一行 */
+    grid-template-columns: minmax(292px, 328px) minmax(360px, 1fr) minmax(256px, 286px);
     gap: 12px;
     padding-right: 16px;
   }
