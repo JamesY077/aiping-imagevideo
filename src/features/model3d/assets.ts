@@ -138,23 +138,57 @@ export function mediaUrl(raw: string): string {
 }
 
 /** 通过同源代理保存文件；失败时退化为新窗口打开。 */
-export async function downloadAsset(raw: string, filename: string): Promise<void> {
+export async function downloadAsset(raw: string, filename: string): Promise<'streamed' | 'blob' | 'opened' | 'failed'> {
   const url = mediaUrl(raw)
+
+  // 1) 走同源代理：用 Range 探测一次，确认代理可用且返回的不是网页。
+  if (url !== raw && (await canStream(url))) {
+    saveWithAnchor(url, filename)
+    return 'streamed'
+  }
+
+  // 2) 代理不可用（如生产环境未配置反代）：尝试 fetch 成 Blob 再保存。
   try {
     const response = await fetch(url, { credentials: 'omit' })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const blob = await response.blob()
-    const objectUrl = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = objectUrl
-    anchor.download = filename
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 4000)
+    if (!blob.size) throw new Error('empty')
+    saveWithAnchor(URL.createObjectURL(blob), filename)
+    return 'blob'
   } catch {
-    window.open(raw, '_blank', 'noopener')
+    // 3) 最后兜底：交给浏览器处理（可能直接打开而不是下载）。
+    const opened = window.open(raw, '_blank', 'noopener')
+    return opened ? 'opened' : 'failed'
   }
+}
+
+/** 只拿 1 个字节验证链路：能拿到 206/200 且不是 HTML/JSON 才算可用。 */
+async function canStream(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(url, { headers: { Range: 'bytes=0-0' }, credentials: 'omit' })
+    if (!response.ok) return false
+    const type = (response.headers.get('content-type') || '').toLowerCase()
+    if (type.includes('text/html') || type.includes('application/json')) return false
+    // 服务端忽略 Range 时这里可能是整个文件：没有 content-range、体积又不明确或过大，
+    // 就不要在这里把整包读进内存，交给后面的 Blob / 新窗口兜底。
+    const length = Number(response.headers.get('content-length') || 0)
+    if (!response.headers.get('content-range') && (!length || length > 8 * 1024 * 1024)) return false
+    await response.arrayBuffer()
+    return true
+  } catch {
+    return false
+  }
+}
+
+function saveWithAnchor(href: string, filename: string) {
+  const anchor = document.createElement('a')
+  anchor.href = href
+  anchor.download = filename
+  anchor.rel = 'noopener'
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  if (href.startsWith('blob:')) setTimeout(() => URL.revokeObjectURL(href), 4000)
 }
 
 export function formatBytes(bytes: number): string {

@@ -326,15 +326,6 @@
                 </div>
                 <p class="billing-note">按实际处理秒数向上取整到 3 秒一档，最终以平台账单为准。</p>
               </div>
-
-              <div class="param-row">
-                <div class="param-label">
-                  <span>任务优先级</span>
-                  <em>{{ priority || '默认' }}</em>
-                </div>
-                <input v-model.number="priority" class="time-range" type="range" min="0" max="255" step="1" />
-                <p class="field-hint">0–255，数值越大排队越靠前。</p>
-              </div>
             </div>
           </section>
         </div>
@@ -517,14 +508,6 @@
                 </dd>
               </div>
               <div>
-                <dt>模型</dt>
-                <dd>{{ task?.model || model.displayName }}</dd>
-              </div>
-              <div>
-                <dt>类型</dt>
-                <dd>{{ isMotion ? '视频动捕' : '3D 建模' }}</dd>
-              </div>
-              <div>
                 <dt>阶段</dt>
                 <dd>{{ stageLabel }}</dd>
               </div>
@@ -560,7 +543,13 @@
                   <span class="asset-sub">{{ assetSubLabel(asset) }}</span>
                 </div>
                 <div class="asset-actions">
-                  <button class="asset-btn" type="button" title="下载" @click="downloadAsset(asset.url, fileNameOf(asset))">
+                  <button
+                    class="asset-btn"
+                    type="button"
+                    title="下载"
+                    :disabled="downloadBusy === asset.path"
+                    @click="handleDownload(asset)"
+                  >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <path d="M12 4v10.5M8.2 11l3.8 3.8L15.8 11M5 19h14" />
                     </svg>
@@ -575,10 +564,6 @@
             </ul>
 
             <RailPager v-if="assets.length" :page="assetPage" :page-count="assetPageCount" @update:page="assetPage = $event" />
-
-            <p v-if="assets.length" class="asset-tip">
-              下载链接由 V2Fun OSS 临时签发，约 1 小时后失效。历史任务可重新查询获取新链接。
-            </p>
           </div>
         </section>
 
@@ -600,10 +585,12 @@
                 <button class="history-item" :class="{ active: task?.task_uuid === entry.taskId }" type="button" @click="restoreTask(entry)">
                   <span class="history-head">
                     <span class="history-model">{{ getModel3D(entry.modelId).shortName }}</span>
-                    <span class="history-status" :class="`hs-${entry.status}`">{{ historyStatusText(entry.status) }}</span>
+                    <span class="history-head-right">
+                      <span class="history-time">{{ formatRelativeTime(entry.createdAt) }}</span>
+                      <span class="history-status" :class="`hs-${entry.status}`">{{ historyStatusText(entry.status) }}</span>
+                    </span>
                   </span>
                   <span class="history-prompt">{{ entry.prompt || '（未填写描述）' }}</span>
-                  <span class="history-time">{{ formatRelativeTime(entry.createdAt) }}</span>
                 </button>
               </li>
             </ul>
@@ -621,6 +608,8 @@
 
     <input ref="imageInputRef" class="hidden-input" type="file" accept="image/png,image/jpeg,image/webp,image/bmp" @change="onImageInputChange" />
     <input ref="videoInputRef" class="hidden-input" type="file" accept="video/mp4,video/quicktime,video/webm" @change="onVideoInputChange" />
+
+    <p v-if="downloadNotice" class="asset-notice" role="status">{{ downloadNotice }}</p>
   </div>
 </template>
 
@@ -709,7 +698,6 @@ const durationSeconds = ref<number>(MOTION_DURATION_LIMITS.defaultValue)
 const withTexture = ref(true)
 const hdTexture = ref(false)
 const pbrTexture = ref(false)
-const priority = ref(0)
 
 const isSubmitting = ref(false)
 
@@ -758,6 +746,12 @@ const pagedHistory = computed(() =>
 // 切换任务后产物整体变化，回到第一页；任务变少时把页码收回到最后一页。
 watch(() => task.value?.task_uuid, () => {
   assetPage.value = 1
+  downloadNotice.value = ''
+  downloadBusy.value = ''
+  if (noticeTimer) {
+    window.clearTimeout(noticeTimer)
+    noticeTimer = null
+  }
 })
 watch(assetPageCount, (count) => {
   if (assetPage.value > count) assetPage.value = count
@@ -964,6 +958,8 @@ onBeforeUnmount(() => {
   viewer?.dispose()
   viewer = null
   if (videoObjectUrl.value) URL.revokeObjectURL(videoObjectUrl.value)
+  if (noticeTimer) window.clearTimeout(noticeTimer)
+  noticeTimer = null
 })
 
 /* ------------------------------------------------------------- 模型切换 */
@@ -1137,7 +1133,6 @@ async function submit() {
         video,
         startSeconds: Number(startSeconds.value) || 0,
         durationSeconds: Math.max(1, Number(durationSeconds.value) || 1),
-        priority: priority.value,
       })
       beginTask(response.task_uuid, 'motion', response)
     } else {
@@ -1147,7 +1142,6 @@ async function submit() {
         withTexture: withTexture.value,
         hdTexture: withTexture.value && hdTexture.value,
         pbrTexture: withTexture.value && pbrTexture.value,
-        priority: priority.value,
       }
       if (meshMode.value === 'text') payload.prompt = prompt.value.trim()
       if (meshMode.value === 'image') payload.image = singleImage.value?.dataUrl
@@ -1394,9 +1388,52 @@ function toggleFullscreen() {
 
 /* ------------------------------------------------------------- 产物 */
 
+const downloadBusy = ref('')
+const downloadNotice = ref('')
+let noticeTimer: number | null = null
+
+/** 下载结果是短暂状态：显示 4 秒后自动淡出，避免常驻占用右栏空间。 */
+function showDownloadNotice(text: string) {
+  downloadNotice.value = text
+  if (noticeTimer) window.clearTimeout(noticeTimer)
+  noticeTimer = window.setTimeout(() => {
+    downloadNotice.value = ''
+    noticeTimer = null
+  }, 4000)
+}
+
+const ASSET_FILE_LABELS: Record<TaskAsset['kind'], string> = {
+  mesh: 'model',
+  motion: 'motion',
+  video: 'preview-video',
+  audio: 'audio',
+  image: 'preview-image',
+  other: 'asset',
+}
+
 function fileNameOf(asset: TaskAsset): string {
-  const name = asset.path.split('/').pop() || 'asset'
-  return name.split('?')[0]
+  const short = (task.value?.task_uuid || 'task').slice(0, 8)
+  const ext = asset.ext || '.bin'
+  return `artrealm-3d-${short}-${ASSET_FILE_LABELS[asset.kind] || 'asset'}${ext}`
+}
+
+async function handleDownload(asset: TaskAsset) {
+  if (downloadBusy.value) return
+  downloadBusy.value = asset.path
+  try {
+    const result = await downloadAsset(asset.url, fileNameOf(asset))
+    if (result === 'failed') {
+      showDownloadNotice('下载失败：链接可能已过期，点历史任务重新查询即可刷新链接。')
+    } else if (result === 'opened') {
+      showDownloadNotice('已在新标签页打开文件，可在浏览器里手动保存。')
+    } else {
+      showDownloadNotice(`已开始下载：${fileNameOf(asset)}`)
+    }
+  } catch {
+    showDownloadNotice('下载失败：链接可能已过期，点历史任务重新查询即可刷新链接。')
+  } finally {
+    downloadBusy.value = ''
+  }
 }
 
 function openAsset(url: string) {
@@ -1491,12 +1528,27 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
 
 /* 右栏比左栏更紧凑：任务 + 产物 + 三条历史要能在一屏内放下 */
 .model3d-rail--right .studio-panel-head {
-  padding: 12px 18px;
+  padding: 9px 16px;
 }
 
 .model3d-rail--right .panel-body {
-  gap: 12px;
-  padding: 14px 16px;
+  gap: 10px;
+  padding: 11px 14px 12px;
+}
+
+.model3d-rail--right .asset-item {
+  padding: 6px 9px;
+}
+
+.model3d-rail--right .asset-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.model3d-rail--right .asset-list {
+  gap: 6px;
 }
 
 .model3d-rail--right .empty-block {
@@ -3116,11 +3168,24 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
   color: #d5f3ff;
 }
 
-.asset-tip {
+/* 下载结果提示：浮在右下角的短时 toast，不参与右栏布局、不影响历史可见性 */
+.asset-notice {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 60;
+  max-width: 340px;
   margin: 0;
-  font-size: 9.5px;
-  line-height: 1.6;
-  color: rgba(255, 255, 255, 0.3);
+  padding: 9px 13px;
+  border: 1px solid rgba(125, 211, 252, 0.24);
+  border-radius: 11px;
+  background: rgba(9, 19, 32, 0.94);
+  box-shadow: 0 16px 40px rgba(2, 6, 14, 0.55);
+  backdrop-filter: blur(10px);
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(205, 238, 255, 0.9);
+  word-break: break-all;
 }
 
 .link-btn {
@@ -3209,29 +3274,31 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
   color: rgba(255, 255, 255, 0.28);
 }
 
+/* 历史面板不参与 flex 收缩：整条右栏滚动，避免被压缩成空壳 */
 .rail-panel--history {
   display: flex;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   flex-direction: column;
-  min-height: 0;
-}
-
-/* 历史列表在面板内部滚动，翻页器固定在面板底部，不会被页面裁掉 */
-.rail-panel--history .panel-body {
-  flex: 1 1 auto;
-  min-height: 0;
 }
 
 .rail-panel--history .history-list {
-  flex: 1 1 auto;
   gap: 6px;
-  min-height: 0;
-  overflow-y: auto;
 }
 
 .rail-panel--history .history-item {
   gap: 2px;
-  padding: 7px 10px;
+  padding: 6px 9px;
+}
+
+.rail-panel--history .history-prompt {
+  font-size: 10px;
+}
+
+.history-head-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
 }
 
 .rail-panel--history .rail-pager {

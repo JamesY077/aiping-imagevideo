@@ -109,7 +109,6 @@ export interface MeshTaskInput {
   withTexture: boolean
   hdTexture: boolean
   pbrTexture: boolean
-  priority?: number
 }
 
 export interface MotionTaskInput {
@@ -118,20 +117,18 @@ export interface MotionTaskInput {
   startSeconds: number
   durationSeconds: number
   bboxes?: number[][] | null
-  priority?: number
 }
 
-function buildOptions(priority?: number) {
-  const options: Record<string, unknown> = { block: false }
-  if (typeof priority === 'number' && priority > 0) options.priority = Math.round(priority)
-  return options
+/** 只走异步轮询；不传 options.priority（账户 mq_priority 固定，传大了会被上游 400）。 */
+function buildOptions() {
+  return { block: false }
 }
 
 export async function createMeshTask(input: MeshTaskInput): Promise<TaskCreateResponse> {
   const body: Record<string, unknown> = {
     model: input.model,
     with_texture: input.withTexture,
-    options: buildOptions(input.priority),
+    options: buildOptions(),
   }
 
   if (input.withTexture) {
@@ -166,7 +163,7 @@ export async function createMotionTask(input: MotionTaskInput): Promise<TaskCrea
     input_video: input.video,
     start_time_seconds: input.startSeconds,
     duration_seconds: input.durationSeconds,
-    options: buildOptions(input.priority),
+    options: buildOptions(),
   }
   if (input.bboxes?.length) body.bboxes = input.bboxes
 
@@ -204,10 +201,11 @@ function assetKind(path: string): TaskAssetKind {
 
 function assetLabel(path: string, kind: TaskAssetKind, isPreview: boolean): string {
   const ext = assetExtension(path).replace('.', '').toUpperCase()
-  if (kind === 'mesh') return `3D 模型 · ${ext}`
-  if (kind === 'motion') return `动捕数据 · ${ext}`
+  // 扩展名由下方的副标题单独展示，标题里不再重复，右栏更紧凑。
+  if (kind === 'mesh') return '3D 模型'
+  if (kind === 'motion') return '动捕数据'
   if (kind === 'video') return isPreview ? '预览视频' : '视频片段'
-  if (kind === 'audio') return `音频 · ${ext}`
+  if (kind === 'audio') return '音频'
   if (kind === 'image') return '预览图'
   return `产物 · ${ext || 'FILE'}`
 }
@@ -226,6 +224,15 @@ function pushAsset(list: TaskAsset[], download: AssetDownload, isPreview = false
   })
 }
 
+const ASSET_SORT_ORDER: Record<TaskAssetKind, number> = {
+  mesh: 0,
+  motion: 1,
+  video: 2,
+  audio: 3,
+  image: 4,
+  other: 5,
+}
+
 export function collectMeshAssets(task: MeshTaskResult | null): TaskAsset[] {
   if (!task?.metadata?.length) return []
   const list: TaskAsset[] = []
@@ -238,7 +245,8 @@ export function collectMeshAssets(task: MeshTaskResult | null): TaskAsset[] {
       pushAsset(list, download, Boolean(isPreview))
     })
   })
-  return list
+  // 模型文件最重要，排在预览图和预览视频前面，翻页第一页就能拿到。
+  return list.sort((a, b) => ASSET_SORT_ORDER[a.kind] - ASSET_SORT_ORDER[b.kind])
 }
 
 /** 找到可旋转查看的模型产物（优先 ply / glb）。 */
@@ -264,7 +272,10 @@ export function collectMotionAssets(task: MotionTaskResult | null): TaskAsset[] 
 /** 常见上游英文错误 -> 中文文案（V2Fun 的审核类错误都是英文短句）。 */
 const ERROR_TRANSLATIONS: { pattern: RegExp; text: string }[] = [
   { pattern: /task execution failed[,.]?\s*please retry later/i, text: '上游处理失败（服务商临时异常），请稍后重试。' },
-  { pattern: /input image failed moderation/i, text: '参考图未通过内容审核，请更换图片后重试。' },
+  {
+    pattern: /input image failed moderation/i,
+    text: '参考图未通过内容审核：请换用主体清晰、背景干净、不含文字 / 水印 / 真人敏感内容的图片，或多视角各视角单独试一次以定位问题图。',
+  },
   { pattern: /input video failed moderation/i, text: '参考视频未通过内容审核，请更换视频后重试。' },
   { pattern: /input (text|prompt) failed moderation/i, text: '提示词未通过内容审核，请修改后重试。' },
   { pattern: /no (human|person|people).*(detected|found)/i, text: '未在视频中检测到人物，请更换包含清晰人物的片段。' },
@@ -303,7 +314,6 @@ const FIELD_LABELS: Record<string, string> = {
   start_time_seconds: '起始时间',
   duration_seconds: '片段时长',
   bboxes: '人物框',
-  'options.priority': '优先级',
 }
 
 function fieldLabel(loc: unknown): string {
@@ -339,7 +349,7 @@ const PARAM_ERROR_TRANSLATIONS: { pattern: RegExp; text: string }[] = [
   { pattern: /(unsupported|not supported|invalid).*(image|format|file)/i, text: '图片格式不受支持，请改用 JPG / PNG / WebP 后重试。' },
   { pattern: /(image|file).*(too (large|big)|size limit|exceeds)/i, text: '图片体积或分辨率超出上限，请压缩后重试。' },
   { pattern: /(duplicate|same (image|view))/i, text: '多视角图片重复，请为每个视角上传不同角度的图片。' },
-  { pattern: /(moderation|safety|nsfw)/i, text: '图片未通过内容审核，请更换图片后重试。' },
+  { pattern: /(moderation|safety|nsfw)/i, text: '图片未通过内容审核，请换用主体清晰、不含文字 / 水印 / 敏感内容的图片后重试。' },
 ]
 
 function translateParamError(raw: string): string {
