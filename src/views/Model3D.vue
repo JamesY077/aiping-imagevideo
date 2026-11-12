@@ -122,7 +122,7 @@
                   </button>
                 </div>
 
-                <div v-if="materialPreset === 'glass'" class="material-thickness">
+                <div v-if="materialPreset === 'glass' && stats?.kind !== 'splat'" class="material-thickness">
                   <div class="material-thickness-head">
                     <span>玻璃厚度</span>
                     <span>{{ Math.round(materialThickness * 100) }}%</span>
@@ -130,7 +130,7 @@
                   <input v-model.number="materialThickness" class="time-range" type="range" min="0" max="1" step="0.01" />
                 </div>
 
-                <p class="field-hint">预览材质只改变本地渲染与导出结果，不修改上游模型文件；高斯点云 PLY 不支持材质替换。</p>
+                <p class="field-hint">预览材质只影响本地渲染与导出；GLB / glTF 应用完整 PBR 材质，点云模型应用整体色调与通透度。</p>
               </div>
 
               <!-- 文本 -->

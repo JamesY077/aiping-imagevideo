@@ -59,6 +59,21 @@ const VIEW_DIRECTIONS: Record<ViewerView, THREE.Vector3> = {
   right: new THREE.Vector3(1, 0, 0),
 }
 
+/**
+ * 高斯点云没有 PBR 材质，只能做整体乘色与通透度调整。
+ * 用接近中性的色值，避免把原始扫描色染死。
+ */
+const SPLAT_MATERIALS: Record<ViewerMaterial, { color: number; opacity: number }> = {
+  original: { color: 0xffffff, opacity: 1 },
+  matte: { color: 0xf1f3f5, opacity: 1 },
+  ceramic: { color: 0xfff4e6, opacity: 1 },
+  metal: { color: 0xd3dee9, opacity: 1 },
+  chrome: { color: 0xf3f9ff, opacity: 1 },
+  gold: { color: 0xf0c264, opacity: 1 },
+  glass: { color: 0xdff2ff, opacity: 0.72 },
+  jade: { color: 0x8fe6bd, opacity: 0.86 },
+}
+
 /** V2Fun 的点云是「Y 轴朝下、正面朝 +X」，绕 (1,0,1) 转 180° 摆正成 Y-up。 */
 const AXIS_FIX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 1).normalize(), Math.PI)
 
@@ -436,7 +451,7 @@ export class HologramViewer {
       const progress = clamp01((performance.now() - this.revealStart) / 1350)
       const eased = easeOutCubic(progress)
       this.modelGroup.scale.setScalar(0.9 + 0.1 * eased)
-      if (this.splat) this.splat.opacity = eased
+      if (this.splat) this.splat.opacity = eased * this.splatTargetOpacity()
       this.scanRing.visible = true
       this.scanRing.position.y = 0.02 + eased * this.modelHeight
       ;(this.scanRing.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - eased * 0.55)
@@ -565,8 +580,9 @@ export class HologramViewer {
     this.placeModel(mesh, rotated)
 
     // 装配动画里从 0 淡入
-    mesh.opacity = 0
     this.splat = mesh
+    this.applyMaterialToSplat()
+    mesh.opacity = 0
     this.modelGroup.add(mesh)
 
     return { kind: 'splat', count: mesh.packedSplats?.numSplats ?? 0, bytes: buffer.byteLength }
@@ -621,6 +637,19 @@ export class HologramViewer {
     this.materialPreset = preset
     this.materialThickness = Math.min(2, Math.max(0.05, thickness))
     this.applyMaterialToMeshes()
+    this.applyMaterialToSplat()
+  }
+
+  /** 点云没有 PBR，只能整体乘色 + 调通透度；至少让材质按钮在点云上也有反馈。 */
+  private applyMaterialToSplat() {
+    if (!this.splat) return
+    const preset = SPLAT_MATERIALS[this.materialPreset]
+    this.splat.recolor.setHex(preset.color)
+    this.splat.opacity = preset.opacity
+  }
+
+  private splatTargetOpacity(): number {
+    return SPLAT_MATERIALS[this.materialPreset].opacity
   }
 
   private applyMaterialToMeshes() {
