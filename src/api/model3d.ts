@@ -274,7 +274,7 @@ const ERROR_TRANSLATIONS: { pattern: RegExp; text: string }[] = [
   { pattern: /task execution failed[,.]?\s*please retry later/i, text: '上游处理失败（服务商临时异常），请稍后重试。' },
   {
     pattern: /input image failed moderation/i,
-    text: '参考图未通过内容审核：请换用主体清晰、背景干净、不含文字 / 水印 / 真人敏感内容的图片，或多视角各视角单独试一次以定位问题图。',
+    text: '参考图未通过内容审核：请换用主体清晰、背景干净、不含文字 / 水印的图片；多视角可先只传正视图提交，再逐个补其他视角来定位问题图片。',
   },
   { pattern: /input video failed moderation/i, text: '参考视频未通过内容审核，请更换视频后重试。' },
   { pattern: /input (text|prompt) failed moderation/i, text: '提示词未通过内容审核，请修改后重试。' },
