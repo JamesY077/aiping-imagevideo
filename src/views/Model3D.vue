@@ -260,7 +260,7 @@
               />
               <div class="time-meta">
                 <span>{{ videoDurationLabel }}</span>
-                <span>{{ motionUnits }} 个计费单位（3 秒/单位）</span>
+                <span>预估 {{ motionUnits }} 个计费单位 · 3 秒/单位</span>
               </div>
             </div>
 
@@ -441,14 +441,14 @@
               </div>
             </div>
 
-            <!-- 左下角读数 -->
-            <div class="hud-readout hud-readout--left">
+            <!-- 左下角读数（仅 3D 装配台显示；动捕预览时这些数值无意义） -->
+            <div v-if="!showVideoStage" class="hud-readout hud-readout--left">
               <span class="readout-key">FORMAT</span>
               <span class="readout-value">{{ statsLabel }}</span>
               <span class="readout-key">SIZE</span>
               <span class="readout-value">{{ stats ? formatBytes(stats.bytes) : '—' }}</span>
             </div>
-            <div class="hud-readout hud-readout--right">
+            <div v-if="!showVideoStage" class="hud-readout hud-readout--right">
               <span class="readout-key">FPS</span>
               <span class="readout-value">{{ fpsLabel }}</span>
               <span class="readout-key">PROXY</span>
@@ -456,7 +456,7 @@
             </div>
           </div>
 
-          <div class="stage-toolbar">
+          <div v-if="!showVideoStage" class="stage-toolbar">
             <div class="tool-group">
               <button class="tool-chip" :class="{ active: holoStyle === 'natural' }" type="button" :disabled="!viewerReady" @click="setStyle('natural')">材质</button>
               <button class="tool-chip" :class="{ active: holoStyle === 'holo' }" type="button" :disabled="!viewerReady" @click="setStyle('holo')">全息</button>
@@ -782,7 +782,7 @@ const videoTotal = computed(() => {
   return Number.isFinite(duration) && duration > 0 ? duration : 0
 })
 const videoDurationLabel = computed(() =>
-  videoTotal.value ? `视频总长 ${videoTotal.value.toFixed(1)}s` : '未读取到视频时长（按手动输入）',
+  videoTotal.value ? `视频总长 ${videoTotal.value.toFixed(1)}s` : '时长未知（URL 源无法预读）',
 )
 
 const maxDuration = computed(() => {

@@ -587,10 +587,11 @@ export class HologramViewer {
             (Math.max(this.container.clientHeight, 320) * 0.5) / Math.tan((this.camera.fov * Math.PI) / 360),
         },
         uSize: { value: this.pointSize },
-        uAlpha: { value: this.style === 'holo' ? 0.1 : 0.85 },
+        uAlpha: { value: this.style === 'holo' ? 0.1 : 0.6 },
         uReveal: { value: 1 },
         uHolo: { value: this.style === 'holo' ? 1 : 0 },
         uHeight: { value: this.modelHeight },
+        uSharp: { value: this.style === 'holo' ? 0.75 : 1 },
       },
       vertexShader: /* glsl */ `
         attribute vec4 aColor;
@@ -607,8 +608,8 @@ export class HologramViewer {
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
           float visible = step(position.y / uHeight, uReveal);
           vAlpha = aColor.a * uAlpha * visible;
-          // 1.7 为画布上的经验放大系数：高斯半径远小于点间距，直接按半径画会碎成噪点。
-          float size = aSize * uProj * uSize * 1.7 / max(-mvPosition.z, 0.001);
+          // 2.2 为画布上的经验放大系数：高斯半径远小于点间距，直接按半径画会碎成噪点。
+          float size = aSize * uProj * uSize * 2.2 / max(-mvPosition.z, 0.001);
           gl_PointSize = clamp(size, 1.0, 48.0);
           gl_Position = projectionMatrix * mvPosition;
           if (vAlpha < 0.004) {
@@ -618,13 +619,15 @@ export class HologramViewer {
       `,
       fragmentShader: /* glsl */ `
         uniform float uHolo;
+        uniform float uSharp;
         varying vec4 vColor;
         varying float vAlpha;
         void main() {
           vec2 coord = gl_PointCoord - 0.5;
           float dist = dot(coord, coord);
           if (dist > 0.25) discard;
-          float soft = smoothstep(0.25, 0.02, dist);
+          // uSharp=0 高斯软边（体积感），uSharp=1 硬边小圆点（表面更实、雾感更少）
+          float soft = smoothstep(0.25, mix(0.02, 0.215, uSharp), dist);
           vec3 natural = vColor.rgb;
           vec3 holo = mix(vec3(0.24, 0.85, 1.0), vColor.rgb, 0.45);
           vec3 color = mix(natural, holo, uHolo);
@@ -632,7 +635,9 @@ export class HologramViewer {
         }
       `,
       transparent: true,
-      depthWrite: this.style !== 'holo',
+      // 点云没有前后排序，写深度会把「先画的点」当成最前面，出现麻点；
+      // 用纯 alpha 混合叠加反而更接近官方预览里的实体表面。
+      depthWrite: false,
       depthTest: true,
       blending: this.style === 'holo' ? THREE.AdditiveBlending : THREE.NormalBlending,
     })
@@ -730,9 +735,8 @@ export class HologramViewer {
     this.style = style
     if (this.splatMaterial) {
       this.splatMaterial.uniforms.uHolo.value = style === 'holo' ? 1 : 0
-      this.splatMaterial.uniforms.uAlpha.value = style === 'holo' ? 0.1 : 0.85
-      // 全息模式用加法混合，不能写深度；材质模式写深度才能得到实体表面。
-      this.splatMaterial.depthWrite = style !== 'holo'
+      this.splatMaterial.uniforms.uAlpha.value = style === 'holo' ? 0.1 : 0.6
+      this.splatMaterial.uniforms.uSharp.value = style === 'holo' ? 0.75 : 1
       this.splatMaterial.blending = style === 'holo' ? THREE.AdditiveBlending : THREE.NormalBlending
       this.splatMaterial.needsUpdate = true
     }
