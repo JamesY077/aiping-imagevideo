@@ -94,14 +94,6 @@ export const MOTION_DURATION_LIMITS = {
   defaultValue: 3,
 } as const
 
-/** 优先级（options.priority）范围来自文档：0–255，越大越优先。 */
-export const PRIORITY_LIMITS = {
-  min: 0,
-  max: 255,
-  step: 1,
-  defaultValue: 0,
-} as const
-
 export interface PromptPreset {
   label: string
   prompt: string
@@ -145,21 +137,8 @@ export const MULTI_VIEW_SLOTS = [
 
 export type MultiViewKey = (typeof MULTI_VIEW_SLOTS)[number]['key']
 
-/** 3D 产物支持的扩展名（实测以 .ply 高斯点云为主，同时兼容 glb / gltf）。 */
-export const MESH_ASSET_EXTENSIONS = ['.ply', '.glb', '.gltf'] as const
-
 export function assetExtension(path: string): string {
   const clean = path.split('?')[0] || ''
   const dot = clean.lastIndexOf('.')
   return dot >= 0 ? clean.slice(dot).toLowerCase() : ''
-}
-
-export function isMotionAsset(path: string): boolean {
-  const ext = assetExtension(path)
-  return ext === '.bvh' || ext === '.fbx' || ext === '.npz'
-}
-
-export function isPreviewVideo(path: string): boolean {
-  const ext = assetExtension(path)
-  return ext === '.mp4' || ext === '.webm' || ext === '.mov'
 }

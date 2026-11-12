@@ -9,7 +9,7 @@
  */
 
 import client from '@/api/aiping'
-import { assetExtension, isMotionAsset, isPreviewVideo } from '@/features/model3d/models'
+import { assetExtension } from '@/features/model3d/models'
 
 export const MESH_TASKS_ENDPOINT = '/multimodal/v2fun/3d_models/meshes'
 export const MOTION_TASKS_ENDPOINT = '/multimodal/v2fun/videos/motion_detections'
@@ -261,14 +261,6 @@ export function collectMotionAssets(task: MotionTaskResult | null): TaskAsset[] 
   return list
 }
 
-export function pickMotionClip(assets: TaskAsset[]): TaskAsset | null {
-  return assets.find((asset) => asset.kind === 'video') || null
-}
-
-export function pickMotionData(assets: TaskAsset[]): TaskAsset | null {
-  return assets.find((asset) => isMotionAsset(asset.path)) || null
-}
-
 /** 常见上游英文错误 -> 中文文案（V2Fun 的审核类错误都是英文短句）。 */
 const ERROR_TRANSLATIONS: { pattern: RegExp; text: string }[] = [
   { pattern: /task execution failed[,.]?\s*please retry later/i, text: '上游处理失败（服务商临时异常），请稍后重试。' },
@@ -314,9 +306,4 @@ export function taskRequestError(error: unknown, fallback = '请求失败，请�
   if (anyError?.code === 'ECONNABORTED') return '请求超时，请检查网络后重试。'
   if (raw.includes('No provider is currently available')) return '上游服务商暂时不可用，请稍后重试。'
   return raw || fallback
-}
-
-/** 判断是否还有预览视频可看（非模型资产也算成功）。 */
-export function hasPreviewOnly(assets: TaskAsset[]): boolean {
-  return assets.some((asset) => isPreviewVideo(asset.path))
 }

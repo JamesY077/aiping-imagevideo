@@ -38,6 +38,13 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    // 视频动捕与 3D 建模共用一套页面与任务流，只是初始进入的分区不同。
+    path: '/motion',
+    name: 'Motion',
+    component: () => import('@/views/Model3D.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/skill',
     name: 'SkillCreate',
     component: () => import('@/views/SkillCreate.vue'),

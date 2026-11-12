@@ -16,8 +16,16 @@ export interface Model3DHistoryEntry {
   status: TaskStatus | 'RUNNING'
 }
 
-const STORAGE_KEY = 'artrealm.model3d.history.v1'
-const MAX_ENTRIES = 24
+const STORAGE_KEY = 'artrealm.model3d.history.v2'
+const LEGACY_STORAGE_KEY = 'artrealm.model3d.history.v1'
+const MAX_ENTRIES = 12
+
+// 清掉内测阶段遗留的调试任务（历史只存 task ID 与展示信息，不影响其他数据）。
+try {
+  localStorage.removeItem(LEGACY_STORAGE_KEY)
+} catch {
+  // 隐私模式下 localStorage 不可写，忽略
+}
 
 export function loadHistory(): Model3DHistoryEntry[] {
   try {
@@ -63,9 +71,4 @@ export function formatRelativeTime(timestamp: number): string {
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`
   const date = new Date(timestamp)
   return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
-}
-
-export function formatClock(timestamp: number): string {
-  const date = new Date(timestamp)
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`
 }

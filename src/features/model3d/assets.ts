@@ -26,7 +26,7 @@ export class AssetError extends Error {
 }
 
 /** 该地址是否需要经过同源代理。 */
-export function needsProxy(raw: string): boolean {
+function needsProxy(raw: string): boolean {
   try {
     const url = new URL(raw, window.location.origin)
     return url.origin !== window.location.origin && V2FUN_HOST_RE.test(url.hostname)
@@ -36,7 +36,7 @@ export function needsProxy(raw: string): boolean {
 }
 
 /** 把 OSS 预签名地址转成同源代理地址（保留完整 path + query，签名才有效）。 */
-export function proxyAssetUrl(raw: string): string {
+function proxyAssetUrl(raw: string): string {
   try {
     const url = new URL(raw, window.location.origin)
     return `${PROXY_PREFIX}${url.pathname}${url.search}`
@@ -95,13 +95,6 @@ async function readWithProgress(response: Response, onProgress?: (loaded: number
   return merged.buffer
 }
 
-export interface FetchedAsset {
-  buffer: ArrayBuffer
-  /** 实际可用的同源地址（可用于 <video> / 下载） */
-  url: string
-  source: 'proxy' | 'direct'
-}
-
 async function fetchOnce(url: string, onProgress?: (loaded: number, total: number) => void): Promise<ArrayBuffer> {
   const response = await fetch(url, { credentials: 'omit' })
   if (!response.ok) {
@@ -118,20 +111,18 @@ async function fetchOnce(url: string, onProgress?: (loaded: number, total: numbe
 /**
  * 读取模型字节：先走同源代理，失败再尝试直连。
  */
-export async function fetchAssetBytes(raw: string, onProgress?: (loaded: number, total: number) => void): Promise<FetchedAsset> {
-  const attempts: { url: string; source: 'proxy' | 'direct' }[] = []
-  if (needsProxy(raw)) attempts.push({ url: proxyAssetUrl(raw), source: 'proxy' })
-  attempts.push({ url: raw, source: 'direct' })
+export async function fetchAssetBytes(raw: string, onProgress?: (loaded: number, total: number) => void): Promise<ArrayBuffer> {
+  const attempts: string[] = needsProxy(raw) ? [proxyAssetUrl(raw), raw] : [raw]
 
   let lastError: unknown = null
-  for (const attempt of attempts) {
+  for (const url of attempts) {
     try {
-      const buffer = await fetchOnce(attempt.url, onProgress)
+      const buffer = await fetchOnce(url, onProgress)
       if (detectModelFormat(buffer, raw) === 'unknown') {
         lastError = new AssetError('下载到的内容不是可识别的 3D 文件', 'format')
         continue
       }
-      return { buffer, url: attempt.url, source: attempt.source }
+      return buffer
     } catch (error) {
       lastError = error
     }

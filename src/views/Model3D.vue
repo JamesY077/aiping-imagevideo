@@ -4,8 +4,12 @@
 
     <StudioHeader
       kicker="3D Studio"
-      title="3D 建模"
-      subtitle="V2Fun 三维重建：文生 3D、图生 3D、多视角 3D，以及视频动作捕捉"
+      :title="pageMode === 'motion' ? '动作捕捉' : '3D 建模'"
+      :subtitle="
+        pageMode === 'motion'
+          ? '上传人物视频，自动追踪姿态并输出可直接驱动三维角色的 BVH 动作数据'
+          : 'V2Fun 三维重建：文生 3D、图生 3D、多视角 3D'
+      "
       accent="#38bdf8"
     >
       <template #actions>
@@ -19,28 +23,43 @@
 
     <main class="model3d-main">
       <!-- ============================ 左栏：模型 / 输入 / 参数 ============================ -->
-      <aside class="model3d-rail model3d-rail--left studio-scroll">
-        <!-- ---------- 模型 ---------- -->
-        <section class="studio-panel rail-panel">
-          <header class="studio-panel-head">
-            <div class="studio-panel-headings">
-              <span class="studio-kicker">Model · 01</span>
-              <h2 class="studio-panel-title">选择建模引擎</h2>
-            </div>
-            <span class="studio-panel-meta">{{ MODEL3D_OPTIONS.length }} 个模型</span>
-          </header>
+      <aside class="model3d-rail model3d-rail--left">
+        <div class="rail-scroll studio-scroll">
+          <!-- ---------- 引擎 ---------- -->
+          <section class="studio-panel rail-panel">
+            <header class="studio-panel-head">
+              <div class="studio-panel-headings">
+                <span class="studio-kicker">Engine · 01</span>
+                <h2 class="studio-panel-title">选择引擎</h2>
+              </div>
+              <span class="studio-panel-meta">{{ modeModels.length }} 个模型</span>
+            </header>
 
-          <div class="model-grid">
-            <button
-              v-for="option in MODEL3D_OPTIONS"
-              :key="option.id"
-              class="model-card"
-              :class="{ active: option.id === modelId, motion: option.kind === 'motion' }"
-              type="button"
-              :aria-pressed="option.id === modelId"
-              @click="selectModel(option)"
-            >
-              <span class="model-card-top">
+            <div class="segmented mode-switch" role="tablist" aria-label="功能分区">
+              <button
+                v-for="tab in PAGE_MODES"
+                :key="tab.value"
+                class="segmented-item"
+                :class="{ active: pageMode === tab.value }"
+                type="button"
+                role="tab"
+                :aria-selected="pageMode === tab.value"
+                @click="setPageMode(tab.value)"
+              >
+                {{ tab.label }}
+              </button>
+            </div>
+
+            <div class="model-grid">
+              <button
+                v-for="option in modeModels"
+                :key="option.id"
+                class="model-card"
+                :class="{ active: option.id === modelId, motion: option.kind === 'motion' }"
+                type="button"
+                :aria-pressed="option.id === modelId"
+                @click="selectModel(option)"
+              >
                 <span class="model-glyph" aria-hidden="true">
                   <svg v-if="option.kind === 'mesh'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
                     <path d="M12 2.8 20.2 7v10L12 21.2 3.8 17V7z" />
@@ -51,285 +70,289 @@
                     <path d="M14.2 10.4 21 7.2v9.6l-6.8-3.2z" />
                   </svg>
                 </span>
-                <span class="model-badge">{{ option.badge }}</span>
-              </span>
-              <span class="model-name">{{ option.shortName }}</span>
-              <span class="model-desc">{{ option.description }}</span>
-              <span class="model-foot">
-                <span class="model-price">{{ option.price }}</span>
-                <span class="model-tags">
-                  <em v-for="tag in option.tags.slice(0, 2)" :key="tag">{{ tag }}</em>
+                <span class="model-body">
+                  <span class="model-line">
+                    <span class="model-name">{{ option.shortName }}</span>
+                    <span class="model-badge">{{ option.badge }}</span>
+                  </span>
+                  <span class="model-desc">{{ option.description }}</span>
+                  <span class="model-foot">
+                    <span class="model-price">{{ option.price }}</span>
+                    <span class="model-tags">
+                      <em v-for="tag in option.tags.slice(0, 3)" :key="tag">{{ tag }}</em>
+                    </span>
+                  </span>
                 </span>
-              </span>
-            </button>
-          </div>
-        </section>
-
-        <!-- ---------- 输入 ---------- -->
-        <section class="studio-panel rail-panel">
-          <header class="studio-panel-head">
-            <div class="studio-panel-headings">
-              <span class="studio-kicker">Input · 02</span>
-              <h2 class="studio-panel-title">{{ isMotion ? '视频动捕素材' : '建模输入' }}</h2>
-            </div>
-            <span class="studio-panel-meta">{{ isMotion ? '视频 · 片段' : '文本 · 图片' }}</span>
-          </header>
-
-          <!-- 3D 建模输入 -->
-          <div v-if="!isMotion" class="panel-body">
-            <div class="segmented" role="tablist" aria-label="输入方式">
-              <button
-                v-for="tab in MESH_MODES"
-                :key="tab.value"
-                class="segmented-item"
-                :class="{ active: meshMode === tab.value }"
-                type="button"
-                role="tab"
-                :aria-selected="meshMode === tab.value"
-                @click="meshMode = tab.value"
-              >
-                {{ tab.label }}
               </button>
             </div>
+          </section>
 
-            <!-- 文本 -->
-            <div v-if="meshMode === 'text'" class="input-block">
-              <textarea
-                v-model="prompt"
-                class="studio-field prompt-input"
-                maxlength="2000"
-                placeholder="描述要建模的物体：单体、结构清晰、材质明确。例如：一位宇航员，全身站立，双手自然下垂，白色宇航服细节清晰。"
-                spellcheck="false"
-                @keydown.meta.enter.prevent="submit"
-                @keydown.ctrl.enter.prevent="submit"
-              />
-              <div class="field-meta">
-                <span>{{ prompt.length }} / 2000</span>
-                <span class="field-hint">⌘ / Ctrl + ↵ 直接生成</span>
+          <!-- ---------- 输入 ---------- -->
+          <section class="studio-panel rail-panel">
+            <header class="studio-panel-head">
+              <div class="studio-panel-headings">
+                <span class="studio-kicker">Input · 02</span>
+                <h2 class="studio-panel-title">{{ isMotion ? '视频动捕素材' : '建模输入' }}</h2>
+              </div>
+              <span class="studio-panel-meta">{{ isMotion ? '视频 · 片段' : '文本 · 图片' }}</span>
+            </header>
+
+            <!-- 3D 建模输入 -->
+            <div v-if="!isMotion" class="panel-body">
+              <div class="segmented" role="tablist" aria-label="输入方式">
+                <button
+                  v-for="tab in MESH_MODES"
+                  :key="tab.value"
+                  class="segmented-item"
+                  :class="{ active: meshMode === tab.value }"
+                  type="button"
+                  role="tab"
+                  :aria-selected="meshMode === tab.value"
+                  @click="meshMode = tab.value"
+                >
+                  {{ tab.label }}
+                </button>
               </div>
 
-              <div class="preset-block">
-                <div class="preset-head">
-                  <span>灵感预设</span>
-                  <span class="preset-hint">点击填入</span>
+              <!-- 文本 -->
+              <div v-if="meshMode === 'text'" class="input-block">
+                <textarea
+                  v-model="prompt"
+                  class="studio-field prompt-input"
+                  maxlength="2000"
+                  placeholder="描述要建模的物体：单体、结构清晰、材质明确。例如：一位宇航员，全身站立，双手自然下垂，白色宇航服细节清晰。"
+                  spellcheck="false"
+                  @keydown.meta.enter.prevent="submit"
+                  @keydown.ctrl.enter.prevent="submit"
+                />
+                <div class="field-meta">
+                  <span>{{ prompt.length }} / 2000</span>
+                  <span class="field-hint">⌘ / Ctrl + ↵ 直接生成</span>
                 </div>
-                <div class="preset-chips">
-                  <button v-for="preset in MESH_PROMPT_PRESETS" :key="preset.label" class="preset-chip" type="button" @click="prompt = preset.prompt">
-                    {{ preset.label }}
-                  </button>
-                </div>
-              </div>
-            </div>
 
-            <!-- 单图 -->
-            <div v-else-if="meshMode === 'image'" class="input-block">
-              <div
-                class="dropzone"
-                :class="{ filled: singleImage }"
-                role="button"
-                tabindex="0"
-                @click="chooseImage('single')"
-                @keydown.enter.prevent="chooseImage('single')"
-                @keydown.space.prevent="chooseImage('single')"
-                @dragover.prevent
-                @drop.prevent="dropImage($event, 'single')"
-              >
-                <template v-if="singleImage">
-                  <img class="dropzone-thumb" :src="singleImage.dataUrl" alt="参考图预览" />
-                  <div class="dropzone-overlay">
-                    <span>{{ singleImage.name }}</span>
-                    <span>{{ singleImage.width }} × {{ singleImage.height }}</span>
+                <div class="preset-block">
+                  <div class="preset-head">
+                    <span>灵感预设</span>
+                    <span class="preset-hint">点击填入</span>
                   </div>
-                  <button class="thumb-clear" type="button" aria-label="移除图片" @click.stop="singleImage = null">×</button>
-                </template>
-                <template v-else>
-                  <span class="dropzone-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                      <rect x="3" y="4.5" width="18" height="15" rx="3" />
-                      <path d="M3.6 16.4 8.8 11l3.4 3.6 2.5-2.4 5.7 5.6" />
-                      <circle cx="8.4" cy="9" r="1.5" />
-                    </svg>
-                  </span>
-                  <span class="dropzone-title">上传一张参考图</span>
-                  <span class="dropzone-sub">点击或拖拽 · PNG / JPG / WebP</span>
-                </template>
+                  <div class="preset-chips">
+                    <button v-for="preset in MESH_PROMPT_PRESETS" :key="preset.label" class="preset-chip" type="button" @click="prompt = preset.prompt">
+                      {{ preset.label }}
+                    </button>
+                  </div>
+                </div>
               </div>
-              <p class="field-hint">建议单一主体、背景干净、主体完整不裁切。</p>
-            </div>
 
-            <!-- 多视角 -->
-            <div v-else class="input-block">
-              <div class="view-grid">
+              <!-- 单图 -->
+              <div v-else-if="meshMode === 'image'" class="input-block">
                 <div
-                  v-for="slot in MULTI_VIEW_SLOTS"
-                  :key="slot.key"
-                  class="view-slot"
-                  :class="{ filled: views[slot.key], required: slot.required }"
+                  class="dropzone"
+                  :class="{ filled: singleImage }"
                   role="button"
                   tabindex="0"
-                  @click="chooseImage(slot.key)"
-                  @keydown.enter.prevent="chooseImage(slot.key)"
-                  @keydown.space.prevent="chooseImage(slot.key)"
+                  @click="chooseImage('single')"
+                  @keydown.enter.prevent="chooseImage('single')"
+                  @keydown.space.prevent="chooseImage('single')"
                   @dragover.prevent
-                  @drop.prevent="dropImage($event, slot.key)"
+                  @drop.prevent="dropImage($event, 'single')"
                 >
-                  <template v-if="views[slot.key]">
-                    <img :src="views[slot.key]?.dataUrl" :alt="slot.label" />
-                    <button class="thumb-clear" type="button" aria-label="移除图片" @click.stop="views[slot.key] = null">×</button>
+                  <template v-if="singleImage">
+                    <img class="dropzone-thumb" :src="singleImage.dataUrl" alt="参考图预览" />
+                    <div class="dropzone-overlay">
+                      <span>{{ singleImage.name }}</span>
+                      <span>{{ singleImage.width }} × {{ singleImage.height }}</span>
+                    </div>
+                    <button class="thumb-clear" type="button" aria-label="移除图片" @click.stop="singleImage = null">×</button>
                   </template>
                   <template v-else>
-                    <span class="view-slot-label">{{ slot.label }}</span>
-                    <span class="view-slot-hint">{{ slot.hint }}</span>
+                    <span class="dropzone-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="4.5" width="18" height="15" rx="3" />
+                        <path d="M3.6 16.4 8.8 11l3.4 3.6 2.5-2.4 5.7 5.6" />
+                        <circle cx="8.4" cy="9" r="1.5" />
+                      </svg>
+                    </span>
+                    <span class="dropzone-title">上传一张参考图</span>
+                    <span class="dropzone-sub">点击或拖拽 · PNG / JPG / WebP</span>
+                  </template>
+                </div>
+                <p class="field-hint">建议单一主体、背景干净、主体完整不裁切。</p>
+              </div>
+
+              <!-- 多视角 -->
+              <div v-else class="input-block">
+                <div class="view-grid">
+                  <div
+                    v-for="slot in MULTI_VIEW_SLOTS"
+                    :key="slot.key"
+                    class="view-slot"
+                    :class="{ filled: views[slot.key], required: slot.required }"
+                    role="button"
+                    tabindex="0"
+                    @click="chooseImage(slot.key)"
+                    @keydown.enter.prevent="chooseImage(slot.key)"
+                    @keydown.space.prevent="chooseImage(slot.key)"
+                    @dragover.prevent
+                    @drop.prevent="dropImage($event, slot.key)"
+                  >
+                    <template v-if="views[slot.key]">
+                      <img :src="views[slot.key]?.dataUrl" :alt="slot.label" />
+                      <button class="thumb-clear" type="button" aria-label="移除图片" @click.stop="views[slot.key] = null">×</button>
+                    </template>
+                    <template v-else>
+                      <span class="view-slot-label">{{ slot.label }}</span>
+                      <span class="view-slot-hint">{{ slot.hint }}</span>
+                    </template>
+                  </div>
+                </div>
+                <p class="field-hint">正视图必填，补全左 / 背 / 右视图可以显著提升还原度。</p>
+              </div>
+            </div>
+
+            <!-- 视频动捕输入 -->
+            <div v-else class="panel-body">
+              <div class="segmented" role="tablist" aria-label="视频来源">
+                <button class="segmented-item" :class="{ active: videoSource === 'url' }" type="button" @click="videoSource = 'url'">视频地址</button>
+                <button class="segmented-item" :class="{ active: videoSource === 'file' }" type="button" @click="videoSource = 'file'">本地上传</button>
+              </div>
+
+              <div v-if="videoSource === 'url'" class="input-block">
+                <input v-model.trim="videoUrl" class="studio-field text-field" type="url" placeholder="https://... .mp4（服务商可访问的公网地址）" spellcheck="false" />
+              </div>
+
+              <div v-else class="input-block">
+                <div
+                  class="dropzone dropzone--video"
+                  :class="{ filled: videoFile }"
+                  role="button"
+                  tabindex="0"
+                  @click="videoInputRef?.click()"
+                  @keydown.enter.prevent="videoInputRef?.click()"
+                  @keydown.space.prevent="videoInputRef?.click()"
+                  @dragover.prevent
+                  @drop.prevent="dropVideo($event)"
+                >
+                  <template v-if="videoFile">
+                    <span class="video-file-icon" aria-hidden="true">▣</span>
+                    <span class="dropzone-title">{{ videoFile.name }}</span>
+                    <span class="dropzone-sub">
+                      {{ formatBytes(videoFile.size) }}
+                      <template v-if="videoMeta?.duration"> · {{ videoMeta.duration.toFixed(1) }}s</template>
+                    </span>
+                    <button class="thumb-clear" type="button" aria-label="移除视频" @click.stop="clearVideo">×</button>
+                  </template>
+                  <template v-else>
+                    <span class="dropzone-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2.8" y="5.4" width="11.4" height="13.2" rx="2.4" />
+                        <path d="M14.2 10.4 21 7.2v9.6l-6.8-3.2z" />
+                      </svg>
+                    </span>
+                    <span class="dropzone-title">上传一段人物视频</span>
+                    <span class="dropzone-sub">MP4 / MOV / WebM · 建议 ≤ 50MB · 单人全身入镜</span>
                   </template>
                 </div>
               </div>
-              <p class="field-hint">正视图必填，补全左 / 背 / 右视图可以显著提升还原度。</p>
-            </div>
-          </div>
 
-          <!-- 视频动捕输入 -->
-          <div v-else class="panel-body">
-            <div class="segmented" role="tablist" aria-label="视频来源">
-              <button class="segmented-item" :class="{ active: videoSource === 'url' }" type="button" @click="videoSource = 'url'">视频地址</button>
-              <button class="segmented-item" :class="{ active: videoSource === 'file' }" type="button" @click="videoSource = 'file'">本地上传</button>
-            </div>
+              <div class="time-block">
+                <div class="time-row">
+                  <label class="time-field">
+                    <span>起始时间</span>
+                    <div class="time-input">
+                      <input v-model.number="startSeconds" type="number" min="0" :max="maxStart" step="0.5" />
+                      <em>s</em>
+                    </div>
+                  </label>
+                  <label class="time-field">
+                    <span>片段时长</span>
+                    <div class="time-input">
+                      <input v-model.number="durationSeconds" type="number" :min="MOTION_DURATION_LIMITS.min" :max="maxDuration" step="1" />
+                      <em>s</em>
+                    </div>
+                  </label>
+                </div>
+                <input
+                  class="time-range"
+                  type="range"
+                  :min="0"
+                  :max="Math.max(0, maxStart)"
+                  step="0.1"
+                  :value="startSeconds"
+                  @input="onSeek(($event.target as HTMLInputElement).value)"
+                />
+                <div class="time-meta">
+                  <span>{{ videoDurationLabel }}</span>
+                  <span>预估 {{ motionUnits }} 个计费单位 · 3 秒/单位</span>
+                </div>
+              </div>
 
-            <div v-if="videoSource === 'url'" class="input-block">
-              <input v-model.trim="videoUrl" class="studio-field text-field" type="url" placeholder="https://... .mp4（服务商可访问的公网地址）" spellcheck="false" />
+              <p class="field-hint">动捕会在指定片段内追踪人物并输出 BVH 动作数据；多人入镜时按检测顺序输出多份。</p>
             </div>
+          </section>
 
-            <div v-else class="input-block">
-              <div
-                class="dropzone dropzone--video"
-                :class="{ filled: videoFile }"
-                role="button"
-                tabindex="0"
-                @click="videoInputRef?.click()"
-                @keydown.enter.prevent="videoInputRef?.click()"
-                @keydown.space.prevent="videoInputRef?.click()"
-                @dragover.prevent
-                @drop.prevent="dropVideo($event)"
-              >
-                <template v-if="videoFile">
-                  <span class="video-file-icon" aria-hidden="true">▣</span>
-                  <span class="dropzone-title">{{ videoFile.name }}</span>
-                  <span class="dropzone-sub">
-                    {{ formatBytes(videoFile.size) }}
-                    <template v-if="videoMeta?.duration"> · {{ videoMeta.duration.toFixed(1) }}s</template>
+          <!-- ---------- 参数 ---------- -->
+          <section class="studio-panel rail-panel">
+            <header class="studio-panel-head">
+              <div class="studio-panel-headings">
+                <span class="studio-kicker">Params · 03</span>
+                <h2 class="studio-panel-title">生成参数</h2>
+              </div>
+              <span class="studio-panel-meta">异步任务</span>
+            </header>
+
+            <div class="panel-body">
+              <template v-if="!isMotion">
+                <label class="switch-row">
+                  <span class="switch-copy">
+                    <span class="switch-title">生成纹理</span>
+                    <span class="switch-sub">输出带颜色的模型（with_texture）</span>
                   </span>
-                  <button class="thumb-clear" type="button" aria-label="移除视频" @click.stop="clearVideo">×</button>
-                </template>
-                <template v-else>
-                  <span class="dropzone-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                      <rect x="2.8" y="5.4" width="11.4" height="13.2" rx="2.4" />
-                      <path d="M14.2 10.4 21 7.2v9.6l-6.8-3.2z" />
-                    </svg>
+                  <input v-model="withTexture" type="checkbox" />
+                  <span class="switch-track" aria-hidden="true"><span class="switch-thumb" /></span>
+                </label>
+
+                <label class="switch-row" :class="{ disabled: !withTexture }">
+                  <span class="switch-copy">
+                    <span class="switch-title">高清纹理</span>
+                    <span class="switch-sub">提高纹理分辨率（hd_texture）</span>
                   </span>
-                  <span class="dropzone-title">上传一段人物视频</span>
-                  <span class="dropzone-sub">MP4 / MOV / WebM · 建议 ≤ 50MB · 单人全身入镜</span>
-                </template>
-              </div>
-            </div>
-
-            <div class="time-block">
-              <div class="time-row">
-                <label class="time-field">
-                  <span>起始时间</span>
-                  <div class="time-input">
-                    <input v-model.number="startSeconds" type="number" min="0" :max="maxStart" step="0.5" />
-                    <em>s</em>
-                  </div>
+                  <input v-model="hdTexture" type="checkbox" :disabled="!withTexture" />
+                  <span class="switch-track" aria-hidden="true"><span class="switch-thumb" /></span>
                 </label>
-                <label class="time-field">
-                  <span>片段时长</span>
-                  <div class="time-input">
-                    <input v-model.number="durationSeconds" type="number" :min="MOTION_DURATION_LIMITS.min" :max="maxDuration" step="1" />
-                    <em>s</em>
-                  </div>
+
+                <label class="switch-row" :class="{ disabled: !withTexture }">
+                  <span class="switch-copy">
+                    <span class="switch-title">PBR 材质</span>
+                    <span class="switch-sub">输出粗糙度 / 金属度贴图（pbr_texture）</span>
+                  </span>
+                  <input v-model="pbrTexture" type="checkbox" :disabled="!withTexture" />
+                  <span class="switch-track" aria-hidden="true"><span class="switch-thumb" /></span>
                 </label>
+              </template>
+
+              <div v-else class="billing-card">
+                <div class="billing-row">
+                  <span>计费单价</span>
+                  <strong>{{ model.price }}</strong>
+                </div>
+                <div class="billing-row">
+                  <span>本次预估</span>
+                  <strong>{{ motionEstimate }}</strong>
+                </div>
+                <p class="billing-note">按实际处理秒数向上取整到 3 秒一档，最终以平台账单为准。</p>
               </div>
-              <input
-                class="time-range"
-                type="range"
-                :min="0"
-                :max="Math.max(0, maxStart)"
-                step="0.1"
-                :value="startSeconds"
-                @input="onSeek(($event.target as HTMLInputElement).value)"
-              />
-              <div class="time-meta">
-                <span>{{ videoDurationLabel }}</span>
-                <span>预估 {{ motionUnits }} 个计费单位 · 3 秒/单位</span>
+
+              <div class="param-row">
+                <div class="param-label">
+                  <span>任务优先级</span>
+                  <em>{{ priority || '默认' }}</em>
+                </div>
+                <input v-model.number="priority" class="time-range" type="range" min="0" max="255" step="1" />
+                <p class="field-hint">0–255，数值越大排队越靠前。</p>
               </div>
             </div>
-
-            <p class="field-hint">动捕会在指定片段内追踪人物并输出 BVH 动作数据；多人入镜时按检测顺序输出多份。</p>
-          </div>
-        </section>
-
-        <!-- ---------- 参数 ---------- -->
-        <section class="studio-panel rail-panel">
-          <header class="studio-panel-head">
-            <div class="studio-panel-headings">
-              <span class="studio-kicker">Params · 03</span>
-              <h2 class="studio-panel-title">生成参数</h2>
-            </div>
-            <span class="studio-panel-meta">异步任务</span>
-          </header>
-
-          <div class="panel-body">
-            <template v-if="!isMotion">
-              <label class="switch-row">
-                <span class="switch-copy">
-                  <span class="switch-title">生成纹理</span>
-                  <span class="switch-sub">输出带颜色的模型（with_texture）</span>
-                </span>
-                <input v-model="withTexture" type="checkbox" />
-                <span class="switch-track" aria-hidden="true"><span class="switch-thumb" /></span>
-              </label>
-
-              <label class="switch-row" :class="{ disabled: !withTexture }">
-                <span class="switch-copy">
-                  <span class="switch-title">高清纹理</span>
-                  <span class="switch-sub">提高纹理分辨率（hd_texture）</span>
-                </span>
-                <input v-model="hdTexture" type="checkbox" :disabled="!withTexture" />
-                <span class="switch-track" aria-hidden="true"><span class="switch-thumb" /></span>
-              </label>
-
-              <label class="switch-row" :class="{ disabled: !withTexture }">
-                <span class="switch-copy">
-                  <span class="switch-title">PBR 材质</span>
-                  <span class="switch-sub">输出粗糙度 / 金属度贴图（pbr_texture）</span>
-                </span>
-                <input v-model="pbrTexture" type="checkbox" :disabled="!withTexture" />
-                <span class="switch-track" aria-hidden="true"><span class="switch-thumb" /></span>
-              </label>
-            </template>
-
-            <div v-else class="billing-card">
-              <div class="billing-row">
-                <span>计费单价</span>
-                <strong>{{ model.price }}</strong>
-              </div>
-              <div class="billing-row">
-                <span>本次预估</span>
-                <strong>{{ motionEstimate }}</strong>
-              </div>
-              <p class="billing-note">按实际处理秒数向上取整到 3 秒一档，最终以平台账单为准。</p>
-            </div>
-
-            <div class="param-row">
-              <div class="param-label">
-                <span>任务优先级</span>
-                <em>{{ priority || '默认' }}</em>
-              </div>
-              <input v-model.number="priority" class="time-range" type="range" min="0" max="255" step="1" />
-              <p class="field-hint">0–255，数值越大排队越靠前。</p>
-            </div>
-          </div>
-        </section>
+          </section>
+        </div>
 
         <div class="rail-actions">
           <button class="build-btn" type="button" :disabled="!canSubmit || isSubmitting" @click="submit">
@@ -421,7 +444,13 @@
             <!-- 空闲态提示 -->
             <div v-if="!showVideoStage && viewerState === 'idle'" class="stage-idle">
               <span class="idle-title">装配台待命</span>
-              <span class="idle-sub">左侧选择模型并提交描述，生成的模型会在这里逐层显影</span>
+              <span class="idle-sub">
+                {{
+                  isMotion
+                    ? '左侧填写视频地址或上传片段，动捕结果会在这里播放'
+                    : '左侧选择模型并提交描述，生成的模型会在这里逐层显影'
+                }}
+              </span>
             </div>
 
             <!-- 加载态 -->
@@ -448,32 +477,16 @@
               <span class="readout-key">SIZE</span>
               <span class="readout-value">{{ stats ? formatBytes(stats.bytes) : '—' }}</span>
             </div>
-            <div v-if="!showVideoStage" class="hud-readout hud-readout--right">
-              <span class="readout-key">FPS</span>
-              <span class="readout-value">{{ fpsLabel }}</span>
-              <span class="readout-key">PROXY</span>
-              <span class="readout-value">{{ assetSourceLabel }}</span>
-            </div>
           </div>
 
           <div v-if="!showVideoStage" class="stage-toolbar">
             <div class="tool-group">
-              <button class="tool-chip" :class="{ active: holoStyle === 'natural' }" type="button" :disabled="!viewerReady" @click="setStyle('natural')">材质</button>
-              <button class="tool-chip" :class="{ active: holoStyle === 'holo' }" type="button" :disabled="!viewerReady" @click="setStyle('holo')">全息</button>
-            </div>
-
-            <div class="tool-slider">
-              <span>点径</span>
-              <input v-model.number="pointSize" type="range" min="0.3" max="2.6" step="0.05" :disabled="!viewerReady" @input="applyPointSize" />
-              <em>{{ pointSize.toFixed(2) }}×</em>
-            </div>
-
-            <div class="tool-group tool-group--end">
               <button class="tool-chip" :class="{ active: autoRotate }" type="button" :disabled="!viewerReady" @click="toggleAutoRotate">
                 <span class="chip-dot" aria-hidden="true" />自动旋转
               </button>
               <button class="tool-chip" :class="{ active: showGrid }" type="button" :disabled="!viewerReady" @click="toggleGrid">栅格</button>
             </div>
+            <span class="tool-tip">拖拽旋转 · 滚轮缩放 · 右键平移</span>
           </div>
         </div>
 
@@ -524,7 +537,7 @@
               </div>
               <div>
                 <dt>类型</dt>
-                <dd>{{ taskKind === 'motion' ? '视频动捕' : '3D 建模' }}</dd>
+                <dd>{{ isMotion ? '视频动捕' : '3D 建模' }}</dd>
               </div>
               <div>
                 <dt>阶段</dt>
@@ -619,6 +632,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import StudioHeader from '@/components/StudioHeader.vue'
 import StudioIsland from '@/components/StudioIsland.vue'
 import {
@@ -648,7 +662,7 @@ import {
   type TaskAsset,
 } from '@/api/model3d'
 import { AssetError, downloadAsset, formatBytes, mediaUrl } from '@/features/model3d/assets'
-import { HologramViewer, type ViewerStats, type ViewerStyle } from '@/features/model3d/viewer'
+import { HologramViewer, type ViewerStats } from '@/features/model3d/viewer'
 import {
   addHistoryEntry,
   clearHistory,
@@ -660,6 +674,14 @@ import {
 import { prepareLocalImageDataUri } from '@/features/generate/localImage'
 import { fileToBase64 } from '@/features/generate/files'
 
+type PageMode = 'mesh' | 'motion'
+
+/** 两个入口共用一套任务流：/model3d = 3D 建模，/motion = 视频动捕。 */
+const PAGE_MODES: { value: PageMode; label: string; path: string }[] = [
+  { value: 'mesh', label: '3D 建模', path: '/model3d' },
+  { value: 'motion', label: '视频动捕', path: '/motion' },
+]
+
 const MESH_MODES: { value: MeshInputMode; label: string }[] = [
   { value: 'text', label: '文生 3D' },
   { value: 'image', label: '图生 3D' },
@@ -668,7 +690,12 @@ const MESH_MODES: { value: MeshInputMode; label: string }[] = [
 
 /* ------------------------------------------------------------- 表单状态 */
 
-const modelId = ref(DEFAULT_MODEL3D_ID)
+const route = useRoute()
+const router = useRouter()
+const pageMode = computed<PageMode>(() => (route.path.startsWith('/motion') ? 'motion' : 'mesh'))
+const modeModels = computed(() => MODEL3D_OPTIONS.filter((item) => item.kind === pageMode.value))
+
+const modelId = ref(pageMode.value === 'motion' ? modeModels.value[0].id : DEFAULT_MODEL3D_ID)
 const model = computed<Model3DOption>(() => getModel3D(modelId.value))
 const isMotion = computed(() => model.value.kind === 'motion')
 
@@ -832,7 +859,6 @@ let viewer: HologramViewer | null = null
 const viewerState = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
 const viewerError = ref('')
 const stats = ref<ViewerStats | null>(null)
-const assetSource = ref<'proxy' | 'direct' | ''>('')
 const loadProgress = ref(0)
 const previewMode = ref(false)
 const previewVideoUrl = ref('')
@@ -840,9 +866,6 @@ const completedVideoUrl = ref('')
 
 const autoRotate = ref(true)
 const showGrid = ref(true)
-const holoStyle = ref<ViewerStyle>('natural')
-const pointSize = ref(1)
-const fpsLabel = ref('—')
 
 const viewerReady = computed(() => viewerState.value === 'ready')
 const showVideoStage = computed(() => {
@@ -861,11 +884,9 @@ const loadProgressPercent = computed(() => Math.round(loadProgress.value * 100))
 
 const statsLabel = computed(() => {
   if (!stats.value) return '—'
-  if (stats.value.format === 'ply-splat') return `SPLAT · ${stats.value.points.toLocaleString()} pts`
-  if (stats.value.format === 'ply-mesh') return `MESH · ${stats.value.triangles.toLocaleString()} tri`
-  return `${stats.value.format.toUpperCase()} · ${stats.value.triangles.toLocaleString()} tri`
+  const count = stats.value.count.toLocaleString()
+  return stats.value.kind === 'splat' ? `SPLAT · ${count} pts` : `MESH · ${count} tri`
 })
-const assetSourceLabel = computed(() => (assetSource.value === 'proxy' ? 'SAME-ORIGIN' : assetSource.value === 'direct' ? 'DIRECT' : '—'))
 const loadLabel = computed(() => {
   if (loadProgressPercent.value > 0 && loadProgressPercent.value < 100) return `正在下载点云数据 ${loadProgressPercent.value}%`
   return '解析几何与颜色属性…'
@@ -888,7 +909,14 @@ const assemblySteps = computed(() => {
     { key: 'parse', index: '01', title: '输入解析', sub: isMotion.value ? '视频帧率 / 片段' : '文本 · 参考图', active: activeIndex === 1, done: activeIndex > 1 },
     { key: 'geometry', index: '02', title: '几何重建', sub: isMotion.value ? '人体姿态追踪' : '点云 / 网格生成', active: activeIndex === 2, done: activeIndex > 2 },
     { key: 'texture', index: '03', title: isMotion.value ? '动作数据' : '材质与纹理', sub: isMotion.value ? 'BVH 输出' : '着色 / 贴图', active: activeIndex === 3, done: activeIndex > 3 },
-    { key: 'deploy', index: '04', title: '装配上架', sub: '全息转台', active: activeIndex === 4, done: false },
+    {
+      key: 'deploy',
+      index: '04',
+      title: isMotion.value ? '动作预览' : '装配上架',
+      sub: isMotion.value ? '视频 / BVH' : '全息转台',
+      active: activeIndex === 4,
+      done: false,
+    },
   ]
 })
 
@@ -906,7 +934,6 @@ onMounted(async () => {
     }
     viewer.setAutoRotate(autoRotate.value)
   }
-  startFpsProbe()
 
   // 刷新页面 / 重新进入时，自动续接上一次未结束的任务，避免历史记录一直停在「进行中」。
   const pending = historyEntries.value.find((entry) => entry.status === 'RUNNING')
@@ -920,27 +947,16 @@ onBeforeUnmount(() => {
   if (videoObjectUrl.value) URL.revokeObjectURL(videoObjectUrl.value)
 })
 
-function startFpsProbe() {
-  let frames = 0
-  let last = performance.now()
-  const loop = () => {
-    if (!viewer) {
-      fpsLabel.value = '—'
-      return
-    }
-    frames += 1
-    const now = performance.now()
-    if (now - last >= 1000) {
-      fpsLabel.value = String(Math.round((frames * 1000) / (now - last)))
-      frames = 0
-      last = now
-    }
-    requestAnimationFrame(loop)
-  }
-  requestAnimationFrame(loop)
+/* ------------------------------------------------------------- 模型切换 */
+
+function setPageMode(mode: PageMode) {
+  const target = PAGE_MODES.find((item) => item.value === mode)
+  if (target && route.path !== target.path) router.push(target.path)
 }
 
-/* ------------------------------------------------------------- 模型切换 */
+watch(pageMode, () => {
+  if (model.value.kind !== pageMode.value) modelId.value = modeModels.value[0].id
+})
 
 function selectModel(option: Model3DOption) {
   if (modelId.value === option.id) return
@@ -1290,10 +1306,7 @@ async function loadModel(url: string) {
   try {
     const result = await viewer.loadFromUrl(url)
     stats.value = result.stats
-    assetSource.value = result.source
     previewMode.value = false
-    viewer.setPointSize(pointSize.value)
-    viewer.setStyle(holoStyle.value)
     viewer.setAutoRotate(autoRotate.value)
     viewer.setGridVisible(showGrid.value)
   } catch (error) {
@@ -1325,15 +1338,6 @@ async function retryLoadModel() {
 }
 
 /* ------------------------------------------------------------- 视图交互 */
-
-function applyPointSize() {
-  viewer?.setPointSize(pointSize.value)
-}
-
-function setStyle(style: ViewerStyle) {
-  holoStyle.value = style
-  viewer?.setStyle(style)
-}
 
 function toggleAutoRotate() {
   autoRotate.value = !autoRotate.value
@@ -1399,6 +1403,7 @@ async function copyTaskId() {
 
 function restoreTask(entry: Model3DHistoryEntry) {
   if (isRunning.value) stopPolling(false)
+  setPageMode(entry.kind)
   modelId.value = entry.modelId
   taskKind.value = entry.kind
   task.value = {
@@ -1450,11 +1455,21 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
 .model3d-rail {
   display: flex;
   flex-direction: column;
+  gap: 10px;
+  max-height: calc(100dvh - 118px);
+  min-height: 0;
+}
+
+/* 只有面板列表滚动，提交按钮固定为左栏页脚 */
+.rail-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   gap: 14px;
-  max-height: calc(100dvh - 96px);
+  min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
-  padding-bottom: 8px;
+  padding-bottom: 4px;
 }
 
 .rail-panel {
@@ -1471,18 +1486,22 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
 /* ---------- 模型卡片 ---------- */
 
 .model-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  padding: 14px 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 14px;
+}
+
+.mode-switch {
+  margin: 12px 14px 0;
 }
 
 .model-card {
   position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 12px 12px 11px;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.035);
@@ -1529,22 +1548,31 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
   background: radial-gradient(120px 80px at 100% 0%, rgba(167, 139, 250, 0.18), transparent 70%);
 }
 
-.model-card-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-
 .model-glyph {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
   border-radius: 9px;
   background: rgba(56, 189, 248, 0.12);
   color: #9fe4ff;
+}
+
+.model-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.model-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .model-card.motion .model-glyph {
@@ -1577,7 +1605,7 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  font-size: 11px;
+  font-size: 10.5px;
   line-height: 1.5;
   color: rgba(255, 255, 255, 0.46);
 }
@@ -1585,9 +1613,8 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
 .model-foot {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  margin-top: 2px;
+  gap: 8px;
+  margin-top: 3px;
   font-size: 10px;
   color: rgba(159, 228, 255, 0.8);
 }
@@ -1595,6 +1622,7 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
 .model-tags {
   display: inline-flex;
   gap: 4px;
+  margin-left: auto;
 }
 
 .model-tags em {
@@ -2111,6 +2139,7 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
 
 .rail-actions {
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
   gap: 7px;
   padding: 2px 2px 4px;
@@ -2534,11 +2563,6 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
   left: 16px;
 }
 
-.hud-readout--right {
-  right: 16px;
-  text-align: right;
-}
-
 .readout-key {
   color: rgba(125, 211, 252, 0.45);
 }
@@ -2562,6 +2586,11 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
   text-align: center;
   pointer-events: none;
   padding: 0 36px;
+}
+
+.stage-idle {
+  justify-content: flex-end;
+  padding-bottom: 78px;
 }
 
 .idle-title,
@@ -2684,10 +2713,6 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
   gap: 5px;
 }
 
-.tool-group--end {
-  margin-left: auto;
-}
-
 .tool-chip {
   display: inline-flex;
   align-items: center;
@@ -2729,45 +2754,11 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
   background: currentColor;
 }
 
-.tool-slider {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 10.5px;
-  color: rgba(255, 255, 255, 0.45);
-}
-
-.tool-slider input {
-  width: 92px;
-  height: 3px;
-  appearance: none;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
-  outline: none;
-}
-
-.tool-slider input::-webkit-slider-thumb {
-  appearance: none;
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: #7dd3fc;
-  cursor: pointer;
-}
-
-.tool-slider input::-moz-range-thumb {
-  width: 11px;
-  height: 11px;
-  border: 0;
-  border-radius: 50%;
-  background: #7dd3fc;
-  cursor: pointer;
-}
-
-.tool-slider em {
-  font-style: normal;
-  font-variant-numeric: tabular-nums;
-  color: rgba(159, 228, 255, 0.8);
+.tool-tip {
+  margin-left: auto;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.26);
 }
 
 /* 装配步骤 */
@@ -3208,6 +3199,9 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
 
   .model3d-rail {
     max-height: none;
+  }
+
+  .rail-scroll {
     overflow: visible;
     padding-right: 0;
   }
@@ -3232,10 +3226,6 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
     padding: 0 12px 24px;
   }
 
-  .model-grid {
-    grid-template-columns: 1fr;
-  }
-
   .stage-shell {
     height: 56dvh;
     min-height: 400px;
@@ -3243,10 +3233,6 @@ function historyStatusText(status: Model3DHistoryEntry['status']): string {
 
   .stage-toolbar {
     gap: 8px;
-  }
-
-  .tool-group--end {
-    margin-left: 0;
   }
 }
 </style>

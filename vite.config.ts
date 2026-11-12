@@ -37,8 +37,8 @@ export default defineConfig({
     strictPort: true,
   },
   build: {
-    // three.js 让 3D 路由的懒加载 chunk 到 ~670KB（gzip 后 ~180KB），
-    // 只影响 /model3d，不影响首屏；这里把告警阈值调到合理范围。
-    chunkSizeWarningLimit: 800,
+    // /model3d 与 /motion 是懒加载路由，three.js + Spark 高斯渲染器让该 chunk 到 ~3.3MB
+    //（gzip 后 ~1.1MB），只影响进入 3D 工作台的用户，不影响首屏；阈值按此上调。
+    chunkSizeWarningLimit: 3600,
   },
 })
