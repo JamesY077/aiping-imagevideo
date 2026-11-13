@@ -129,6 +129,49 @@
         <div v-if="translationStatus" class="status-msg success">{{ translationStatus }}</div>
       </section>
 
+      <section class="card skill-settings-card">
+        <div class="section-head">
+          <span class="kicker">默认 Skill</span>
+          <h3>内置图片设计规范</h3>
+        </div>
+        <p class="field-hint">
+          这三个内置 Skill 默认参与每次图片生成，与生图页多选的风格 Skill 合并后一起下发。
+        </p>
+        <div class="skill-toggle-list">
+          <div v-for="skill in defaultQualitySkills" :key="skill.id" class="skill-toggle-row">
+            <div class="skill-toggle-text">
+              <strong>{{ skill.name }}</strong>
+              <small>{{ skill.description }}</small>
+              <a
+                v-if="skill.source"
+                class="skill-source-link"
+                :href="skill.source"
+                target="_blank"
+                rel="noopener"
+              >
+                原始 Skill 仓库 ↗
+              </a>
+            </div>
+            <button
+              class="toggle-switch"
+              :class="{ on: skillStore.isDefaultQualitySkillEnabled(skill.id) }"
+              type="button"
+              role="switch"
+              :aria-checked="skillStore.isDefaultQualitySkillEnabled(skill.id)"
+              :aria-label="`${skillStore.isDefaultQualitySkillEnabled(skill.id) ? '关闭' : '开启'} ${skill.name}`"
+              @click="skillStore.setDefaultQualitySkillEnabled(skill.id, !skillStore.isDefaultQualitySkillEnabled(skill.id))"
+            >
+              <span class="toggle-knob" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="ghost-btn" type="button" @click="skillStore.enableAllDefaultQualitySkills()">
+            全部开启
+          </button>
+        </div>
+      </section>
+
       <section class="card about-card">
         <div class="section-head">
           <span class="kicker">关于</span>
@@ -203,6 +246,7 @@ import {
   useSettingsStore,
 } from '@/stores/settingsStore'
 import { useSkillStore } from '@/stores/skillStore'
+import { DEFAULT_QUALITY_SKILLS } from '@/features/skill/builtin'
 import { maskApiKey } from '@/utils/format'
 import { testConnectionWithDetail } from '@/api/aiping'
 import { AIPING_PUBLIC_API_BASE_URL, isOpenAiBaseUrlFormat } from '@/api/config'
@@ -212,6 +256,7 @@ const apiStore = useApiStore()
 const chatStore = useChatStore()
 const settingsStore = useSettingsStore()
 const skillStore = useSkillStore()
+const defaultQualitySkills = DEFAULT_QUALITY_SKILLS
 
 const showEditConfig = ref(false)
 const newApiKey = ref('')
@@ -672,6 +717,102 @@ label {
 .about-card,
 .danger-card {
   grid-column: span 1;
+}
+
+/* ---------- 内置默认 Skill ---------- */
+
+.skill-settings-card {
+  grid-column: 1 / -1;
+}
+
+.skill-toggle-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.skill-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.skill-toggle-text {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.skill-toggle-text strong {
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.skill-toggle-text small {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.skill-source-link {
+  justify-self: start;
+  color: rgba(255, 178, 122, 0.85);
+  font-size: 10.5px;
+  text-decoration: none;
+}
+
+.skill-source-link:hover {
+  color: #ffb27a;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.toggle-switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 27px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+
+.toggle-switch.on {
+  border-color: transparent;
+  background: linear-gradient(90deg, #ec5a00, #ff8a4c);
+}
+
+.toggle-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toggle-switch.on .toggle-knob {
+  transform: translateX(19px);
+  background: #fff;
+}
+
+@media (max-width: 1023px) {
+  .skill-settings-card {
+    grid-column: 1 / -1;
+  }
 }
 
 .modal-overlay {

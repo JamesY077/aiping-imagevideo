@@ -267,6 +267,10 @@ VITE_CDN_ASSET_BASE=https://artrealm-image-1314455608.cos.ap-beijing.myqcloud.co
   coscmd upload -r --skipmd5 public/ site-assets/
   ```
 
+- 生图页内置风格 Skill 的示例图在 `public/skill-previews/`（16 张 WebP），发版时同样要同步到
+  `site-assets/skill-previews/`，否则快捷按钮只剩文字、缩略图裂图：
+  `coscmd upload -r --skipmd5 public/skill-previews/ site-assets/skill-previews/`
+
 - 两张背景图地址硬编码在代码里：`src/views/LandingPage.vue`（`home-collage-bg.webp`）与
   `src/views/ApiKeySetup.vue`（`login-collage-bg.webp`）。更换 COS 桶或启用 CDN 加速域名时，
   除改 `VITE_CDN_ASSET_BASE` 外还需同步修改这两处代码。

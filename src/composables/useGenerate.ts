@@ -137,7 +137,7 @@ export function useGenerate() {
     klingSound = false,
     // Skill 规范：非空时，实际下发给模型的提示词会携带该 skill 规范，
     // 但聊天区仍展示用户输入的原始 prompt。
-    skillContent: string | null = null,
+    skillContent: string | string[] | null = null,
     // 视频分辨率档位（MiniMax-H3 使用：768P / 2K，其余模型忽略）。
     videoResolution: string | null = null,
     // 简易模式单轮批量生成数量，限制为 1-5。
