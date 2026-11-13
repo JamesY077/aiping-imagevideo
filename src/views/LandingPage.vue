@@ -1,194 +1,126 @@
 <template>
-  <div class="loot-home">
+  <div class="home">
     <div class="page-progress" aria-hidden="true">
       <span :style="{ transform: `scaleX(${pageProgress / 100})` }" />
     </div>
     <div class="noise" aria-hidden="true" />
 
-    <header class="loot-nav" :class="{ 'is-scrolled': scrolled }">
-      <div class="nav-left">
-        <button class="brand" type="button" aria-label="ArtRealm 首页" @click="router.push('/')">
-          <img class="brand-mark" :src="assetUrl('/logo1.webp')" alt="" />
-          <span class="brand-text">ARTREALM<span class="brand-dot">.</span></span>
-        </button>
-      </div>
+    <header class="nav" :class="{ 'is-scrolled': scrolled }">
+      <button class="brand" type="button" aria-label="ArtRealm 首页" @click="router.push('/')">
+        <img class="brand-mark" :src="assetUrl('/logo1.webp')" alt="" />
+        <span class="brand-text">ARTREALM<span class="brand-dot">.</span></span>
+      </button>
 
-      <nav class="nav-pill" aria-label="主导航">
-        <a href="#zones" @click.prevent="scrollToZones">创作分区</a>
-        <a href="#manifesto" @click.prevent="scrollToManifesto">创作流程</a>
-        <a href="#inspiration" @click.prevent="scrollToInspiration">模板库</a>
-        <span class="nav-divider" aria-hidden="true" />
-        <span class="nav-progress">{{ pageProgress }}%</span>
+      <nav class="nav-links" aria-label="主导航">
+        <a href="#zones" @click.prevent="scrollToZones">工作台</a>
+        <a href="#skill" @click.prevent="scrollToSkill">Skill</a>
+        <a href="#prompts" @click.prevent="scrollToPrompts">提示词</a>
+        <button type="button" @click="goModel3D">3D 建模</button>
       </nav>
 
-      <div class="nav-right">
-        <button class="nav-text-btn" type="button" @click="goModel3D">3D 建模</button>
-        <button class="cta-pill" type="button" @click="router.push('/setup')">
-          <span>{{ hasSession ? '进入工坊' : '开始创作' }}</span>
-          <span class="cta-pill-icon" aria-hidden="true">
-            <svg viewBox="0 0 14 14" fill="none">
-              <path
-                d="M3 11 11 3M4.4 3H11v6.6"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </span>
-        </button>
-      </div>
+      <button class="cta" type="button" @click="router.push('/setup')">
+        <span>{{ hasSession ? '进入工坊' : '开始创作' }}</span>
+        <span class="cta-icon" aria-hidden="true">
+          <svg viewBox="0 0 14 14" fill="none">
+            <path
+              d="M3 11 11 3M4.4 3H11v6.6"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </span>
+      </button>
     </header>
 
     <main>
       <!-- Hero -->
-      <section class="loot-hero" aria-labelledby="home-title">
-        <div class="hero-atmosphere" :style="{ backgroundImage: `url(${assetUrl('/home-collage-bg.webp')})` }" aria-hidden="true" />
+      <section class="hero" aria-labelledby="hero-title">
+        <div
+          class="hero-bg"
+          :style="{ backgroundImage: `url(${assetUrl('/home-collage-bg.webp')})` }"
+          aria-hidden="true"
+        />
 
-        <div class="hero-grid">
-          <div class="hero-heading">
-            <p class="hero-eyebrow" data-reveal>AI Creative Studio · ArtRealm</p>
-            <h1 id="home-title" class="hero-title">
-              <span class="hero-line hero-line--1" data-reveal>把灵感</span>
-              <span class="hero-line hero-line--2" data-reveal>做成作品</span>
-            </h1>
-            <p class="hero-sub" data-reveal>
-              图片、视频、配音与 3D 模型，四条生产线在同一块画布上。
-              <span class="hero-sub-strong">从一句描述开始，到可交付的成片结束。</span>
-            </p>
+        <div class="hero-main">
+          <h1 id="hero-title" class="hero-title">
+            <span class="hero-line hero-line--1">把灵感</span>
+            <span class="hero-line hero-line--2">做成作品</span>
+          </h1>
+
+          <div class="hero-index">
+            <button
+              v-for="entry in heroEntries"
+              :key="entry.key"
+              class="index-row"
+              type="button"
+              @click="entry.onClick"
+            >
+              <span class="index-num">{{ entry.index }}</span>
+              <span class="index-name">{{ entry.title }}</span>
+              <span class="index-arrow" aria-hidden="true">↗</span>
+            </button>
           </div>
-
-          <aside class="hero-cards" aria-label="创作概览">
-            <article
-              class="hero-card hero-card--a"
-              role="button"
-              tabindex="0"
-              data-reveal
-              @click="enterZone(zones[1])"
-              @keydown.enter.prevent="enterZone(zones[1])"
-              @keydown.space.prevent="enterZone(zones[1])"
-            >
-              <span class="hero-card-kicker">Workspaces</span>
-              <span class="hero-card-num">03</span>
-              <span class="hero-card-title">创作工作台</span>
-              <span class="hero-card-desc">Skill · 图片视频 · 配音</span>
-              <span class="hero-card-arrow" aria-hidden="true">↗</span>
-            </article>
-
-            <article
-              class="hero-card hero-card--b"
-              role="button"
-              tabindex="0"
-              data-reveal
-              @click="enterZone(zones[2])"
-              @keydown.enter.prevent="enterZone(zones[2])"
-              @keydown.space.prevent="enterZone(zones[2])"
-            >
-              <span class="hero-card-kicker">Model Matrix</span>
-              <div class="hero-chips">
-                <span>Seedream</span>
-                <span>Seedance</span>
-                <span>Kling</span>
-                <span>MiniMax</span>
-              </div>
-              <span class="hero-card-num">12<span class="num-plus">+</span></span>
-              <span class="hero-card-desc">图像 / 视频 / 语音 / 3D 模型</span>
-              <span class="hero-card-arrow" aria-hidden="true">↗</span>
-            </article>
-          </aside>
         </div>
 
         <div class="hero-foot">
-          <div class="hero-meta" data-reveal>
-            <span class="meta-index">(01)</span>
-            <p>
-              把日常的创作流程，压缩成<span class="hl">一次对话</span>。素材、模型、画布与导出，都在这里。
-            </p>
-          </div>
-
-          <button class="hero-ticker" type="button" data-reveal @click="useTypedPrompt">
+          <button class="ticker" type="button" @click="useTypedPrompt">
             <span class="ticker-label">Prompt</span>
-            <span class="ticker-text">{{ typewriterText }}<i class="ticker-caret" aria-hidden="true" /></span>
-            <span class="ticker-action" aria-hidden="true">
-              <svg viewBox="0 0 14 14" fill="none">
-                <path
-                  d="M3 11 11 3M4.4 3H11v6.6"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </span>
+            <span class="ticker-text">{{ typewriterText }}<i class="caret" aria-hidden="true" /></span>
+            <span class="ticker-go" aria-hidden="true">↗</span>
           </button>
-
-          <div class="hero-scroll" aria-hidden="true">
+          <span class="scroll-hint" aria-hidden="true">
             <span>Scroll</span>
-            <span class="hero-scroll-line" />
+            <i />
+          </span>
+        </div>
+      </section>
+
+      <!-- 创作流程 -->
+      <section id="process" class="process" aria-label="创作流程">
+        <div class="process-sticky">
+          <div class="process-words">
+            <div
+              v-for="(item, index) in manifestoWords"
+              :key="item.word"
+              class="process-word"
+              :class="{ 'is-active': activeManifesto === index }"
+            >
+              <span class="pw-index">{{ item.index }}</span>
+              <span class="pw-text">{{ item.word }}</span>
+            </div>
+          </div>
+          <div class="process-track" aria-hidden="true">
+            <span :style="{ transform: `scaleY(${manifestoProgress})` }" />
           </div>
         </div>
       </section>
 
-      <!-- 滚动驱动的创作流程 -->
-      <section id="manifesto" class="manifesto" aria-label="创作流程">
-        <div class="manifesto-sticky">
-          <div class="manifesto-inner">
-            <div class="manifesto-words">
-              <p class="manifesto-kicker">How it works</p>
-              <div
-                v-for="(item, index) in manifestoWords"
-                :key="item.word"
-                class="manifesto-word"
-                :class="{ 'is-active': activeManifesto === index }"
-              >
-                <span class="mw-index">{{ item.index }}</span>
-                <span class="mw-text">{{ item.word }}</span>
-                <span class="mw-en">{{ item.en }}</span>
-              </div>
-            </div>
-
-            <div class="manifesto-side">
-              <span class="manifesto-side-label">Process</span>
-              <p>{{ manifestoWords[activeManifesto].desc }}</p>
-              <span class="manifesto-side-count">0{{ activeManifesto + 1 }} / 03</span>
-            </div>
-          </div>
+      <!-- 三个工作台 -->
+      <section id="zones" class="section">
+        <div class="section-head" data-reveal>
+          <span class="section-num">02</span>
+          <h2 class="section-title">三个<span class="accent">工作台</span></h2>
         </div>
-      </section>
 
-      <!-- 三大分区 -->
-      <section id="zones" class="loot-section zones-section">
-        <header class="section-head">
-          <div class="section-head-main">
-            <span class="section-index" data-reveal>02 / Workspaces</span>
-            <h2 class="section-title" data-reveal>
-              三个工作台<br />
-              <span class="title-accent">一条创作动线</span>
-            </h2>
-          </div>
-          <p class="section-desc" data-reveal>
-            从 Skill 规范到画面生成，再到声音演绎。选一个分区进入，其余交给模型与画布。
-          </p>
-        </header>
-
-        <div class="zone-grid">
+        <div class="work-grid">
           <article
             v-for="zone in zones"
             :key="zone.key"
-            class="zone-card"
-            :class="[`zone-card--${zone.key}`, { 'is-soon': zone.soon }]"
+            class="work-card"
+            data-reveal
             role="button"
             tabindex="0"
-            data-reveal
             :aria-label="zone.cta"
             @click="enterZone(zone)"
             @keydown.enter.prevent="enterZone(zone)"
             @keydown.space.prevent="enterZone(zone)"
           >
-            <div v-if="zone.image" class="zone-media-layer">
+            <div v-if="zone.image" class="work-bg" aria-hidden="true">
               <img :src="zone.image" alt="" loading="lazy" decoding="async" />
             </div>
-            <div v-else class="zone-voice-art" aria-hidden="true">
+            <div v-else class="work-bg work-bg--voice" aria-hidden="true">
               <span
                 v-for="(height, index) in voiceWave"
                 :key="index"
@@ -197,50 +129,31 @@
               />
             </div>
 
-            <div class="zone-top">
-              <span class="zone-step">{{ zone.index }}</span>
-              <span class="zone-label">{{ zone.label }}</span>
-              <span v-if="zone.soon" class="zone-badge">即将上线</span>
-            </div>
+            <span class="work-num">{{ zone.index }}</span>
 
-            <div class="zone-body">
-              <h3 class="zone-title">{{ zone.title }}</h3>
-              <p class="zone-desc">{{ zone.desc }}</p>
-              <div class="zone-tags">
-                <span v-for="tag in zone.tags" :key="tag">{{ tag }}</span>
-              </div>
-              <div class="zone-cta">
-                <span>{{ zone.cta }}</span>
-                <span class="zone-cta-icon" aria-hidden="true">↗</span>
-              </div>
+            <div class="work-bottom">
+              <h3 class="work-title">{{ zone.title }}</h3>
+              <span class="work-arrow" aria-hidden="true">↗</span>
             </div>
           </article>
         </div>
       </section>
 
-      <!-- Skill 模板库 -->
-      <section id="inspiration" class="loot-section library-section">
-        <header class="section-head">
-          <div class="section-head-main">
-            <span class="section-index" data-reveal>03 / Skill Library</span>
-            <h2 class="section-title" data-reveal>
-              把风格<br />
-              <span class="title-accent">变成可复用的规范</span>
-            </h2>
-          </div>
-          <p class="section-desc" data-reveal>
-            一句需求拆成完整创作规范，沉淀成 Skill。下载后可直接放进工作台复用与修改。
-          </p>
-        </header>
+      <!-- Skill 模板 -->
+      <section id="skill" class="section">
+        <div class="section-head" data-reveal>
+          <span class="section-num">03</span>
+          <h2 class="section-title"><span class="accent">Skill</span> 模板</h2>
+        </div>
 
         <div class="skill-grid">
           <article
             v-for="(item, index) in skillTemplates"
             :key="item.title"
             class="skill-card"
+            data-reveal
             role="button"
             tabindex="0"
-            data-reveal
             @click="handleSkillTemplateClick"
             @keydown.enter.prevent="handleSkillTemplateClick"
             @keydown.space.prevent="handleSkillTemplateClick"
@@ -251,10 +164,10 @@
               <button
                 class="skill-download"
                 type="button"
-                :aria-label="`下载 ${item.title} Skill 文件`"
+                :aria-label="`下载 ${item.title}`"
                 @click.stop="handleSkillDownloadClick(item)"
               >
-                下载 <span aria-hidden="true">↓</span>
+                <span aria-hidden="true">↓</span>
               </button>
             </div>
             <div class="skill-info">
@@ -265,64 +178,55 @@
         </div>
       </section>
 
-      <!-- 提示词模板库 -->
-      <section class="loot-section prompt-section">
-        <header class="section-head">
-          <div class="section-head-main">
-            <span class="section-index" data-reveal>04 / Prompt Library</span>
-            <h2 class="section-title" data-reveal>
-              复制一个起点<br />
-              <span class="title-accent">更快抵达成片</span>
-            </h2>
-          </div>
-          <p class="section-desc" data-reveal>
-            产品图、电影感场景、UI 概念稿。点开任意模板，提示词会直接带进创作工坊。
-          </p>
-        </header>
+      <!-- 提示词模板 -->
+      <section id="prompts" class="section">
+        <div class="section-head" data-reveal>
+          <span class="section-num">04</span>
+          <h2 class="section-title">提示词<span class="accent">模板</span></h2>
+        </div>
 
         <div class="prompt-grid">
           <button
             v-for="(item, index) in templates"
             :key="item.title"
             class="prompt-card"
-            type="button"
             data-reveal
+            type="button"
             @click="handleTemplateClick(item)"
           >
             <span class="prompt-visual">
               <img :src="item.image" alt="" loading="lazy" decoding="async" />
               <span class="prompt-index">{{ String(index + 1).padStart(2, '0') }}</span>
-              <span class="prompt-use">使用模板 ↗</span>
+              <span class="prompt-use" aria-hidden="true">↗</span>
             </span>
             <span class="prompt-title">{{ item.title }}</span>
           </button>
         </div>
       </section>
 
-      <!-- 收尾 CTA -->
-      <section class="final-cta">
-        <div class="final-bg" :style="{ backgroundImage: `url(${assetUrl('/home-collage-bg.webp')})` }" aria-hidden="true" />
+      <!-- 收尾 -->
+      <section class="outro">
+        <div
+          class="outro-bg"
+          :style="{ backgroundImage: `url(${assetUrl('/home-collage-bg.webp')})` }"
+          aria-hidden="true"
+        />
 
-        <div class="final-inner">
-          <p class="final-kicker" data-reveal>Start Creating</p>
-          <h2 class="final-title" data-reveal>
+        <div class="outro-inner" data-reveal>
+          <h2 class="outro-title">
             灵感不用等<br />
-            <span class="title-accent">现在就变成作品</span>
+            <span class="accent">现在就变成作品</span>
           </h2>
-          <div class="final-actions" data-reveal>
-            <button class="final-btn" type="button" @click="router.push('/setup')">
+          <div class="outro-actions">
+            <button class="outro-btn" type="button" @click="router.push('/setup')">
               <span>{{ hasSession ? '进入创作工坊' : '开始创作' }}</span>
-              <span class="final-btn-icon" aria-hidden="true">↗</span>
+              <span class="outro-btn-icon" aria-hidden="true">↗</span>
             </button>
-            <button class="final-ghost" type="button" @click="goModel3D">先看看 3D 建模 →</button>
+            <button class="outro-ghost" type="button" @click="goModel3D">3D 建模 →</button>
           </div>
         </div>
 
-        <div class="final-meta">
-          <span>ArtRealm © 2026</span>
-          <span>3D · Image · Video · Voice</span>
-          <button type="button" @click="scrollToTop">回到顶部 ↑</button>
-        </div>
+        <button class="to-top" type="button" @click="scrollToTop">回到顶部 ↑</button>
       </section>
     </main>
   </div>
@@ -342,24 +246,17 @@ const hasSession = ref(false)
 interface CreativeZone {
   key: 'skill' | 'media' | 'voice'
   index: string
-  label: string
   title: string
-  desc: string
-  tags: string[]
   cta: string
   target: 'skill' | 'studio' | 'voice'
   image?: string
-  soon?: boolean
 }
 
 const zones: CreativeZone[] = [
   {
     key: 'skill',
     index: '01',
-    label: 'Skill Studio',
     title: 'Skill 创作',
-    desc: '把一句话需求拆成可复用的创作规范，沉淀为标准 Skill，随时应用与修改。',
-    tags: ['模板库', '标准化 Markdown', '本地应用'],
     cta: '进入 Skill 工作台',
     target: 'skill',
     image: assetUrl('/skill-wkw-neon-loneliness-style.webp'),
@@ -367,10 +264,7 @@ const zones: CreativeZone[] = [
   {
     key: 'media',
     index: '02',
-    label: 'Image & Video',
     title: '图片视频生成',
-    desc: '文生图、图生视频、首尾帧与多模态参考，同一个工作台完成全部画面创作。',
-    tags: ['Seedream', 'Seedance', 'MiniMax H3', 'Kling'],
     cta: '进入创作工坊',
     target: 'studio',
     image: assetUrl('/template-f1.webp'),
@@ -378,10 +272,7 @@ const zones: CreativeZone[] = [
   {
     key: 'voice',
     index: '03',
-    label: 'Voice Studio',
     title: '配音创作',
-    desc: '文本转语音与声音复刻：音色、语速、语调、音量都能调，10 秒样本就能复刻自己的声音。',
-    tags: ['MiniMax Speech 2.8', '声音复刻', '情绪演绎'],
     cta: '进入配音工作台',
     target: 'voice',
   },
@@ -390,28 +281,24 @@ const zones: CreativeZone[] = [
 const skillTemplates = [
   {
     title: '王家卫式霓虹孤独风格',
-    theme: 'template-skill',
     image: assetUrl('/skill-wkw-neon-loneliness-style.webp'),
     fileUrl: '/skills/wkw-neon-loneliness-style.md',
     fileName: 'wkw-neon-loneliness-style.md',
   },
   {
     title: '剪纸定格动画',
-    theme: 'template-skill',
     image: assetUrl('/skill-papercut-stop-motion-explainer.webp'),
     fileUrl: '/skills/papercut-stop-motion-explainer.md',
     fileName: 'papercut-stop-motion-explainer.md',
   },
   {
     title: '手绘发光动画实拍融合',
-    theme: 'template-skill',
     image: assetUrl('/skill-handdrawn-live-video-generator.webp'),
     fileUrl: '/skills/handdrawn-live-video-generator.md',
     fileName: 'handdrawn-live-video-generator.md',
   },
   {
     title: '极简旅行海报',
-    theme: 'template-skill',
     image: assetUrl('/skill-photo-to-minimal-vector-travel-poster.webp'),
     fileUrl: '/skills/photo-to-minimal-vector-travel-poster.md',
     fileName: 'photo-to-minimal-vector-travel-poster.md',
@@ -421,50 +308,50 @@ const skillTemplates = [
 const templates = [
   {
     title: 'F1 飞驰赛车',
-    prompt: 'F1 方程式赛车在赛道上高速飞驰，低机位广角镜头，车身运动模糊，轮胎带起火花与水雾，雨后赛道反光，电影级运动摄影，浅景深，强烈速度感，超清细节',
-    theme: 'template-race',
+    prompt:
+      'F1 方程式赛车在赛道上高速飞驰，低机位广角镜头，车身运动模糊，轮胎带起火花与水雾，雨后赛道反光，电影级运动摄影，浅景深，强烈速度感，超清细节',
     image: assetUrl('/template-f1.webp'),
   },
   {
     title: 'iPhone 17 产品电商图',
-    prompt: 'iPhone 17 旗舰手机产品电商主图，钛金属边框高光，深色科技感背景，蓝紫渐变轮廓光，镜头模组与屏幕清晰展示，悬浮构图，商业产品摄影，高级质感，超清渲染',
-    theme: 'template-product',
+    prompt:
+      'iPhone 17 旗舰手机产品电商主图，钛金属边框高光，深色科技感背景，蓝紫渐变轮廓光，镜头模组与屏幕清晰展示，悬浮构图，商业产品摄影，高级质感，超清渲染',
     image: assetUrl('/template-iphone17.webp'),
   },
   {
     title: '科技感网页 UI',
-    prompt: '未来科技感网页 UI 界面设计，深色模式仪表盘，玻璃拟态数据卡片，蓝紫渐变数据可视化图表，悬浮导航栏，清晰信息层级，高清界面设计，现代极简',
-    theme: 'template-tech',
+    prompt:
+      '未来科技感网页 UI 界面设计，深色模式仪表盘，玻璃拟态数据卡片，蓝紫渐变数据可视化图表，悬浮导航栏，清晰信息层级，高清界面设计，现代极简',
     image: assetUrl('/template-webui.webp'),
   },
   {
     title: '卡通兔子',
-    prompt: '可爱卡通兔子角色，软萌大眼睛，奶油白毛绒质感，治愈系绘本插画风格，柔和自然光，浅色温馨场景，精致细节，迪士尼级角色设计',
-    theme: 'template-commerce',
+    prompt:
+      '可爱卡通兔子角色，软萌大眼睛，奶油白毛绒质感，治愈系绘本插画风格，柔和自然光，浅色温馨场景，精致细节，迪士尼级角色设计',
     image: assetUrl('/template-rabbit.webp'),
   },
   {
     title: '无线耳机结构解析',
-    prompt: '无线头戴式降噪耳机爆炸分解产品图，精密声学结构与内部电子组件清晰展示，USB-C 充电口、电池、驱动单元、麦克风阵列与记忆棉耳罩，工业设计图纸风格，深色科技背景，商业产品渲染，超清细节',
-    theme: 'template-commerce',
+    prompt:
+      '无线头戴式降噪耳机爆炸分解产品图，精密声学结构与内部电子组件清晰展示，USB-C 充电口、电池、驱动单元、麦克风阵列与记忆棉耳罩，工业设计图纸风格，深色科技背景，商业产品渲染，超清细节',
     image: assetUrl('/template-headphones.webp'),
   },
   {
     title: '影视爆炸现场',
-    prompt: '电影级爆炸现场，橙红色火球与黑色浓烟升腾，尘土碎片飞溅，冲击波，逆光剪影，广角构图，逼真影视特效，超高细节',
-    theme: 'template-monster',
+    prompt:
+      '电影级爆炸现场，橙红色火球与黑色浓烟升腾，尘土碎片飞溅，冲击波，逆光剪影，广角构图，逼真影视特效，超高细节',
     image: assetUrl('/template-landscape.webp'),
   },
   {
     title: '中世纪战士',
-    prompt: '中世纪战士角色，厚重金属铠甲，战损做旧，斗篷，手持长剑，阴天战场背景，电影级写实人像，戏剧性侧光，细腻质感，史诗氛围',
-    theme: 'template-hero',
+    prompt:
+      '中世纪战士角色，厚重金属铠甲，战损做旧，斗篷，手持长剑，阴天战场背景，电影级写实人像，戏剧性侧光，细腻质感，史诗氛围',
     image: assetUrl('/template-festival.webp'),
   },
   {
     title: '专业相机三视图',
-    prompt: '专业数码相机产品三视图与爆炸分解展示，黑色机身，35mm f/2.0 定焦镜头，标注尺寸、按键与接口，工业设计图纸风格，商业产品展示，超清渲染',
-    theme: 'template-commerce',
+    prompt:
+      '专业数码相机产品三视图与爆炸分解展示，黑色机身，35mm f/2.0 定焦镜头，标注尺寸、按键与接口，工业设计图纸风格，商业产品展示，超清渲染',
     image: assetUrl('/template-camera.webp'),
   },
 ]
@@ -477,9 +364,9 @@ const typewriterPhrases = [
 ]
 
 const manifestoWords = [
-  { index: '01', word: '生成', en: 'Generate', desc: '一句描述直接产出画面、视频或 3D 模型，不用来回切换工具。' },
-  { index: '02', word: '编排', en: 'Orchestrate', desc: '模板、参考图与镜头语言放在同一块画布上，边生成边调整。' },
-  { index: '03', word: '交付', en: 'Deliver', desc: '图片、视频、配音与 3D 资产一次导出，直接进入下一步工作。' },
+  { index: '01', word: '生成' },
+  { index: '02', word: '编排' },
+  { index: '03', word: '交付' },
 ]
 
 /** 配音分区的等宽声波装饰（固定序列，避免每次渲染抖动）。 */
@@ -493,7 +380,7 @@ let phraseIndex = 0
 let charIndex = 0
 let deleting = false
 
-/** 页面进度与滚动状态：顶部细进度条 + 导航百分比 + 流程分区的词语高亮。 */
+/** 页面进度：顶部细进度条 + 流程分区的词语高亮。 */
 const pageProgress = ref(0)
 const scrolled = ref(false)
 const manifestoProgress = ref(0)
@@ -511,9 +398,9 @@ function readScroll() {
   pageProgress.value = max > 0 ? Math.min(100, Math.max(0, Math.round((window.scrollY / max) * 100))) : 0
   scrolled.value = window.scrollY > 32
 
-  const manifesto = document.getElementById('manifesto')
-  if (!manifesto) return
-  const rect = manifesto.getBoundingClientRect()
+  const process = document.getElementById('process')
+  if (!process) return
+  const rect = process.getBoundingClientRect()
   const span = rect.height - window.innerHeight
   const passed = -rect.top
   manifestoProgress.value = span > 0 ? Math.min(1, Math.max(0, passed / span)) : 0
@@ -554,12 +441,12 @@ function scrollToZones() {
   document.getElementById('zones')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-function scrollToManifesto() {
-  document.getElementById('manifesto')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+function scrollToSkill() {
+  document.getElementById('skill')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-function scrollToInspiration() {
-  document.getElementById('inspiration')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+function scrollToPrompts() {
+  document.getElementById('prompts')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 function scrollToTop() {
@@ -588,6 +475,20 @@ function goModel3D() {
   router.push('/model3d')
 }
 
+interface HeroEntry {
+  key: string
+  index: string
+  title: string
+  onClick: () => void
+}
+
+const heroEntries: HeroEntry[] = [
+  { key: 'skill', index: '01', title: 'Skill 创作', onClick: () => enterZone(zones[0]) },
+  { key: 'media', index: '02', title: '图片视频生成', onClick: () => enterZone(zones[1]) },
+  { key: 'voice', index: '03', title: '配音创作', onClick: () => enterZone(zones[2]) },
+  { key: 'model3d', index: '04', title: '3D 建模', onClick: () => goModel3D() },
+]
+
 function handleTemplateClick(item: { prompt: string }) {
   sessionStorage.setItem(
     LANDING_PENDING_PROMPT_KEY,
@@ -609,7 +510,7 @@ function handleTemplateClick(item: { prompt: string }) {
   router.push({ path: '/setup', query: { redirect: 'studio' } })
 }
 
-/** 点 hero 底部的打字机提示词，直接把完整句子带进工坊。 */
+/** 点 Hero 底部的打字机提示词，直接把完整句子带进工坊。 */
 function useTypedPrompt() {
   const phrase = typewriterPhrases[phraseIndex % typewriterPhrases.length]
   handleTemplateClick({ prompt: phrase })
@@ -669,13 +570,13 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.loot-home {
+.home {
   --orange: #ec5a00;
   --orange-bright: #ff7243;
-  --red: #641005;
+  --deep: #641005;
   --ink: #060504;
   --line: rgba(255, 255, 255, 0.12);
-  --muted: rgba(245, 241, 236, 0.52);
+  --muted: rgba(245, 241, 236, 0.5);
   --smooth: cubic-bezier(0.16, 1, 0.3, 1);
 
   position: relative;
@@ -685,6 +586,14 @@ onBeforeUnmount(() => {
   overflow-x: clip;
   background: var(--ink);
   color: #f5f1ec;
+  font-family: var(--font-family);
+}
+
+.accent {
+  background: linear-gradient(92deg, #ffffff 0%, #ffb27a 42%, var(--orange) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 /* ---------- 全局装饰 ---------- */
@@ -696,7 +605,7 @@ onBeforeUnmount(() => {
   z-index: 70;
   width: 100%;
   height: 2px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
   pointer-events: none;
 }
 
@@ -722,10 +631,10 @@ onBeforeUnmount(() => {
 
 [data-reveal] {
   opacity: 0;
-  translate: 0 26px;
+  translate: 0 24px;
   transition:
-    opacity 0.85s var(--smooth),
-    translate 0.85s var(--smooth);
+    opacity 0.8s var(--smooth),
+    translate 0.8s var(--smooth);
 }
 
 [data-reveal].is-visible {
@@ -735,7 +644,7 @@ onBeforeUnmount(() => {
 
 /* ---------- 导航 ---------- */
 
-.loot-nav {
+.nav {
   position: fixed;
   top: 0;
   left: 0;
@@ -748,19 +657,15 @@ onBeforeUnmount(() => {
   transition: background 0.4s ease, backdrop-filter 0.4s ease;
 }
 
-.loot-nav.is-scrolled {
-  background: linear-gradient(180deg, rgba(6, 5, 4, 0.82), rgba(6, 5, 4, 0.18) 78%, transparent);
+.nav.is-scrolled {
+  background: linear-gradient(180deg, rgba(6, 5, 4, 0.86), rgba(6, 5, 4, 0.2) 78%, transparent);
   backdrop-filter: blur(12px);
-}
-
-.nav-left {
-  display: flex;
-  align-items: center;
 }
 
 .brand {
   display: inline-flex;
   align-items: center;
+  justify-self: start;
   gap: 10px;
   padding: 0;
   border: 0;
@@ -788,85 +693,52 @@ onBeforeUnmount(() => {
   color: var(--orange-bright);
 }
 
-.nav-pill {
+.nav-links {
   display: inline-flex;
   align-items: center;
-  gap: 26px;
-  padding: 11px 20px;
+  gap: 30px;
+  padding: 12px 24px;
   border: 1px solid rgba(255, 255, 255, 0.13);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.045);
+  background: rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(24px) saturate(140%);
 }
 
-.nav-pill a {
-  color: rgba(245, 241, 236, 0.62);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.18em;
-  text-decoration: none;
-  text-transform: uppercase;
-  transition: color 0.25s ease;
-}
-
-.nav-pill a:hover {
-  color: #fff;
-}
-
-.nav-divider {
-  width: 1px;
-  height: 14px;
-  background: rgba(255, 255, 255, 0.18);
-}
-
-.nav-progress {
-  min-width: 34px;
-  color: var(--orange-bright);
-  font-family: var(--font-family-display);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.08em;
-  text-align: right;
-}
-
-.nav-right {
-  display: flex;
-  align-items: center;
-  justify-self: end;
-  gap: 18px;
-}
-
-.nav-text-btn {
+.nav-links a,
+.nav-links button {
   padding: 0;
   border: 0;
   background: transparent;
-  color: rgba(245, 241, 236, 0.62);
+  color: rgba(245, 241, 236, 0.58);
+  font-family: var(--font-family);
   font-size: 11px;
   font-weight: 500;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  text-decoration: none;
   cursor: pointer;
   transition: color 0.25s ease;
 }
 
-.nav-text-btn:hover {
+.nav-links a:hover,
+.nav-links button:hover {
   color: #fff;
 }
 
-.cta-pill {
+.cta {
   display: inline-flex;
   align-items: center;
+  justify-self: end;
   gap: 14px;
   height: 44px;
   padding: 0 6px 0 20px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--orange), var(--red));
+  background: linear-gradient(90deg, var(--orange), var(--deep));
   color: #fff;
+  font-family: var(--font-family);
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  letter-spacing: 0.14em;
   cursor: pointer;
   box-shadow: 0 16px 40px rgba(236, 90, 0, 0.24);
   transition:
@@ -874,12 +746,12 @@ onBeforeUnmount(() => {
     box-shadow 0.45s var(--smooth);
 }
 
-.cta-pill:hover {
+.cta:hover {
   transform: translateY(-2px);
   box-shadow: 0 22px 54px rgba(236, 90, 0, 0.36);
 }
 
-.cta-pill-icon {
+.cta-icon {
   display: grid;
   place-items: center;
   width: 32px;
@@ -888,93 +760,70 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.18);
 }
 
-.cta-pill svg {
+.cta-icon svg {
   width: 13px;
   height: 13px;
 }
 
 /* ---------- Hero ---------- */
 
-.loot-hero {
+.hero {
   position: relative;
   display: flex;
   flex-direction: column;
   min-height: 100svh;
-  padding: 118px 40px 30px;
+  padding: 116px 40px 26px;
   overflow: hidden;
 }
 
-.hero-atmosphere {
+.hero-bg {
   position: absolute;
   inset: -6% -8% 0;
   z-index: 0;
-  background-position: center 28%;
+  background-position: center 26%;
   background-size: cover;
-  opacity: 0.24;
+  opacity: 0.22;
   filter: saturate(0.9) contrast(1.05);
-  -webkit-mask-image: radial-gradient(120% 92% at 68% 18%, #000 0%, transparent 70%);
-  mask-image: radial-gradient(120% 92% at 68% 18%, #000 0%, transparent 70%);
+  -webkit-mask-image: radial-gradient(120% 92% at 66% 20%, #000 0%, transparent 72%);
+  mask-image: radial-gradient(120% 92% at 66% 20%, #000 0%, transparent 72%);
   pointer-events: none;
 }
 
-.loot-hero::before {
+.hero::before {
   content: '';
   position: absolute;
-  top: -32%;
-  right: -6%;
+  top: -34%;
+  right: -8%;
   z-index: 0;
-  width: 780px;
-  height: 780px;
+  width: 820px;
+  height: 820px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(236, 90, 0, 0.22), transparent 66%);
+  background: radial-gradient(circle, rgba(236, 90, 0, 0.2), transparent 66%);
   filter: blur(30px);
   pointer-events: none;
 }
 
-.hero-grid {
+.hero-main {
   position: relative;
   z-index: 2;
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
-  align-items: end;
-  gap: 44px;
-  width: 100%;
-  max-width: 1560px;
-  margin: 0 auto;
-  padding-bottom: 40px;
   flex: 1;
-}
-
-.hero-heading {
-  min-width: 0;
-}
-
-.hero-eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  color: rgba(245, 241, 236, 0.42);
-  font-family: var(--font-family-display);
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-}
-
-.hero-eyebrow::before {
-  content: '';
-  width: 46px;
-  height: 1px;
-  background: var(--orange);
+  grid-template-columns: minmax(0, 1.5fr) minmax(228px, 0.5fr);
+  align-items: end;
+  gap: clamp(32px, 6vw, 110px);
+  width: 100%;
+  max-width: 1680px;
+  margin: 0 auto;
+  padding-bottom: clamp(32px, 6vh, 76px);
 }
 
 .hero-title {
-  margin: 28px 0 0;
   font-family: var(--font-family-display);
+  font-size: clamp(3.3rem, 10.6vw, 12.6rem);
   font-weight: 500;
-  font-size: clamp(3.4rem, 9.6vw, 10.8rem);
   line-height: 0.94;
   letter-spacing: -0.055em;
+  animation: hero-in 1s var(--smooth) both;
 }
 
 .hero-line {
@@ -990,143 +839,76 @@ onBeforeUnmount(() => {
 }
 
 .hero-line--2 {
-  margin-left: clamp(0px, 7vw, 150px);
-  background: linear-gradient(92deg, #ffffff 0%, #ffb27a 46%, #ec5a00 100%);
+  margin-left: clamp(0px, 8vw, 180px);
+  background: linear-gradient(92deg, #ffffff 0%, #ffb27a 46%, var(--orange) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
-.hero-sub {
-  max-width: 430px;
-  margin-top: 32px;
-  color: var(--muted);
-  font-size: 13.5px;
-  line-height: 1.8;
+@keyframes hero-in {
+  from {
+    opacity: 0;
+    translate: 0 40px;
+  }
 }
 
-.hero-sub-strong {
-  display: block;
-  margin-top: 6px;
-  color: rgba(245, 241, 236, 0.86);
-}
-
-.hero-cards {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 16px;
-  padding-bottom: 6px;
-}
-
-.hero-card:focus-visible {
-  border-color: var(--orange-bright);
-  outline: none;
-  box-shadow:
-    0 0 0 3px rgba(236, 90, 0, 0.35),
-    0 30px 70px rgba(0, 0, 0, 0.45);
-}
-
-.hero-card {
-  position: relative;
+.hero-index {
   display: grid;
-  gap: 8px;
-  width: min(100%, 318px);
-  padding: 20px 22px 22px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 24px;
-  background:
-    linear-gradient(150deg, rgba(255, 255, 255, 0.11) 0%, rgba(255, 255, 255, 0.03) 52%, rgba(255, 255, 255, 0.06) 100%);
-  box-shadow:
-    0 30px 70px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  backdrop-filter: blur(22px) saturate(135%);
+  align-content: end;
+  min-width: 0;
+  animation: hero-in 1s 0.15s var(--smooth) both;
+}
+
+.index-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  text-align: left;
   cursor: pointer;
-  transition:
-    border-color 0.45s ease,
-    transform 0.65s var(--smooth),
-    box-shadow 0.65s var(--smooth);
 }
 
-.hero-card--a {
-  transform: rotate(-1.6deg);
+.index-row:last-child {
+  border-bottom: 1px solid var(--line);
 }
 
-.hero-card--b {
-  transform: rotate(1.2deg) translateX(-18px);
-}
-
-.hero-card:hover {
-  border-color: rgba(236, 90, 0, 0.55);
-  transform: rotate(0deg) translateY(-6px);
-  box-shadow:
-    0 40px 90px rgba(0, 0, 0, 0.55),
-    0 0 60px -18px rgba(236, 90, 0, 0.45);
-}
-
-.hero-card-kicker {
-  color: rgba(245, 241, 236, 0.42);
+.index-num {
+  color: var(--orange-bright);
   font-family: var(--font-family-display);
   font-size: 9.5px;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
+  letter-spacing: 0.14em;
 }
 
-.hero-card-num {
-  font-family: var(--font-family-display);
-  font-size: 54px;
-  font-weight: 500;
-  line-height: 0.9;
-  letter-spacing: -0.05em;
-  background: linear-gradient(92deg, #fff 0%, #ffb27a 62%, #ec5a00 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.num-plus {
-  font-size: 0.5em;
-  vertical-align: super;
-}
-
-.hero-card-title {
-  font-size: 16px;
+.index-name {
+  overflow: hidden;
+  font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.01em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transition: color 0.25s ease;
 }
 
-.hero-card-desc {
-  color: rgba(245, 241, 236, 0.46);
-  font-size: 11px;
-  letter-spacing: 0.05em;
+.index-arrow {
+  justify-self: end;
+  color: rgba(245, 241, 236, 0.34);
+  font-size: 13px;
+  transition:
+    color 0.3s ease,
+    transform 0.4s var(--smooth);
 }
 
-.hero-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.index-row:hover .index-name {
+  color: var(--orange-bright);
 }
 
-.hero-chips span {
-  padding: 4px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 999px;
-  color: rgba(245, 241, 236, 0.6);
-  font-size: 9.5px;
-  letter-spacing: 0.06em;
-}
-
-.hero-card-arrow {
-  position: absolute;
-  top: 16px;
-  right: 18px;
-  color: rgba(245, 241, 236, 0.4);
-  font-size: 14px;
-  transition: color 0.35s ease, transform 0.45s var(--smooth);
-}
-
-.hero-card:hover .hero-card-arrow {
+.index-row:hover .index-arrow {
   color: var(--orange-bright);
   transform: translate(2px, -2px);
 }
@@ -1134,57 +916,37 @@ onBeforeUnmount(() => {
 .hero-foot {
   position: relative;
   z-index: 2;
-  display: grid;
-  grid-template-columns: minmax(0, 320px) minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
-  gap: 28px;
+  gap: 30px;
   width: 100%;
-  max-width: 1560px;
+  max-width: 1680px;
   margin: 0 auto;
-  padding-top: 22px;
+  padding-top: 18px;
   border-top: 1px solid var(--line);
+  animation: hero-in 1s 0.25s var(--smooth) both;
 }
 
-.hero-meta {
+.ticker {
   display: flex;
-  gap: 12px;
-  color: var(--muted);
-  font-size: 11.5px;
-  line-height: 1.65;
-}
-
-.meta-index {
-  flex: 0 0 auto;
-  padding-top: 2px;
-  color: var(--orange-bright);
-  font-family: var(--font-family-display);
-  font-size: 9.5px;
-  letter-spacing: 0.18em;
-}
-
-.hl {
-  color: #fff;
-}
-
-.hero-ticker {
-  display: flex;
+  flex: 1;
   align-items: center;
   gap: 14px;
   min-width: 0;
   padding: 13px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.11);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
   color: inherit;
   text-align: left;
-  backdrop-filter: blur(18px);
+  backdrop-filter: blur(16px);
   cursor: pointer;
   transition: border-color 0.35s ease, background 0.35s ease;
 }
 
-.hero-ticker:hover {
+.ticker:hover {
   border-color: rgba(236, 90, 0, 0.45);
-  background: rgba(236, 90, 0, 0.07);
+  background: rgba(236, 90, 0, 0.06);
 }
 
 .ticker-label {
@@ -1206,7 +968,7 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
 }
 
-.ticker-caret {
+.caret {
   display: inline-block;
   width: 1px;
   height: 1em;
@@ -1226,42 +988,40 @@ onBeforeUnmount(() => {
   }
 }
 
-.ticker-action {
+.ticker-go {
   display: grid;
   flex: 0 0 auto;
   place-items: center;
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(245, 241, 236, 0.72);
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(245, 241, 236, 0.7);
+  font-size: 12px;
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
-.ticker-action svg {
-  width: 12px;
-  height: 12px;
-}
-
-.hero-ticker:hover .ticker-action {
+.ticker:hover .ticker-go {
   background: var(--orange);
   color: #fff;
 }
 
-.hero-scroll {
+.scroll-hint {
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  color: rgba(245, 241, 236, 0.32);
+  gap: 9px;
+  color: rgba(245, 241, 236, 0.3);
   font-family: var(--font-family-display);
   font-size: 9px;
-  letter-spacing: 0.26em;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
 }
 
-.hero-scroll-line {
+.scroll-hint i {
   width: 1px;
-  height: 44px;
+  height: 34px;
   background: linear-gradient(180deg, var(--orange), transparent);
   animation: scroll-pulse 2.2s ease-in-out infinite;
 }
@@ -1270,7 +1030,7 @@ onBeforeUnmount(() => {
   0%,
   100% {
     opacity: 0.35;
-    transform: scaleY(0.72);
+    transform: scaleY(0.7);
     transform-origin: top;
   }
   50% {
@@ -1280,14 +1040,14 @@ onBeforeUnmount(() => {
   }
 }
 
-/* ---------- 滚动流程 ---------- */
+/* ---------- 创作流程 ---------- */
 
-.manifesto {
+.process {
   position: relative;
   height: 260vh;
 }
 
-.manifesto-sticky {
+.process-sticky {
   position: sticky;
   top: 0;
   display: grid;
@@ -1297,243 +1057,204 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-.manifesto-inner {
+.process-words {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  align-items: end;
-  gap: 60px;
   width: 100%;
-  max-width: 1560px;
+  max-width: 1680px;
+  margin: 0 auto;
+  padding-right: 90px;
 }
 
-.manifesto-words {
-  display: grid;
-  min-width: 0;
-}
-
-.manifesto-kicker {
-  margin-bottom: 26px;
-  color: rgba(245, 241, 236, 0.32);
-  font-family: var(--font-family-display);
-  font-size: 10px;
-  letter-spacing: 0.32em;
-  text-transform: uppercase;
-}
-
-.manifesto-word {
+.process-word {
   display: flex;
   align-items: baseline;
-  gap: clamp(12px, 2vw, 32px);
-  color: rgba(245, 241, 236, 0.14);
+  gap: clamp(12px, 2vw, 30px);
+  color: rgba(245, 241, 236, 0.13);
   font-family: var(--font-family-display);
-  font-size: clamp(3rem, 9vw, 9.6rem);
+  font-size: clamp(3.6rem, 12.5vw, 11rem);
   font-weight: 500;
   line-height: 1.12;
   letter-spacing: -0.05em;
   transition:
     color 0.5s ease,
-    transform 0.8s var(--smooth);
+    transform 0.9s var(--smooth);
 }
 
-.manifesto-word.is-active {
+.process-word.is-active {
   color: #fff;
-  transform: translateX(clamp(12px, 3vw, 52px));
+  transform: translateX(clamp(10px, 3vw, 54px));
 }
 
-.manifesto-word.is-active .mw-text {
+.process-word.is-active .pw-text {
   background: linear-gradient(92deg, #ffffff 0%, #ff9a5c 55%, var(--orange) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
-.mw-index {
-  color: rgba(245, 241, 236, 0.3);
-  font-size: 0.16em;
+.pw-index {
+  color: rgba(245, 241, 236, 0.28);
+  font-size: 0.14em;
   letter-spacing: 0.2em;
 }
 
-.manifesto-word.is-active .mw-index {
+.process-word.is-active .pw-index {
   color: var(--orange);
 }
 
-.mw-en {
-  color: rgba(245, 241, 236, 0.22);
-  font-size: 0.13em;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
+.process-track {
+  position: absolute;
+  top: 24%;
+  right: 40px;
+  bottom: 24%;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.1);
 }
 
-.manifesto-word.is-active .mw-en {
-  color: rgba(255, 114, 67, 0.6);
-}
-
-.manifesto-side {
-  display: grid;
-  align-content: space-between;
-  gap: 16px;
-  min-height: 168px;
-  padding: 4px 0 6px 24px;
-  border-left: 1px solid var(--line);
-}
-
-.manifesto-side-label {
-  color: var(--orange-bright);
-  font-family: var(--font-family-display);
-  font-size: 9.5px;
-  letter-spacing: 0.26em;
-  text-transform: uppercase;
-}
-
-.manifesto-side p {
-  color: var(--muted);
-  font-size: 12.5px;
-  line-height: 1.8;
-}
-
-.manifesto-side-count {
-  color: rgba(245, 241, 236, 0.32);
-  font-family: var(--font-family-display);
-  font-size: 10px;
-  letter-spacing: 0.22em;
+.process-track span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(180deg, var(--orange), var(--orange-bright));
+  transform-origin: top;
+  transition: transform 0.1s linear;
 }
 
 /* ---------- 分区通用 ---------- */
 
-.loot-section {
+.section {
   position: relative;
-  padding: clamp(90px, 10vw, 150px) 40px;
-}
-
-.section-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 60px;
-  width: 100%;
-  max-width: 1560px;
-  margin: 0 auto 52px;
-  padding-bottom: 26px;
-  border-bottom: 1px solid var(--line);
-}
-
-.section-head-main {
-  display: grid;
-  gap: 18px;
-}
-
-.section-index {
-  color: var(--orange-bright);
-  font-family: var(--font-family-display);
-  font-size: 10px;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-}
-
-.section-title {
-  font-family: var(--font-family-display);
-  font-size: clamp(2.5rem, 5.6vw, 6rem);
-  font-weight: 500;
-  line-height: 1.1;
-  letter-spacing: -0.045em;
-}
-
-.title-accent {
-  background: linear-gradient(92deg, #ffffff 0%, #ffb27a 42%, var(--orange) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.section-desc {
-  max-width: 330px;
-  padding-bottom: 6px;
-  color: var(--muted);
-  font-size: 12.5px;
-  line-height: 1.8;
-}
-
-/* ---------- 三大工作台 ---------- */
-
-.zones-section {
+  padding: clamp(84px, 8vw, 140px) 40px;
   scroll-margin-top: 96px;
 }
 
-.zone-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 20px;
+.section-head {
   width: 100%;
-  max-width: 1560px;
+  max-width: 1680px;
   margin: 0 auto;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
 }
 
-.zone-card {
+.section-num {
+  color: var(--orange-bright);
+  font-family: var(--font-family-display);
+  font-size: 10px;
+  letter-spacing: 0.24em;
+}
+
+.section-title {
+  margin-top: 24px;
+  font-family: var(--font-family-display);
+  font-size: clamp(2.4rem, 6vw, 7.2rem);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.05em;
+}
+
+/* ---------- 三个工作台 ---------- */
+
+.work-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.34fr) minmax(0, 1fr);
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  width: 100%;
+  max-width: 1680px;
+  height: clamp(560px, 74vh, 760px);
+  margin: clamp(40px, 4.5vw, 68px) auto 0;
+}
+
+.work-card {
   position: relative;
   display: flex;
   flex-direction: column;
-  min-height: 540px;
+  justify-content: space-between;
+  min-height: 0;
+  padding: 26px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.13);
-  border-radius: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 28px;
   background: #0a0908;
   cursor: pointer;
   transition:
-    transform 0.65s var(--smooth),
+    transform 0.7s var(--smooth),
     border-color 0.5s ease,
-    box-shadow 0.65s var(--smooth);
+    box-shadow 0.7s var(--smooth);
 }
 
-.zone-card:hover,
-.zone-card:focus-visible {
+.work-card:first-child {
+  grid-row: 1 / span 2;
+}
+
+.work-card:first-child .work-title {
+  font-size: clamp(1.9rem, 2.8vw, 3rem);
+}
+
+.work-card:hover,
+.work-card:focus-visible {
   border-color: rgba(236, 90, 0, 0.55);
   outline: none;
   transform: translateY(-8px);
   box-shadow: 0 42px 96px rgba(0, 0, 0, 0.58);
 }
 
-.zone-media-layer,
-.zone-voice-art {
+.work-bg {
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
 }
 
-.zone-media-layer img {
+.work-bg img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: 0.6;
+  opacity: 0.72;
   transform: scale(1.02);
   transition:
-    transform 1.4s var(--smooth),
+    transform 1.5s var(--smooth),
     opacity 0.6s ease;
 }
 
-.zone-card:hover .zone-media-layer img {
-  opacity: 0.78;
-  transform: scale(1.08);
+.work-card:hover .work-bg img {
+  opacity: 0.9;
+  transform: scale(1.07);
 }
 
-.zone-voice-art {
+.work-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    180deg,
+    rgba(6, 5, 4, 0.5) 0%,
+    rgba(6, 5, 4, 0.06) 26%,
+    rgba(6, 5, 4, 0.5) 58%,
+    rgba(6, 5, 4, 0.96) 100%
+  );
+  pointer-events: none;
+}
+
+.work-bg--voice {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
   padding: 0 34px;
   background:
-    radial-gradient(120% 90% at 50% 32%, rgba(236, 90, 0, 0.36), transparent 58%),
-    radial-gradient(90% 80% at 18% 18%, rgba(100, 16, 5, 0.75), transparent 62%),
+    radial-gradient(120% 90% at 50% 32%, rgba(236, 90, 0, 0.4), transparent 58%),
+    radial-gradient(90% 80% at 18% 18%, rgba(100, 16, 5, 0.8), transparent 62%),
     #0a0705;
 }
 
 .voice-bar {
   flex: 1;
   min-height: 4px;
-  max-height: 44%;
+  max-height: 42%;
   border-radius: 999px;
-  background: linear-gradient(180deg, #ff9a5c, rgba(236, 90, 0, 0.18));
+  background: linear-gradient(180deg, #ff9a5c, rgba(236, 90, 0, 0.16));
   opacity: 0.8;
   animation: voice-pulse 1.8s ease-in-out infinite alternate;
 }
@@ -1549,141 +1270,62 @@ onBeforeUnmount(() => {
   }
 }
 
-.zone-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  background: linear-gradient(
-    180deg,
-    rgba(6, 5, 4, 0.04) 0%,
-    rgba(6, 5, 4, 0.62) 46%,
-    rgba(6, 5, 4, 0.95) 78%,
-    #060504 100%
-  );
-  pointer-events: none;
+.work-num {
+  position: relative;
+  z-index: 2;
+  color: rgba(255, 255, 255, 0.7);
+  font-family: var(--font-family-display);
+  font-size: clamp(1.4rem, 1.8vw, 1.9rem);
+  letter-spacing: 0.1em;
 }
 
-.zone-top {
+.work-bottom {
   position: relative;
   z-index: 2;
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 24px 24px 0;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.zone-step {
-  color: var(--orange-bright);
+.work-title {
   font-family: var(--font-family-display);
-  font-size: 11.5px;
-  letter-spacing: 0.2em;
-}
-
-.zone-label {
-  color: rgba(245, 241, 236, 0.48);
-  font-family: var(--font-family-display);
-  font-size: 9.5px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-}
-
-.zone-badge {
-  margin-left: auto;
-  padding: 5px 10px;
-  border: 1px solid rgba(255, 178, 122, 0.4);
-  border-radius: 999px;
-  background: rgba(236, 90, 0, 0.14);
-  color: #ffd0b3;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-}
-
-.zone-body {
-  position: relative;
-  z-index: 2;
-  display: grid;
-  gap: 14px;
-  margin-top: auto;
-  padding: 24px;
-}
-
-.zone-title {
-  font-family: var(--font-family-display);
-  font-size: clamp(1.6rem, 2.2vw, 2.2rem);
+  font-size: clamp(1.45rem, 2vw, 2.1rem);
   font-weight: 600;
+  line-height: 1.15;
   letter-spacing: -0.03em;
 }
 
-.zone-desc {
-  max-width: 34ch;
-  color: var(--muted);
-  font-size: 12.5px;
-  line-height: 1.75;
-}
-
-.zone-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.zone-tags span {
-  padding: 5px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(245, 241, 236, 0.66);
-  font-size: 10px;
-  letter-spacing: 0.05em;
-}
-
-.zone-cta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  margin-top: 2px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.13);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-.zone-cta-icon {
+.work-arrow {
   display: grid;
+  flex: 0 0 auto;
   place-items: center;
-  width: 38px;
-  height: 38px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 50%;
-  font-size: 14px;
+  font-size: 15px;
   transition:
     background 0.4s ease,
     border-color 0.4s ease,
     transform 0.5s var(--smooth);
 }
 
-.zone-card:hover .zone-cta-icon {
+.work-card:hover .work-arrow {
   border-color: transparent;
-  background: linear-gradient(135deg, var(--orange), var(--red));
+  background: linear-gradient(135deg, var(--orange), var(--deep));
   transform: translate(2px, -2px);
 }
 
-/* ---------- 模板库 ---------- */
-
-.library-section {
-  scroll-margin-top: 96px;
-}
+/* ---------- Skill 模板 ---------- */
 
 .skill-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 18px;
   width: 100%;
-  max-width: 1560px;
-  margin: 0 auto;
+  max-width: 1680px;
+  margin: clamp(40px, 4.5vw, 68px) auto 0;
 }
 
 .skill-card {
@@ -1716,7 +1358,8 @@ onBeforeUnmount(() => {
   transform: scale(1.06);
 }
 
-.skill-index {
+.skill-index,
+.prompt-index {
   position: absolute;
   top: 12px;
   left: 13px;
@@ -1726,8 +1369,8 @@ onBeforeUnmount(() => {
   background: rgba(6, 5, 4, 0.52);
   color: #fff;
   font-family: var(--font-family-display);
-  font-size: 9.5px;
-  letter-spacing: 0.18em;
+  font-size: 9px;
+  letter-spacing: 0.16em;
   backdrop-filter: blur(8px);
 }
 
@@ -1735,16 +1378,15 @@ onBeforeUnmount(() => {
   position: absolute;
   right: 12px;
   bottom: 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 13px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 50%;
   background: rgba(6, 5, 4, 0.58);
   color: #fff;
-  font-size: 10.5px;
-  letter-spacing: 0.08em;
+  font-size: 13px;
   opacity: 0;
   transform: translateY(6px);
   backdrop-filter: blur(12px);
@@ -1762,8 +1404,8 @@ onBeforeUnmount(() => {
 }
 
 .skill-download:hover {
-  background: linear-gradient(90deg, var(--orange), var(--red));
   border-color: transparent;
+  background: linear-gradient(90deg, var(--orange), var(--deep));
 }
 
 .skill-info {
@@ -1783,9 +1425,11 @@ onBeforeUnmount(() => {
 }
 
 .skill-arrow {
-  color: rgba(245, 241, 236, 0.3);
+  color: rgba(245, 241, 236, 0.28);
   font-size: 13px;
-  transition: color 0.3s ease, transform 0.4s var(--smooth);
+  transition:
+    color 0.3s ease,
+    transform 0.4s var(--smooth);
 }
 
 .skill-card:hover .skill-arrow {
@@ -1793,23 +1437,31 @@ onBeforeUnmount(() => {
   transform: translate(2px, -2px);
 }
 
+/* ---------- 提示词模板 ---------- */
+
 .prompt-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: start;
   gap: 16px;
   width: 100%;
-  max-width: 1560px;
-  margin: 0 auto;
+  max-width: 1680px;
+  margin: clamp(40px, 4.5vw, 68px) auto 0;
 }
 
 .prompt-card {
   display: grid;
+  min-width: 0;
   padding: 0;
   border: 0;
   background: transparent;
   color: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.prompt-card:nth-child(even) {
+  margin-top: clamp(24px, 4vw, 56px);
 }
 
 .prompt-visual {
@@ -1837,38 +1489,23 @@ onBeforeUnmount(() => {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(6, 5, 4, 0) 46%, rgba(6, 5, 4, 0.78) 100%);
+  background: linear-gradient(180deg, rgba(6, 5, 4, 0) 52%, rgba(6, 5, 4, 0.7) 100%);
   pointer-events: none;
-}
-
-.prompt-index {
-  position: absolute;
-  top: 11px;
-  left: 12px;
-  z-index: 2;
-  padding: 4px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 999px;
-  background: rgba(6, 5, 4, 0.5);
-  color: #fff;
-  font-family: var(--font-family-display);
-  font-size: 9px;
-  letter-spacing: 0.16em;
-  backdrop-filter: blur(8px);
 }
 
 .prompt-use {
   position: absolute;
+  right: 12px;
   bottom: 12px;
-  left: 12px;
   z-index: 2;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--orange), var(--red));
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, var(--orange), var(--deep));
   color: #fff;
-  font-size: 9.5px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-size: 13px;
   opacity: 0;
   transform: translateY(8px);
   transition:
@@ -1884,7 +1521,7 @@ onBeforeUnmount(() => {
 
 .prompt-title {
   display: block;
-  margin-top: 10px;
+  margin-top: 11px;
   overflow: hidden;
   color: rgba(245, 241, 236, 0.76);
   font-size: 12.5px;
@@ -1895,29 +1532,29 @@ onBeforeUnmount(() => {
 
 /* ---------- 收尾 ---------- */
 
-.final-cta {
+.outro {
   position: relative;
   display: grid;
   place-items: center;
-  min-height: 100svh;
-  padding: 130px 40px 150px;
+  min-height: 92svh;
+  padding: 130px 40px 140px;
   overflow: hidden;
   border-top: 1px solid var(--line);
 }
 
-.final-bg {
+.outro-bg {
   position: absolute;
   inset: 0;
   background-position: center;
   background-size: cover;
-  opacity: 0.26;
+  opacity: 0.24;
   filter: saturate(0.9);
   -webkit-mask-image: radial-gradient(92% 82% at 50% 42%, #000 0%, transparent 74%);
   mask-image: radial-gradient(92% 82% at 50% 42%, #000 0%, transparent 74%);
   pointer-events: none;
 }
 
-.final-cta::after {
+.outro::after {
   content: '';
   position: absolute;
   bottom: -46%;
@@ -1931,7 +1568,7 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-.final-inner {
+.outro-inner {
   position: relative;
   z-index: 2;
   display: grid;
@@ -1939,33 +1576,24 @@ onBeforeUnmount(() => {
   text-align: center;
 }
 
-.final-kicker {
-  margin-bottom: 26px;
-  color: var(--orange-bright);
+.outro-title {
   font-family: var(--font-family-display);
-  font-size: 10px;
-  letter-spacing: 0.34em;
-  text-transform: uppercase;
-}
-
-.final-title {
-  font-family: var(--font-family-display);
-  font-size: clamp(2.9rem, 8.4vw, 9.4rem);
+  font-size: clamp(2.7rem, 8.2vw, 9.2rem);
   font-weight: 500;
-  line-height: 1.12;
+  line-height: 1.1;
   letter-spacing: -0.05em;
 }
 
-.final-actions {
+.outro-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 22px;
+  gap: 24px;
   margin-top: 46px;
 }
 
-.final-btn {
+.outro-btn {
   display: inline-flex;
   align-items: center;
   gap: 18px;
@@ -1973,12 +1601,12 @@ onBeforeUnmount(() => {
   padding: 0 10px 0 30px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--orange), var(--red));
+  background: linear-gradient(90deg, var(--orange), var(--deep));
   color: #fff;
+  font-family: var(--font-family);
   font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.14em;
-  text-transform: uppercase;
   cursor: pointer;
   box-shadow: 0 24px 60px rgba(236, 90, 0, 0.28);
   transition:
@@ -1986,12 +1614,12 @@ onBeforeUnmount(() => {
     box-shadow 0.5s var(--smooth);
 }
 
-.final-btn:hover {
+.outro-btn:hover {
   transform: translateY(-3px);
   box-shadow: 0 32px 82px rgba(236, 90, 0, 0.42);
 }
 
-.final-btn-icon {
+.outro-btn-icon {
   display: grid;
   place-items: center;
   width: 44px;
@@ -2001,128 +1629,92 @@ onBeforeUnmount(() => {
   font-size: 16px;
 }
 
-.final-ghost {
+.outro-ghost {
   padding: 6px 0;
   border: 0;
   border-bottom: 1px solid transparent;
   background: transparent;
   color: var(--muted);
+  font-family: var(--font-family);
   font-size: 12px;
   letter-spacing: 0.06em;
   cursor: pointer;
   transition: color 0.3s ease, border-color 0.3s ease;
 }
 
-.final-ghost:hover {
+.outro-ghost:hover {
   border-color: rgba(255, 255, 255, 0.4);
   color: #fff;
 }
 
-.final-meta {
+.to-top {
   position: absolute;
   right: 40px;
   bottom: 30px;
-  left: 40px;
   z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: rgba(245, 241, 236, 0.34);
   font-family: var(--font-family-display);
   font-size: 9.5px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-}
-
-.final-meta button {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  letter-spacing: inherit;
   cursor: pointer;
   transition: color 0.3s ease;
 }
 
-.final-meta button:hover {
+.to-top:hover {
   color: #fff;
 }
 
 /* ---------- 响应式 ---------- */
 
 @media (max-width: 1180px) {
-  .nav-pill {
-    gap: 18px;
+  .nav-links {
+    gap: 22px;
+    padding: 10px 20px;
   }
 
-  .hero-card {
-    width: min(100%, 280px);
-  }
-
-  .zone-card {
-    min-height: 500px;
-  }
-}
-
-/* 平板宽度下三列会挤到 300px，改成 2 列 + 整行第三张，排版更稳。 */
-@media (max-width: 1080px) and (min-width: 901px) {
-  .zone-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .zone-card:last-child {
-    grid-column: 1 / -1;
-    min-height: 420px;
-  }
-
-  .zone-card:last-child .zone-body {
-    max-width: 620px;
+  .work-card {
+    padding: 22px;
   }
 }
 
 @media (max-width: 1080px) {
-  .loot-nav {
+  .nav {
     grid-template-areas:
       'brand cta'
-      'nav nav';
+      'links links';
     grid-template-columns: 1fr auto;
     row-gap: 10px;
     padding-bottom: 12px;
   }
 
-  .nav-left {
+  .brand {
     grid-area: brand;
   }
 
-  .nav-right {
+  .cta {
     grid-area: cta;
   }
 
-  .nav-pill {
-    grid-area: nav;
+  .nav-links {
+    grid-area: links;
     justify-self: center;
-    gap: 20px;
-    padding: 9px 18px;
   }
 
-  .loot-hero {
-    padding-top: 150px;
+  .hero {
+    padding-top: 152px;
   }
 
-  .hero-grid {
-    grid-template-columns: minmax(0, 1fr) 260px;
-    gap: 32px;
+  .hero-main {
+    grid-template-columns: minmax(0, 1fr) 250px;
+    gap: 34px;
   }
 
-  .hero-card {
-    width: 100%;
-    padding: 18px;
-  }
-
-  .hero-card-num {
-    font-size: 44px;
+  .index-name {
+    font-size: 13.5px;
   }
 
   .skill-grid,
@@ -2137,91 +1729,66 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 900px) {
-  .loot-nav {
+  .nav {
     padding: 14px 20px 12px;
   }
 
-  .loot-hero {
-    padding: 140px 20px 24px;
+  .hero {
+    padding: 142px 20px 24px;
   }
 
-  .hero-grid {
+  .hero-main {
     grid-template-columns: minmax(0, 1fr);
+    align-content: end;
     align-items: start;
     gap: 34px;
-    padding-top: 24px;
+    padding-bottom: 34px;
   }
 
-  .hero-cards {
-    flex-direction: row;
-    align-items: stretch;
-    justify-content: flex-start;
-    padding-bottom: 0;
+  .hero-index {
+    margin-top: 0;
   }
 
-  .hero-card {
-    flex: 1 1 0;
-    width: auto;
-    transform: none !important;
-  }
-
-  .hero-card--b {
-    transform: none;
-  }
-
-  .hero-foot {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .hero-ticker {
-    grid-column: 1 / -1;
-    grid-row: 1;
-  }
-
-  .hero-scroll {
+  .scroll-hint {
     display: none;
   }
 
-  .loot-section {
+  .section {
     padding-right: 20px;
     padding-left: 20px;
+    scroll-margin-top: 130px;
   }
 
-  .section-head {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 22px;
-  }
-
-  .section-desc {
-    max-width: 46ch;
-  }
-
-  .zone-grid {
+  .work-grid {
     grid-template-columns: 1fr;
+    grid-template-rows: none;
+    height: auto;
+    gap: 16px;
   }
 
-  .zone-card {
-    min-height: 430px;
+  .work-card {
+    aspect-ratio: 4 / 5;
   }
 
-  .manifesto {
+  .work-card:first-child {
+    grid-row: auto;
+    aspect-ratio: 1 / 1;
+  }
+
+  .process {
     height: 200vh;
   }
 
-  .manifesto-sticky {
+  .process-sticky {
     padding: 0 20px;
   }
 
-  .manifesto-inner {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 30px;
-    align-items: start;
+  .process-words {
+    padding-right: 0;
   }
 
-  .manifesto-side {
-    min-height: 0;
-    padding-left: 18px;
+  .process-track {
+    right: 20px;
   }
 
   .skill-grid,
@@ -2234,17 +1801,13 @@ onBeforeUnmount(() => {
     display: block;
   }
 
-  .final-cta {
-    padding: 110px 20px 140px;
+  .outro {
+    padding: 110px 20px 130px;
   }
 
-  .final-meta {
+  .to-top {
     right: 20px;
-    left: 20px;
-  }
-
-  .final-meta span:nth-child(2) {
-    display: none;
+    bottom: 24px;
   }
 }
 
@@ -2254,27 +1817,34 @@ onBeforeUnmount(() => {
     letter-spacing: 0.14em;
   }
 
-  .nav-text-btn {
-    display: none;
+  .nav-links {
+    gap: 16px;
+    padding: 9px 16px;
   }
 
-  .cta-pill {
+  .nav-links a,
+  .nav-links button {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+  }
+
+  .cta {
     height: 40px;
     padding-left: 15px;
     font-size: 10px;
   }
 
-  .cta-pill-icon {
+  .cta-icon {
     width: 28px;
     height: 28px;
   }
 
-  .loot-hero {
-    padding-top: 132px;
+  .hero {
+    padding-top: 134px;
   }
 
   .hero-title {
-    font-size: clamp(2.9rem, 12.4vw, 5rem);
+    font-size: clamp(3rem, 15vw, 5.4rem);
     line-height: 1.02;
   }
 
@@ -2282,110 +1852,40 @@ onBeforeUnmount(() => {
     margin-left: 0;
   }
 
-  .hero-sub {
-    margin-top: 20px;
-    font-size: 12.5px;
-    line-height: 1.7;
+  .index-row {
+    padding: 13px 0;
   }
 
-  .hero-cards {
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .hero-card {
-    flex: none;
-    padding: 14px 16px;
-    border-radius: 18px;
-    gap: 6px;
-  }
-
-  .hero-card-num {
-    font-size: 34px;
-  }
-
-  .hero-foot {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-
-  .hero-meta {
-    grid-row: 2;
-  }
-
-  .hero-ticker {
-    grid-row: 1;
-  }
-
-  .manifesto-word {
-    font-size: clamp(2.6rem, 15vw, 4.4rem);
-    line-height: 1.16;
-  }
-
-  .manifesto-word.is-active {
-    transform: translateX(10px);
-  }
-
-  .mw-en {
-    display: none;
+  .process-word {
+    font-size: clamp(3.4rem, 17vw, 5.6rem);
   }
 
   .section-title {
-    font-size: clamp(2.1rem, 10vw, 3.2rem);
-    line-height: 1.24;
+    font-size: clamp(2.2rem, 10vw, 3.4rem);
+    line-height: 1.16;
   }
 
-  .zone-card {
-    min-height: 400px;
-    border-radius: 24px;
-  }
-
-  .zone-body {
+  .work-card {
+    aspect-ratio: 1 / 1;
+    border-radius: 22px;
     padding: 20px;
   }
 
-  .skill-grid,
-  .prompt-grid {
-    gap: 12px;
+  .prompt-card:nth-child(even) {
+    margin-top: 28px;
   }
 
-  .skill-visual {
-    border-radius: 14px;
+  .outro-title {
+    font-size: clamp(2.3rem, 11vw, 3.8rem);
   }
 
-  .prompt-visual {
-    border-radius: 14px;
-  }
-
-  .skill-download {
-    opacity: 1;
-    transform: none;
-    right: 8px;
-    bottom: 8px;
-    padding: 6px 10px;
-  }
-
-  .skill-info strong,
-  .prompt-title {
-    font-size: 11.5px;
-  }
-
-  .final-title {
-    font-size: clamp(2.4rem, 11.5vw, 4rem);
-  }
-
-  .final-btn {
+  .outro-btn {
     height: 58px;
     padding-left: 24px;
   }
-
-  .final-meta {
-    font-size: 8.5px;
-    letter-spacing: 0.14em;
-  }
 }
 
-/* 触屏设备没有 hover，下载与"使用模板"常驻显示 */
+/* 触屏设备没有 hover，下载与箭头常驻显示 */
 @media (hover: none) {
   .skill-download,
   .prompt-use {
@@ -2401,29 +1901,39 @@ onBeforeUnmount(() => {
     transition: none;
   }
 
-  .hero-scroll-line,
-  .voice-bar,
-  .ticker-caret {
+  .hero-title,
+  .hero-index,
+  .hero-foot {
     animation: none;
   }
 
-  .manifesto {
+  .scroll-hint i,
+  .voice-bar,
+  .caret {
+    animation: none;
+  }
+
+  .process {
     height: auto;
   }
 
-  .manifesto-sticky {
+  .process-sticky {
     position: static;
     height: auto;
     padding-top: 110px;
     padding-bottom: 110px;
   }
 
-  .manifesto-word {
+  .process-word {
     color: rgba(245, 241, 236, 0.4);
   }
 
-  .manifesto-word.is-active {
+  .process-word.is-active {
     transform: none;
+  }
+
+  .process-track {
+    display: none;
   }
 }
 </style>
