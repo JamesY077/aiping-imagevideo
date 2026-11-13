@@ -17,7 +17,7 @@ const SKILL_COMPRESSION_BASE_CHARS = 500
 const SKILL_COMPRESSION_CHARS_PER_SKILL = 140
 const SKILL_COMPRESSION_MAX_CHARS = 1100
 
-function normalizeSkillContents(skillContent: string | string[] | null | undefined): string[] {
+export function normalizeSkillContents(skillContent: string | string[] | null | undefined): string[] {
   const list = Array.isArray(skillContent) ? skillContent : [skillContent]
   const seen = new Set<string>()
   const result: string[] = []
@@ -47,8 +47,7 @@ function cleanCompressedSkill(content: string, limit: number): string {
 }
 
 /** 压缩失败时的兜底：去掉 YAML 头部并按总长度均分截断，避免一次失败就让生成完全中断。 */
-function fallbackCompressSkills(skillContents: string[]): string {
-  const limit = compressionLimit(skillContents.length)
+function fallbackCompressSkills(skillContents: string[], limit: number): string {
   const perSkill = Math.max(120, Math.floor(limit / skillContents.length))
   return skillContents
     .map((content) => {
@@ -79,9 +78,8 @@ async function resolveSkillCompressionModel(): Promise<string> {
   return fallback.id
 }
 
-async function compressSkillContents(skillContents: string[]): Promise<string> {
+async function compressSkillContents(skillContents: string[], limit: number): Promise<string> {
   const model = await resolveSkillCompressionModel()
-  const limit = compressionLimit(skillContents.length)
   const merged = skillContents
     .map((content, index) => `### Skill ${index + 1}\n${content}`)
     .join('\n\n')
@@ -103,32 +101,44 @@ async function compressSkillContents(skillContents: string[]): Promise<string> {
 const compressionCache = new Map<string, string>()
 const COMPRESSION_CACHE_LIMIT = 12
 
+/**
+ * 把多份 Skill 合并压缩成一段可直接用于生成的视觉规范。
+ * limit 可按场景放宽（例如 AI 润色需要更完整的元素清单）。
+ */
+export async function summarizeSkillContents(
+  skillContent: string | string[] | null | undefined,
+  limit?: number,
+): Promise<string> {
+  const skillContents = normalizeSkillContents(skillContent)
+  if (!skillContents.length) return ''
+
+  const resolvedLimit = Math.max(200, Math.round(limit ?? compressionLimit(skillContents.length)))
+  const cacheKey = `${resolvedLimit}::${skillContents.join('\n\n---SKILL---\n\n')}`
+  const cached = compressionCache.get(cacheKey)
+  if (cached) return cached
+
+  let skillSummary: string
+  try {
+    skillSummary = await compressSkillContents(skillContents, resolvedLimit)
+  } catch (error) {
+    console.warn('Skill 压缩失败，使用截断后的原始 Skill 作为兜底。', error)
+    skillSummary = fallbackCompressSkills(skillContents, resolvedLimit)
+  }
+
+  compressionCache.set(cacheKey, skillSummary)
+  if (compressionCache.size > COMPRESSION_CACHE_LIMIT) {
+    const oldest = compressionCache.keys().next().value
+    if (oldest) compressionCache.delete(oldest)
+  }
+  return skillSummary
+}
+
 /** 有 Skill 时先合并压缩，再把压缩结果和用户提示词合并；无 Skill 时原样返回。 */
 export async function buildEffectivePrompt(
   prompt: string,
   skillContent: string | string[] | null | undefined,
 ): Promise<string> {
-  const skillContents = normalizeSkillContents(skillContent)
-  if (!skillContents.length) return prompt
-
-  const cacheKey = skillContents.join('\n\n---SKILL---\n\n')
-  const cached = compressionCache.get(cacheKey)
-  if (cached) {
-    return `请严格遵循以下 Skill 创作规范：\n${cached}\n\n用户创作需求：\n${prompt}`
-  }
-
-  let skillSummary: string
-  try {
-    skillSummary = await compressSkillContents(skillContents)
-    compressionCache.set(cacheKey, skillSummary)
-    if (compressionCache.size > COMPRESSION_CACHE_LIMIT) {
-      const oldest = compressionCache.keys().next().value
-      if (oldest) compressionCache.delete(oldest)
-    }
-  } catch (error) {
-    console.warn('Skill 压缩失败，使用截断后的原始 Skill 作为兜底。', error)
-    skillSummary = fallbackCompressSkills(skillContents)
-  }
-
+  const skillSummary = await summarizeSkillContents(skillContent)
+  if (!skillSummary) return prompt
   return `请严格遵循以下 Skill 创作规范：\n${skillSummary}\n\n用户创作需求：\n${prompt}`
 }

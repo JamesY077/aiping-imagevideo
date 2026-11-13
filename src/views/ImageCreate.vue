@@ -90,6 +90,7 @@
                 >
                   <img :src="result.url" alt="生成的图片" referrerpolicy="no-referrer" loading="lazy" decoding="async" />
                   <span class="tile-index">{{ index + 1 }}</span>
+                  <span v-if="result.layoutSkipped" class="tile-note">无编辑图层</span>
                   <figcaption class="tile-overlay">
                     <div class="tile-tools">
                       <button class="tile-btn" type="button" @click.stop="openLightbox(index)">查看</button>
@@ -136,7 +137,7 @@
                   class="ghost-pill"
                   type="button"
                   :disabled="isPolishing || isGenerating || !hasPolishModel"
-                  :title="hasPolishModel ? '用 AI 把简短描述扩写成更专业的提示词' : '提示词增强已在设置中关闭'"
+                  :title="polishButtonTitle"
                   @click="handlePolish"
                 >
                   {{ isPolishing ? '润色中…' : 'AI 润色' }}
@@ -293,7 +294,7 @@
                   <span class="mini-knob" aria-hidden="true" />
                 </button>
               </div>
-              <p class="rail-hint">开启后先拆成可编辑图层再出图，结果里可继续调图层。</p>
+              <p class="rail-hint">默认关闭。开启后先拆成可编辑图层再出图；若没拆出图层，会按普通图片正常输出并标注「无编辑图层」。</p>
             </section>
           </div>
         </aside>
@@ -377,11 +378,11 @@ import ModelSelector from '@/components/ModelSelector.vue'
 import SkillPicker from '@/components/SkillPicker.vue'
 import ImageLightbox from '@/components/ImageLightbox.vue'
 import MossLayerEditor from '@/components/MossLayerEditor.vue'
-import { useSettingsStore, DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT } from '@/stores/settingsStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { useChatStore } from '@/stores/chatStore'
 import { useSkillStore } from '@/stores/skillStore'
 import { useGenerate } from '@/composables/useGenerate'
-import { polishPrompt } from '@/api/aiping'
+import { polishPromptWithSkills } from '@/features/skill/polish'
 import {
   ASPECT_RATIO_OPTIONS,
   getLocalUploadAccept,
@@ -456,7 +457,8 @@ const expandHint = ref(false)
 let uploadHighlightTimer: number | null = null
 const promptInputRef = ref<HTMLTextAreaElement | null>(null)
 const isPolishing = ref(false)
-const mossLayoutEnabled = ref(true)
+// 分层布局默认关闭：开启后会多一次文本模型布局规划，失败时退回普通出图。
+const mossLayoutEnabled = ref(false)
 const layerEditorState = ref<LayerEditorState | null>(null)
 const historyOpen = ref(false)
 const paramsOpen = ref(false)
@@ -508,6 +510,11 @@ const supportsImageReferenceMode = computed(
 const modelLabel = computed(() => settingsStore.selectedModel || '未选择模型')
 const selectedStyleCount = computed(() => skillStore.selectedStyleSkillIds.length)
 const hasPolishModel = computed(() => settingsStore.promptPolishEnabled && !!settingsStore.promptPolishModel.trim())
+const polishButtonTitle = computed(() => {
+  if (!hasPolishModel.value) return '提示词增强已在设置中关闭'
+  const usesSkills = !isExpandMode.value && skillStore.effectiveSkillContents.length > 0
+  return usesSkills ? '按已选 Skill 规范改写提示词并补齐必要画面元素' : '用 AI 把简短描述扩写成更专业的提示词'
+})
 const imageAccept = computed(() => getLocalUploadAccept(settingsStore.selectedModel) || IMAGE_FILE_ACCEPT)
 
 const modeOptions = computed(() => [
@@ -956,16 +963,12 @@ async function handlePolish() {
   }
   isPolishing.value = true
   try {
-    inputText.value = await polishPrompt({
+    // 有已选 Skill 时按 Skill 规范改写并补齐元素，而不是脱离规范自由扩写。
+    inputText.value = await polishPromptWithSkills({
       model,
-      messages: [
-        {
-          role: 'system',
-          content: settingsStore.promptPolishSystemPrompt.trim() || DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT,
-        },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.7,
+      prompt,
+      skillContent: isExpandMode.value ? [] : skillStore.effectiveSkillContents,
+      systemPrompt: settingsStore.promptPolishSystemPrompt,
     })
     await nextTick()
     autoGrow()
@@ -1671,6 +1674,24 @@ onBeforeUnmount(() => {
   font-size: 10px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(8px);
+}
+
+.tile-note {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 0 8px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(8, 8, 10, 0.62);
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 9.5px;
+  font-weight: 600;
+  white-space: nowrap;
   backdrop-filter: blur(8px);
 }
 

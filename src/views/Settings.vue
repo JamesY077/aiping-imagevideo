@@ -74,7 +74,7 @@
         <div class="setting-toggle-row">
           <div class="setting-toggle-text">
             <strong>默认开启 AI 润色</strong>
-            <p class="field-hint">开启后，图片页与视频页的「AI 润色」按钮可直接使用，无需再填写模型 ID。</p>
+            <p class="field-hint">开启后，图片页与视频页的「AI 润色」按钮可直接使用，无需再填写模型 ID。已选 Skill 时，润色会按 Skill 规范改写提示词并补齐必要画面元素。</p>
           </div>
           <button
             class="toggle-switch"

@@ -35,6 +35,7 @@
         <span class="lightbox-meta">
           <span v-if="result?.aspectRatio">{{ result.aspectRatio }}</span>
           <span v-if="result?.size">{{ result.size.width }} × {{ result.size.height }}</span>
+          <span v-if="result?.layoutSkipped" class="lightbox-note">没有可编辑图层</span>
         </span>
         <div class="lightbox-buttons">
           <button class="lb-btn lb-btn-primary" type="button" @click="download">下载</button>
@@ -222,6 +223,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   color: rgba(255, 255, 255, 0.42);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+
+.lightbox-note {
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 10px;
+  line-height: 18px;
 }
 
 .lightbox-buttons {

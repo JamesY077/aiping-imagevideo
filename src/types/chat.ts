@@ -27,6 +27,8 @@ export interface GenerateResult {
   }
   /** Moss 分层布局：仅该模型生成的图片会携带，用于打开图层编辑器。 */
   layout?: MossLayout
+  /** 用户开启了分层布局，但本次未能规划出可编辑图层，已按普通图片正常输出。 */
+  layoutSkipped?: boolean
 }
 
 export interface Message {

@@ -174,7 +174,7 @@
                   class="ghost-pill"
                   type="button"
                   :disabled="isPolishing || activeSessionGenerating || !hasPromptPolishModelConfigured"
-                  :title="hasPromptPolishModelConfigured ? '用 AI 把简短描述扩写成更专业的镜头提示词' : polishDisabledReason"
+                  :title="polishButtonTitle"
                   @click="handlePolishPrompt"
                 >
                   {{ isPolishing ? '润色中…' : 'AI 润色' }}
@@ -914,12 +914,12 @@ import StudioHeader from '@/components/StudioHeader.vue'
 import StudioIsland from '@/components/StudioIsland.vue'
 import SkillPicker from '@/components/SkillPicker.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { DEFAULT_EXPAND_SYSTEM_PROMPT, DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT } from '@/stores/settingsStore'
+import { DEFAULT_EXPAND_SYSTEM_PROMPT } from '@/stores/settingsStore'
 import { useGenerate } from '@/composables/useGenerate'
 import { useChatStore } from '@/stores/chatStore'
 import { useSkillStore } from '@/stores/skillStore'
 
-import { polishPrompt } from '@/api/aiping'
+import { polishPromptWithSkills } from '@/features/skill/polish'
 import {
   ASPECT_RATIO_OPTIONS,
   getLocalUploadAccept,
@@ -1298,6 +1298,11 @@ const hasPromptPolishModelConfigured = computed(
   () => settingsStore.promptPolishEnabled && !!settingsStore.promptPolishModel.trim(),
 )
 const polishDisabledReason = '提示词增强已在设置中关闭，可在设置里重新开启'
+const polishButtonTitle = computed(() => {
+  if (!hasPromptPolishModelConfigured.value) return polishDisabledReason
+  const usesSkills = !isExpandMode.value && skillStore.effectiveSkillContents.length > 0
+  return usesSkills ? '按已选 Skill 规范改写提示词并补齐必要画面元素' : '用 AI 把简短描述扩写成更专业的镜头提示词'
+})
 
 const activeSessionGenerating = computed(() => chatStore.isGenerating)
 const modelCapability = computed(() => getModelCapability(settingsStore.selectedModel))
@@ -1313,7 +1318,8 @@ const isImageMultiReferenceMode = computed(
     modelCapability.value?.imageReferenceMode === 'multi',
 )
 const imageReferenceLimit = computed(() => modelCapability.value?.imageReferenceLimit ?? MULTIMODAL_LIMITS.image)
-const mossLayoutEnabled = ref(true)
+// 分层布局默认关闭，Moss 默认按普通图片生成，避免多一次布局规划与等待。
+const mossLayoutEnabled = ref(false)
 interface LayerEditorState {
   imageUrl: string
   layout: MossLayout
@@ -2295,21 +2301,14 @@ async function handlePolishPrompt() {
 
   isPolishing.value = true
   try {
-    inputText.value = await polishPrompt({
+    // 有已选 Skill 时按 Skill 规范改写并补齐元素；扩图模式忽略 Skill，保持原图不变。
+    inputText.value = await polishPromptWithSkills({
       model,
-      messages: [
-        {
-          role: 'system',
-          content: isExpandMode.value
-            ? DEFAULT_EXPAND_SYSTEM_PROMPT
-            : settingsStore.promptPolishSystemPrompt.trim() || DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT,
-        },
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-      temperature: 0.7,
+      prompt,
+      skillContent: isExpandMode.value ? [] : skillStore.effectiveSkillContents,
+      systemPrompt: isExpandMode.value
+        ? DEFAULT_EXPAND_SYSTEM_PROMPT
+        : settingsStore.promptPolishSystemPrompt,
     })
     await nextTick()
     promptInputRef.value?.focus()
