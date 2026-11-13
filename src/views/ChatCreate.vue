@@ -7119,7 +7119,7 @@ async function handleRegenerate(message: Message) {
 .skill-chip-thumb {
   display: block;
   width: 78px;
-  height: 58px;
+  height: 78px;
   border-radius: 11px;
   object-fit: cover;
   filter: saturate(0.86) brightness(0.74);
@@ -7173,6 +7173,7 @@ async function handleRegenerate(message: Message) {
   color: #08080a;
   font-size: 10px;
   font-weight: 800;
+  box-shadow: 0 0 0 1.5px rgba(8, 8, 10, 0.3);
   opacity: 0;
   transform: scale(0.6);
   transition:
@@ -7257,7 +7258,7 @@ async function handleRegenerate(message: Message) {
   }
 
   .skill-chip-thumb {
-    height: 52px;
+    height: 70px;
   }
 
   .skill-upload-group {
