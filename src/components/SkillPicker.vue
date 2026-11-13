@@ -90,10 +90,11 @@
           <img
             v-if="skill.thumbnail"
             class="skill-chip-thumb"
-            :src="assetUrl(skill.thumbnail)"
+            :src="getPreviewSrc(skill)"
             alt=""
             loading="lazy"
             decoding="async"
+            @error="handlePreviewError(skill, $event)"
           />
           <span class="skill-chip-name">{{ skill.name }}</span>
           <span class="skill-chip-check" aria-hidden="true">✓</span>
@@ -134,6 +135,7 @@ import { useRouter } from 'vue-router'
 import { MAX_ACTIVE_SKILLS, useSkillStore } from '@/stores/skillStore'
 import { readSkillFile } from '@/features/skill/parse'
 import { STYLE_SKILL_OPTIONS } from '@/features/skill/builtin'
+import { getSkillPreviewPath } from '@/features/skill/previews'
 import { showErrorMessage } from '@/utils/errors'
 import { assetUrl } from '@/utils/assets'
 
@@ -143,11 +145,13 @@ import { assetUrl } from '@/utils/assets'
  * layout=grid：多列网格（图片页右侧参数栏）。
  * 上传 Skill 最多 3 个，与内置风格卡同尺寸展示。
  */
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   layout?: 'rail' | 'grid'
   /** 仅上传入口：视频页不展示内置质量/风格 Skill。 */
   uploadOnly?: boolean
-}>(), { layout: 'rail', uploadOnly: false })
+  /** 当前选择的图片模型；示例图会按模型读取对应目录。 */
+  modelId?: string | null
+}>(), { layout: 'rail', uploadOnly: false, modelId: null })
 
 const router = useRouter()
 const skillStore = useSkillStore()
@@ -157,6 +161,27 @@ const skillFileInput = ref<HTMLInputElement | null>(null)
 const isUploadFull = computed(() => skillStore.activeSkills.length >= MAX_ACTIVE_SKILLS)
 /** 单份 Skill 只用于生成规范，超过 512KB 基本是误传，也容易撑爆 localStorage。 */
 const MAX_SKILL_FILE_BYTES = 512 * 1024
+/** 记录加载失败的「模型 + Skill」组合，失败后回落到公共示例图。 */
+const failedPreviewKeys = ref<string[]>([])
+
+function getPreviewSrc(skill: { id: string; thumbnail?: string }): string {
+  if (!skill.thumbnail) return ''
+  const key = `${props.modelId || 'base'}:${skill.id}`
+  const path = failedPreviewKeys.value.includes(key)
+    ? skill.thumbnail
+    : getSkillPreviewPath(skill, props.modelId)
+  return assetUrl(path || skill.thumbnail)
+}
+
+function handlePreviewError(skill: { id: string; thumbnail?: string }, event: Event) {
+  if (!skill.thumbnail) return
+  const key = `${props.modelId || 'base'}:${skill.id}`
+  if (!failedPreviewKeys.value.includes(key)) {
+    failedPreviewKeys.value = [...failedPreviewKeys.value, key]
+  }
+  // 立即回退，避免 404 后一直显示破图。
+  ;(event.currentTarget as HTMLImageElement).src = assetUrl(skill.thumbnail)
+}
 
 function skillInitial(name: string): string {
   const trimmed = (name || '').trim()

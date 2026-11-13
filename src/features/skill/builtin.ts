@@ -101,8 +101,9 @@ const STYLE_META: StyleMeta[] = [
   { id: 'dopamine', name: '多巴胺配色', description: '高饱和快乐色块、圆润形状、明快对比。' },
 ]
 
-// 示例图文件名必须与 Skill id 完全一致（/skill-previews/<id>.webp），
-// 否则生图页快捷按钮会只剩文字。
+// 示例图文件名必须与 Skill id 完全一致（/skill-previews/<id>.webp）；
+// 按模型区分的版本放在 /skill-previews/<model-slug>/<id>.webp，
+// 由 features/skill/previews.ts 解析，缺失时回落到公共示例图。
 const STYLE_SKILLS: BuiltinSkill[] = STYLE_META.map((meta) => ({
   id: meta.id,
   name: meta.name,

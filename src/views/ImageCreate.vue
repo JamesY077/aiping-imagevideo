@@ -277,7 +277,7 @@
               </button>
             </section>
 
-            <SkillPicker layout="grid" />
+            <SkillPicker layout="grid" :model-id="settingsStore.selectedModel" />
 
             <section v-if="isMossImageModel" class="rail-card">
               <div class="rail-switch-row">
