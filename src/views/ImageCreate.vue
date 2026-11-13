@@ -19,57 +19,6 @@
 
       <div class="image-body">
         <section class="workbench">
-          <!-- 提示词条 -->
-          <div class="prompt-card" :class="{ 'is-expand': isExpandMode }">
-            <div class="prompt-field">
-              <textarea
-                ref="promptInputRef"
-                v-model="inputText"
-                class="prompt-input"
-                :placeholder="promptPlaceholder"
-                rows="1"
-                @input="autoGrow"
-                @keydown="onPromptKeydown"
-              />
-              <div class="prompt-buttons">
-                <button
-                  class="ghost-pill"
-                  type="button"
-                  :disabled="isPolishing || isGenerating || !hasPolishModel"
-                  :title="hasPolishModel ? '用 AI 把简短描述扩写成更专业的提示词' : '请先在设置中配置 AI 润色模型'"
-                  @click="handlePolish"
-                >
-                  {{ isPolishing ? '润色中…' : 'AI 润色' }}
-                </button>
-                <button
-                  class="generate-btn"
-                  type="button"
-                  :disabled="!canSend"
-                  @click="handleSend"
-                >
-                  <template v-if="isGenerating">
-                    <span class="generate-spinner" aria-hidden="true" />
-                    {{ generatingProgress }}%
-                  </template>
-                  <template v-else>
-                    生成
-                    <span class="generate-kbd">⌘↵</span>
-                  </template>
-                </button>
-              </div>
-            </div>
-
-            <div class="prompt-chips">
-              <span class="pchip pchip-model">{{ modelLabel }}</span>
-              <span class="pchip">{{ modeLabel }}</span>
-              <span class="pchip">{{ settingsStore.aspectRatio }}</span>
-              <span class="pchip">{{ effectiveBatchSize }} 张</span>
-              <span v-if="selectedStyleCount" class="pchip pchip-accent">风格 × {{ selectedStyleCount }}</span>
-              <span v-if="isMossImageModel && mossLayoutEnabled" class="pchip">分层布局</span>
-              <button class="pchip pchip-action" type="button" @click="paramsOpen = true">参数</button>
-            </div>
-          </div>
-
           <!-- 结果区 -->
           <div class="gallery-area" :class="{ 'has-result': !!currentBatch }">
             <div v-if="!batches.length" class="gallery-empty">
@@ -168,6 +117,57 @@
                 </div>
               </div>
             </template>
+          </div>
+
+          <!-- 提示词条 -->
+          <div class="prompt-card" :class="{ 'is-expand': isExpandMode }">
+            <div class="prompt-field">
+              <textarea
+                ref="promptInputRef"
+                v-model="inputText"
+                class="prompt-input"
+                :placeholder="promptPlaceholder"
+                rows="1"
+                @input="autoGrow"
+                @keydown="onPromptKeydown"
+              />
+              <div class="prompt-buttons">
+                <button
+                  class="ghost-pill"
+                  type="button"
+                  :disabled="isPolishing || isGenerating || !hasPolishModel"
+                  :title="hasPolishModel ? '用 AI 把简短描述扩写成更专业的提示词' : '请先在设置中配置 AI 润色模型'"
+                  @click="handlePolish"
+                >
+                  {{ isPolishing ? '润色中…' : 'AI 润色' }}
+                </button>
+                <button
+                  class="generate-btn"
+                  type="button"
+                  :disabled="!canSend"
+                  @click="handleSend"
+                >
+                  <template v-if="isGenerating">
+                    <span class="generate-spinner" aria-hidden="true" />
+                    {{ generatingProgress }}%
+                  </template>
+                  <template v-else>
+                    生成
+                    <span class="generate-kbd">⌘↵</span>
+                  </template>
+                </button>
+              </div>
+            </div>
+
+            <div class="prompt-chips">
+              <span class="pchip pchip-model">{{ modelLabel }}</span>
+              <span class="pchip">{{ modeLabel }}</span>
+              <span class="pchip">{{ settingsStore.aspectRatio }}</span>
+              <span class="pchip">{{ effectiveBatchSize }} 张</span>
+              <span v-if="selectedStyleCount" class="pchip pchip-accent">风格 × {{ selectedStyleCount }}</span>
+              <span v-if="isMossImageModel && mossLayoutEnabled" class="pchip">分层布局</span>
+              <button class="pchip pchip-action" type="button" @click="paramsOpen = true">参数</button>
+            </div>
           </div>
         </section>
 
@@ -1393,18 +1393,32 @@ onBeforeUnmount(() => {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 2px 2px 8px;
+  padding: 2px 8px 8px 2px;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+  scrollbar-color: rgba(217, 205, 184, 0.3) rgba(255, 255, 255, 0.04);
+  overscroll-behavior: contain;
 }
 
 .gallery-area::-webkit-scrollbar {
-  width: 6px;
+  width: 9px;
+}
+
+.gallery-area::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .gallery-area::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(217, 205, 184, 0.34);
+  background-clip: padding-box;
+}
+
+.gallery-area::-webkit-scrollbar-thumb:hover {
+  background: rgba(217, 205, 184, 0.58);
+  background-clip: padding-box;
 }
 
 .gallery-empty {
@@ -1758,19 +1772,38 @@ onBeforeUnmount(() => {
   gap: 10px;
   flex: 1 1 auto;
   min-height: 0;
-  padding: 12px;
+  padding: 12px 8px 12px 12px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+  scrollbar-color: rgba(217, 205, 184, 0.36) rgba(255, 255, 255, 0.05);
+  overscroll-behavior: contain;
+}
+
+/* 参数卡片不允许被压缩：内容超出时交给滚动条，而不是把卡片裁掉。 */
+.rail-scroll > * {
+  flex: 0 0 auto;
 }
 
 .rail-scroll::-webkit-scrollbar {
-  width: 6px;
+  width: 9px;
+}
+
+.rail-scroll::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
 }
 
 .rail-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(217, 205, 184, 0.4);
+  background-clip: padding-box;
+}
+
+.rail-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(217, 205, 184, 0.62);
+  background-clip: padding-box;
 }
 
 .rail-card {
