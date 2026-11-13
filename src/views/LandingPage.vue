@@ -13,7 +13,7 @@
 
       <nav class="home-nav" aria-label="主导航">
         <a class="nav-link" href="#zones" @click.prevent="scrollToZones">创作分区</a>
-        <a class="nav-link" href="#inspiration" @click.prevent="scrollToInspiration">灵感模板</a>
+        <a class="nav-link" href="#inspiration" @click.prevent="scrollToInspiration">Skill 模板库</a>
       </nav>
 
       <button class="login-btn" type="button" @click="router.push('/setup')">
@@ -25,11 +25,11 @@
       <section class="hero" aria-labelledby="home-title">
         <p class="hero-kicker">AI Creative Studio</p>
         <h1 id="home-title">
-          三个工作台，<br />
+          四个工作台，<br />
           <span class="hero-gradient">一条完整的创作动线</span>
         </h1>
         <p class="hero-subtitle">
-          从一句灵感到成片，从画面到声音。选择你的创作分区，其余交给模型与画布。
+          从一句灵感到成片，从平面到三维。选择你的创作分区，其余交给模型与画布。
         </p>
 
         <div class="typewriter-card" aria-label="创作灵感">
@@ -79,59 +79,78 @@
         <div>
           <p class="section-kicker">Reusable Workflow</p>
           <h2 id="skill-template-title">Skill 模板库</h2>
+          <p class="template-desc">
+            每个 Skill 都是一份可复用的创作规范。点一下就能带上规范进入生图工作台，也可以下载 Markdown 自行修改。
+          </p>
         </div>
       </div>
 
       <div class="template-grid">
         <article
           v-for="item in skillTemplates"
-          :key="item.title"
+          :key="item.id"
           class="template-card skill-template-card"
           role="button"
           tabindex="0"
-          @click="handleSkillTemplateClick"
-          @keydown.enter.prevent="handleSkillTemplateClick"
-          @keydown.space.prevent="handleSkillTemplateClick"
+          @click="applySkill(item.id)"
+          @keydown.enter.prevent="applySkill(item.id)"
+          @keydown.space.prevent="applySkill(item.id)"
         >
-          <span class="template-visual" :class="[item.theme, { 'has-image': item.image }]">
-            <img v-if="item.image" :src="item.image" alt="" class="template-image" loading="lazy" decoding="async" />
-            <span v-else class="visual-glow" />
+          <span class="template-visual template-skill has-image">
+            <img :src="item.image" alt="" class="template-image" loading="lazy" decoding="async" />
             <button
               class="skill-download-btn"
               type="button"
               :aria-label="`下载 ${item.title} Skill 文件`"
-              @click.stop="handleSkillDownloadClick(item)"
+              @click.stop="downloadSkill(item.id)"
+              @keydown.enter.stop
+              @keydown.space.stop
             >
               下载
             </button>
           </span>
           <strong>{{ item.title }}</strong>
+          <p class="skill-card-desc">{{ item.desc }}</p>
         </article>
       </div>
-    </section>
 
-    <section class="template-section prompt-template-section" aria-labelledby="template-title">
-      <div class="template-head">
+      <div class="preset-head">
         <div>
-          <p class="section-kicker">Prompt Inspiration</p>
-          <h2 id="template-title">提示词模板库</h2>
+          <p class="section-kicker">Style Presets</p>
+          <h3>内置风格 Skill</h3>
+          <p>{{ presetSkills.length }} 种风格规范，点选后进入生图页会自动生效；悬停卡片右上角可单独下载。</p>
         </div>
+        <span class="preset-selected">已选 {{ skillStore.selectedStyleSkillIds.length }} 个</span>
       </div>
 
-      <div class="template-grid">
-        <button
-          v-for="item in templates"
-          :key="item.title"
-          class="template-card"
-          type="button"
-          @click="handleTemplateClick(item)"
+      <div class="preset-grid">
+        <article
+          v-for="skill in presetSkills"
+          :key="skill.id"
+          class="preset-card"
+          :class="{ active: skillStore.selectedStyleSkillIds.includes(skill.id) }"
         >
-          <span class="template-visual" :class="[item.theme, { 'has-image': item.image, 'is-zoomed': item.title === '影视爆炸现场' }]">
-            <img v-if="item.image" :src="item.image" alt="" class="template-image" loading="lazy" decoding="async" />
-            <span v-else class="visual-glow" />
-          </span>
-          <strong>{{ item.title }}</strong>
-        </button>
+          <button class="preset-apply" type="button" @click="applySkill(skill.id)">
+            <span class="preset-visual">
+              <img
+                v-if="skill.thumbnail"
+                :src="assetUrl(skill.thumbnail)"
+                :alt="skill.name"
+                loading="lazy"
+                decoding="async"
+              />
+            </span>
+            <span class="preset-name">{{ skill.name }}</span>
+          </button>
+          <button
+            class="preset-download"
+            type="button"
+            :aria-label="`下载 ${skill.name} Skill 文件`"
+            @click="downloadSkill(skill.id)"
+          >
+            ↓
+          </button>
+        </article>
       </div>
     </section>
   </div>
@@ -142,21 +161,26 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { hasActiveApiSession } from '@/api/config'
 import { assetUrl } from '@/utils/assets'
-
-const LANDING_PENDING_PROMPT_KEY = 'artrealm_landing_pending_prompt'
+import {
+  STYLE_SKILL_OPTIONS,
+  getBuiltinSkill,
+  getBuiltinSkillContent,
+} from '@/features/skill/builtin'
+import { useSkillStore } from '@/stores/skillStore'
 
 const router = useRouter()
+const skillStore = useSkillStore()
 const hasSession = ref(false)
 
 interface CreativeZone {
-  key: 'skill' | 'media' | 'voice'
+  key: 'skill' | 'media' | 'model3d' | 'voice'
   index: string
   icon: string
   title: string
   desc: string
   tags: string[]
   cta: string
-  target: 'skill' | 'image' | 'voice'
+  target: 'skill' | 'image' | 'model3d' | 'voice'
   soon?: boolean
 }
 
@@ -182,8 +206,18 @@ const zones: CreativeZone[] = [
     target: 'image',
   },
   {
-    key: 'voice',
+    key: 'model3d',
     index: '03',
+    icon: '◇',
+    title: '3D 建模',
+    desc: '文生 3D、图生 3D 与多视角重建：一句话或一张图，直接得到可预览、可下载的三维模型。',
+    tags: ['V2Fun', '文生 3D', '图生 3D', '多视角重建'],
+    cta: '进入 3D 工作台',
+    target: 'model3d',
+  },
+  {
+    key: 'voice',
+    index: '04',
     icon: '♪',
     title: '配音创作',
     desc: '文本转语音与声音复刻：音色、语速、语调、音量都能调，10 秒样本就能复刻自己的声音。',
@@ -193,93 +227,43 @@ const zones: CreativeZone[] = [
   },
 ]
 
-const skillTemplates = [
+const FEATURED_SKILLS: Array<{ id: string; title: string; desc: string }> = [
   {
-    title: '王家卫式霓虹孤独风格',
-    theme: 'template-skill',
-    image: assetUrl('/skill-wkw-neon-loneliness-style.webp'),
-    fileUrl: '/skills/wkw-neon-loneliness-style.md',
-    fileName: 'wkw-neon-loneliness-style.md',
+    id: 'wkw-neon-loneliness-style',
+    title: '王家卫式霓虹孤独',
+    desc: '霓虹单光源、湿面反光与长曝光拖影，把普通场景压成电影里的孤独片段。',
   },
   {
+    id: 'papercut-stop-motion-explainer',
     title: '剪纸定格动画',
-    theme: 'template-skill',
-    image: assetUrl('/skill-papercut-stop-motion-explainer.webp'),
-    fileUrl: '/skills/papercut-stop-motion-explainer.md',
-    fileName: 'papercut-stop-motion-explainer.md',
+    desc: '分层纸艺布景与逐帧手工运动，把抽象知识讲成可触摸的纸片世界。',
   },
   {
-    title: '手绘发光动画实拍融合',
-    theme: 'template-skill',
-    image: assetUrl('/skill-handdrawn-live-video-generator.webp'),
-    fileUrl: '/skills/handdrawn-live-video-generator.md',
-    fileName: 'handdrawn-live-video-generator.md',
+    id: 'handdrawn-live-video-generator',
+    title: '手绘发光实拍融合',
+    desc: '粗糙蜡笔线条在真实空间里点燃、变形、逃跑，做出会发光的实拍涂鸦。',
   },
   {
+    id: 'photo-to-minimal-vector-travel-poster',
     title: '极简旅行海报',
-    theme: 'template-skill',
-    image: assetUrl('/skill-photo-to-minimal-vector-travel-poster.webp'),
-    fileUrl: '/skills/photo-to-minimal-vector-travel-poster.md',
-    fileName: 'photo-to-minimal-vector-travel-poster.md',
+    desc: '从照片提炼主视觉，重构成留白克制、色块干净的高级矢量海报。',
   },
 ]
 
-const templates = [
-  {
-    title: 'F1 飞驰赛车',
-    prompt: 'F1 方程式赛车在赛道上高速飞驰，低机位广角镜头，车身运动模糊，轮胎带起火花与水雾，雨后赛道反光，电影级运动摄影，浅景深，强烈速度感，超清细节',
-    theme: 'template-race',
-    image: assetUrl('/template-f1.webp'),
-  },
-  {
-    title: 'iPhone 17 产品电商图',
-    prompt: 'iPhone 17 旗舰手机产品电商主图，钛金属边框高光，深色科技感背景，蓝紫渐变轮廓光，镜头模组与屏幕清晰展示，悬浮构图，商业产品摄影，高级质感，超清渲染',
-    theme: 'template-product',
-    image: assetUrl('/template-iphone17.webp'),
-  },
-  {
-    title: '科技感网页 UI',
-    prompt: '未来科技感网页 UI 界面设计，深色模式仪表盘，玻璃拟态数据卡片，蓝紫渐变数据可视化图表，悬浮导航栏，清晰信息层级，高清界面设计，现代极简',
-    theme: 'template-tech',
-    image: assetUrl('/template-webui.webp'),
-  },
-  {
-    title: '卡通兔子',
-    prompt: '可爱卡通兔子角色，软萌大眼睛，奶油白毛绒质感，治愈系绘本插画风格，柔和自然光，浅色温馨场景，精致细节，迪士尼级角色设计',
-    theme: 'template-commerce',
-    image: assetUrl('/template-rabbit.webp'),
-  },
-  {
-    title: '无线耳机结构解析',
-    prompt: '无线头戴式降噪耳机爆炸分解产品图，精密声学结构与内部电子组件清晰展示，USB-C 充电口、电池、驱动单元、麦克风阵列与记忆棉耳罩，工业设计图纸风格，深色科技背景，商业产品渲染，超清细节',
-    theme: 'template-commerce',
-    image: assetUrl('/template-headphones.webp'),
-  },
-  {
-    title: '影视爆炸现场',
-    prompt: '电影级爆炸现场，橙红色火球与黑色浓烟升腾，尘土碎片飞溅，冲击波，逆光剪影，广角构图，逼真影视特效，超高细节',
-    theme: 'template-monster',
-    image: assetUrl('/template-landscape.webp'),
-  },
-  {
-    title: '中世纪战士',
-    prompt: '中世纪战士角色，厚重金属铠甲，战损做旧，斗篷，手持长剑，阴天战场背景，电影级写实人像，戏剧性侧光，细腻质感，史诗氛围',
-    theme: 'template-hero',
-    image: assetUrl('/template-festival.webp'),
-  },
-  {
-    title: '专业相机三视图',
-    prompt: '专业数码相机产品三视图与爆炸分解展示，黑色机身，35mm f/2.0 定焦镜头，标注尺寸、按键与接口，工业设计图纸风格，商业产品展示，超清渲染',
-    theme: 'template-commerce',
-    image: assetUrl('/template-camera.webp'),
-  },
-]
+const skillTemplates = FEATURED_SKILLS.map((item) => ({
+  ...item,
+  image: assetUrl(getBuiltinSkill(item.id)?.thumbnail || ''),
+}))
+
+const featuredSkillIds = new Set(FEATURED_SKILLS.map((item) => item.id))
+/** 首页精选已单列，风格网格只展示其余内置 Skill，避免重复。 */
+const presetSkills = STYLE_SKILL_OPTIONS.filter((skill) => !featuredSkillIds.has(skill.id))
 
 const typewriterPhrases = [
-  'F1 方程式赛车在赛道上飞驰。',
-  'iPhone 17 旗舰手机产品电商主图。',
-  '未来科技感网页 UI 界面设计。',
-  '治愈系卡通兔子角色。',
+  '雨夜霓虹里，一个人慢慢走过街角。',
+  '把这张照片变成极简旅行海报。',
+  '用剪纸定格动画讲讲水循环。',
+  '一句话生成一个可旋转的 3D 手办。',
 ]
 
 const typewriterText = ref('')
@@ -336,46 +320,41 @@ function enterZone(zone: CreativeZone) {
   router.push(zone.target === 'skill' ? '/skill' : `/${zone.target}`)
 }
 
-function handleTemplateClick(item: { prompt: string }) {
-  sessionStorage.setItem(
-    LANDING_PENDING_PROMPT_KEY,
-    JSON.stringify({ prompt: item.prompt, hasReference: false }),
-  )
-
+function openImageWorkspace() {
   if (hasActiveApiSession()) {
-    router.push({
-      path: '/image',
-      query: {
-        mode: 'simple',
-        type: 'image',
-        prompt: item.prompt,
-      },
-    })
+    router.push({ path: '/image', query: { mode: 'simple', type: 'image' } })
     return
   }
-
   router.push({ path: '/setup', query: { redirect: 'image' } })
 }
 
-function handleSkillTemplateClick() {
-  if (hasActiveApiSession()) {
-    router.push('/skill')
-    return
+/** 首页应用 Skill：先选中这份规范，再进入生图页（Skill 选择会持久化到本地）。 */
+function applySkill(id: string) {
+  const skill = getBuiltinSkill(id)
+  if (skill && skill.category !== 'quality' && !skillStore.selectedStyleSkillIds.includes(id)) {
+    skillStore.toggleStyleSkill(id)
   }
-  router.push({ path: '/setup', query: { redirect: 'skill' } })
+  openImageWorkspace()
 }
 
-function handleSkillDownloadClick(item: { fileUrl: string; fileName: string }) {
+/** 内置 Skill 的正文就在前端包里，直接生成 Markdown 下载，不依赖 public 文件。 */
+function downloadSkill(id: string) {
+  const content = getBuiltinSkillContent(id)
+  if (!content.trim()) return
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
-  link.href = item.fileUrl
-  link.download = item.fileName
+  link.href = url
+  link.download = `${id}.md`
   document.body.appendChild(link)
   link.click()
   link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 onMounted(() => {
   hasSession.value = hasActiveApiSession()
+  skillStore.loadFromStorage()
   runTypewriter()
 })
 
@@ -684,11 +663,11 @@ onBeforeUnmount(() => {
   }
 }
 
-/* ---------- 三大分区 ---------- */
+/* ---------- 四大分区 ---------- */
 .zone-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
   scroll-margin-top: 110px;
 }
 
@@ -700,9 +679,9 @@ onBeforeUnmount(() => {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  min-height: 336px;
-  padding: 26px 26px 24px;
+  gap: 12px;
+  min-height: 320px;
+  padding: 24px 22px 22px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 28px;
@@ -723,6 +702,12 @@ onBeforeUnmount(() => {
   --zone-accent: #7fe0ff;
   --zone-accent-strong: #d6f7ff;
   --zone-glow: rgba(56, 189, 248, 0.34);
+}
+
+.zone-model3d {
+  --zone-accent: #8ef0c4;
+  --zone-accent-strong: #dcfff0;
+  --zone-glow: rgba(52, 211, 153, 0.30);
 }
 
 .zone-voice {
@@ -810,7 +795,7 @@ onBeforeUnmount(() => {
   margin-top: 4px;
   color: #fff;
   font-family: var(--font-family-display);
-  font-size: 25px;
+  font-size: 23px;
   font-weight: 800;
   letter-spacing: -0.04em;
 }
@@ -860,7 +845,7 @@ onBeforeUnmount(() => {
   color: rgba(255, 255, 255, 0.86);
 }
 
-/* ---------- 模板区 ---------- */
+/* ---------- Skill 模板库 ---------- */
 .template-section {
   position: relative;
   z-index: 2;
@@ -874,13 +859,9 @@ onBeforeUnmount(() => {
   scroll-margin-top: 110px;
 }
 
-.prompt-template-section {
-  margin-top: 0;
-}
-
 .template-head {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 18px;
@@ -900,6 +881,14 @@ onBeforeUnmount(() => {
   font-size: 22px;
   font-weight: 800;
   letter-spacing: -0.04em;
+}
+
+.template-desc {
+  max-width: 640px;
+  margin-top: 8px;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 12.5px;
+  line-height: 1.7;
 }
 
 .template-grid {
@@ -931,6 +920,17 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
+.skill-card-desc {
+  display: -webkit-box;
+  margin: 6px 0 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
 .template-visual {
   position: relative;
   display: block;
@@ -944,8 +944,7 @@ onBeforeUnmount(() => {
 }
 
 .template-visual::before,
-.template-visual::after,
-.visual-glow {
+.template-visual::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -957,11 +956,6 @@ onBeforeUnmount(() => {
 
 .template-visual::after {
   background: linear-gradient(180deg, transparent 50%, rgba(0, 0, 0, 0.36));
-}
-
-.visual-glow {
-  filter: blur(18px);
-  opacity: 0.58;
 }
 
 .template-image {
@@ -1004,42 +998,6 @@ onBeforeUnmount(() => {
   display: none;
 }
 
-.template-visual.is-zoomed .template-image {
-  transform: scale(1.08);
-}
-
-.template-product::before {
-  background: linear-gradient(135deg, #101722, #741a48 70%), radial-gradient(circle at 36% 38%, #f3ebce, transparent 0 20%);
-}
-
-.template-b2b::before {
-  background: linear-gradient(135deg, #2d7ab5, #d8eef6), radial-gradient(circle at 62% 44%, #ffffff, transparent 0 18%);
-}
-
-.template-tech::before {
-  background: radial-gradient(ellipse at 50% 50%, #dfeeff, transparent 0 16%), linear-gradient(135deg, #04080d, #182232);
-}
-
-.template-race::before {
-  background: linear-gradient(135deg, #d9e3e6, #1d2d36), radial-gradient(ellipse at 50% 68%, #101010, transparent 0 28%);
-}
-
-.template-monster::before {
-  background: linear-gradient(135deg, #2d1e1b, #e07936), radial-gradient(circle at 50% 50%, #1a100c, transparent 0 24%);
-}
-
-.template-commerce::before {
-  background: radial-gradient(circle at 64% 42%, #101010, transparent 0 18%), linear-gradient(135deg, #120303, #8e1113);
-}
-
-.template-hero::before {
-  background: linear-gradient(135deg, #bd2b23, #082f44 72%), radial-gradient(circle at 38% 45%, #f1a165, transparent 0 18%);
-}
-
-.template-stage::before {
-  background: linear-gradient(135deg, #dfe7ef, #46556d), radial-gradient(ellipse at 52% 74%, #ffffff, transparent 0 24%);
-}
-
 .template-skill::before {
   background:
     radial-gradient(circle at 68% 36%, rgba(255, 176, 202, 0.28), transparent 0 16%),
@@ -1051,19 +1009,182 @@ onBeforeUnmount(() => {
   border-color: rgba(116, 230, 255, 0.28);
 }
 
+/* ---------- 内置风格 Skill ---------- */
+
+.preset-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 40px 0 14px;
+  padding-top: 26px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.preset-head h3 {
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.preset-head p {
+  margin-top: 6px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.preset-selected {
+  flex: 0 0 auto;
+  padding: 5px 11px;
+  border: 1px solid rgba(116, 230, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(116, 230, 255, 0.08);
+  color: rgba(214, 247, 255, 0.82);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.preset-card {
+  position: relative;
+  min-width: 0;
+}
+
+.preset-apply {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.preset-visual {
+  position: relative;
+  display: block;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 16px;
+  background: #0a0a0d;
+  transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.preset-visual img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--transition-slow);
+}
+
+.preset-card:hover .preset-visual {
+  transform: translateY(-2px);
+  border-color: rgba(116, 230, 255, 0.32);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.34);
+}
+
+.preset-card:hover .preset-visual img {
+  transform: scale(1.045);
+}
+
+.preset-card.active .preset-visual {
+  border-color: rgba(116, 230, 255, 0.6);
+  box-shadow:
+    0 0 0 1px rgba(116, 230, 255, 0.45),
+    0 0 28px -8px rgba(116, 230, 255, 0.5);
+}
+
+.preset-card.active .preset-visual::after {
+  content: '✓';
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(116, 230, 255, 0.92);
+  color: #041018;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.preset-name {
+  display: block;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.preset-card.active .preset-name {
+  color: rgba(234, 252, 255, 0.92);
+}
+
+.preset-download {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  background: rgba(6, 10, 18, 0.62);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0;
+  backdrop-filter: blur(10px);
+  transition: opacity var(--transition-base), background var(--transition-base);
+}
+
+.preset-card:hover .preset-download,
+.preset-download:focus-visible {
+  opacity: 1;
+}
+
+.preset-download:hover {
+  background: rgba(9, 24, 52, 0.78);
+}
+
 @media (max-width: 1100px) {
+  .zone-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .template-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .preset-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 960px) {
   .home-nav {
     display: none;
-  }
-
-  .zone-grid {
-    grid-template-columns: 1fr;
   }
 
   .zone-card {
@@ -1145,8 +1266,29 @@ onBeforeUnmount(() => {
     border-radius: 24px;
   }
 
+  .zone-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .zone-index {
     font-size: 76px;
+  }
+
+  .preset-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 30px;
+    padding-top: 20px;
+  }
+
+  .preset-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .preset-name {
+    font-size: 11.5px;
   }
 
   .template-section {

@@ -1,312 +1,337 @@
 <template>
-  <div class="chat-page" :style="{ height: appHeight, '--app-height': appHeight, '--studio-accent': '#d9cdb8' }">
-    <StudioIsland />
-    <div class="workspace-shell single-session-layout">
+  <div class="video-page" :style="{ height: appHeight, '--app-height': appHeight, '--studio-accent': '#8fb6ff' }">
+    <StudioIsland v-show="!paramsOpen" />
+    <div class="video-shell">
       <StudioHeader
         kicker="Video Studio"
         title="视频生成"
-        subtitle="用一句话描述镜头、运动与氛围，选好时长与比例后开始生成"
+        subtitle="写好一句镜头描述，选好时长与比例，一次生成一组可以横向比较的视频"
         accent="#8fb6ff"
-      />
+      >
+        <template #actions>
+          <button class="header-action" type="button" @click="openHistory">
+            历史
+            <span v-if="videoBatches.length" class="header-action-count">{{ videoBatches.length }}</span>
+          </button>
+        </template>
+      </StudioHeader>
 
-
-      <main class="workspace-main">
-        <section class="chat-stage">
-          <header class="studio-panel-head chat-stage-head">
-            <div class="studio-panel-headings">
-              <span class="studio-kicker">Conversation</span>
-              <h2 class="studio-panel-title">创作对话</h2>
-            </div>
-            <span class="studio-panel-meta">{{ activeMessages.length }} 条</span>
-          </header>
-          <div class="chat-area" ref="chatAreaRef">
-            <div v-if="activeMessages.length === 0" class="empty-state">
-              <span class="empty-badge" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 3.4 13.8 8.6 19 10.4 13.8 12.2 12 17.4 10.2 12.2 5 10.4 10.2 8.6z" />
-                  <path d="M18.4 15.6v3.2M16.8 17.2h3.2" />
+      <div class="video-body">
+        <section class="workbench">
+          <!-- 结果画廊 -->
+          <div class="gallery-area" :class="{ 'has-result': !!currentVideoBatch }">
+            <div v-if="!videoBatches.length" class="gallery-empty">
+              <span class="empty-mark" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2.6" y="5.4" width="12.6" height="13.2" rx="3" />
+                  <path d="m15.2 10.6 4.9-3a.8.8 0 0 1 1.2.7v7.4a.8.8 0 0 1-1.2.7l-4.9-3" />
+                  <path d="M9 10v4.4L12.4 12z" fill="currentColor" stroke="none" />
                 </svg>
               </span>
-              <p class="empty-kicker">Image &amp; Video Studio</p>
-              <h1>把一句想法，变成可交付的画面。</h1>
-              <p class="empty-copy">描述主体、风格、光线、构图和用途；生成、查看、下载与迭代都在这一块工作台里完成。</p>
-
-              <div class="quick-starts">
+              <h2>写好一句镜头描述，出第一条视频。</h2>
+              <p>说清主体、动作、运镜、节奏与氛围。生成后可以在这里播放、比较、下载或重生成。</p>
+              <div class="starters">
                 <button
                   v-for="item in quickStarts"
                   :key="item.title"
-                  class="quick-start"
+                  class="starter"
                   type="button"
                   @click="applyQuickPrompt(item.prompt)"
                 >
-                  <span class="quick-start-head">
-                    <span class="quick-start-title">{{ item.title }}</span>
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                    </svg>
-                  </span>
-                  <span class="quick-start-desc">{{ item.desc }}</span>
+                  <span class="starter-title">{{ item.title }}</span>
+                  <span class="starter-desc">{{ item.desc }}</span>
                 </button>
               </div>
             </div>
 
+            <template v-else-if="currentVideoBatch">
+              <header class="batch-bar">
+                <div class="batch-copy">
+                  <p class="batch-prompt">{{ currentVideoBatch.prompt || '视频生成' }}</p>
+                  <div class="batch-meta">
+                    <span>{{ currentVideoBatch.model || selectedModelLabel }}</span>
+                    <span v-if="currentVideoBatch.aspectRatio">{{ currentVideoBatch.aspectRatio }}</span>
+                    <span v-if="currentVideoBatch.duration">{{ currentVideoBatch.duration }}s</span>
+                    <span v-if="currentVideoBatch.results.length">{{ currentVideoBatch.results.length }} 条</span>
+                    <span>{{ formatTime(currentVideoBatch.createdAt) }}</span>
+                  </div>
+                </div>
+                <div class="batch-actions">
+                  <button class="ghost-pill" type="button" :disabled="activeSessionGenerating" @click="regenerateBatch(currentVideoBatch)">
+                    重生成
+                  </button>
+                  <button class="ghost-pill" type="button" @click="reusePrompt(currentVideoBatch)">
+                    用这段提示词
+                  </button>
+                </div>
+              </header>
 
-            <ChatBubble
-              v-for="msg in activeMessages"
-              :key="msg.id"
-              :message="msg"
-              @regenerate="handleRegenerate"
-              @copy-prompt="handleCopyPrompt"
-              @expand-image="handleExpandImage"
-              @edit-layers="handleEditLayers"
-            />
+              <div v-if="currentVideoBatch.partialError" class="batch-warning">
+                {{ currentVideoBatch.partialError }}
+              </div>
 
-            <div v-if="!hasUserMessages" class="quick-start-block">
-              <p class="quick-start-label">试试这些起点</p>
-              <div class="quick-starts">
-                <button
-                  v-for="item in quickStarts"
-                  :key="item.title"
-                  class="quick-start"
-                  type="button"
-                  @click="applyQuickPrompt(item.prompt)"
-                >
-                  <span class="quick-start-head">
-                    <span class="quick-start-title">{{ item.title }}</span>
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                    </svg>
-                  </span>
-                  <span class="quick-start-desc">{{ item.desc }}</span>
+              <div v-if="currentVideoBatch.status === 'failed'" class="batch-error">
+                <p>{{ currentVideoBatch.error || '这一轮生成失败了。' }}</p>
+                <button class="ghost-pill" type="button" :disabled="activeSessionGenerating" @click="regenerateBatch(currentVideoBatch)">
+                  再试一次
                 </button>
               </div>
+
+              <div
+                class="video-grid"
+                :class="{ 'is-single': gridColumns === 1 }"
+                :style="{ '--cols': gridColumns }"
+              >
+                <figure
+                  v-for="(result, index) in currentVideoBatch.results"
+                  :key="result.url"
+                  class="video-tile"
+                  @click="openVideoPreview(index)"
+                >
+                  <video
+                    :src="result.url"
+                    :poster="result.thumbnail || undefined"
+                    preload="metadata"
+                    muted
+                    playsinline
+                  />
+                  <span class="tile-index">{{ index + 1 }}</span>
+                  <span class="tile-play" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 6.4v11.2l9.2-5.6z" /></svg>
+                  </span>
+                  <figcaption class="tile-overlay">
+                    <div class="tile-tools">
+                      <button class="tile-btn" type="button" @click.stop="openVideoPreview(index)">播放</button>
+                      <button class="tile-btn" type="button" @click.stop="downloadVideoResult(result)">下载</button>
+                      <button class="tile-btn" type="button" @click.stop="regenerateBatch(currentVideoBatch)">重生成</button>
+                    </div>
+                    <span class="tile-size">{{ videoMetaLabel(result) }}</span>
+                  </figcaption>
+                </figure>
+
+                <div v-for="n in pendingCount" :key="`pending-${n}`" class="video-tile tile-pending">
+                  <span class="tile-shimmer" aria-hidden="true" />
+                  <span class="tile-pending-text">
+                    {{ currentVideoBatch.progress ? `生成中 ${currentVideoBatch.progress}%` : '排队中' }}
+                  </span>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- 底部提示词条 -->
+          <div class="prompt-card">
+            <div v-if="referencedMentions.length" class="referenced-mentions" aria-label="已引用素材">
+              <span class="referenced-mentions-label">已引用</span>
+              <span
+                v-for="item in referencedMentions"
+                :key="item.url"
+                class="referenced-chip"
+                :class="`referenced-chip-${mentionKind(item)}`"
+              >
+                <span class="referenced-chip-dot" aria-hidden="true" />
+                {{ item.refLabel }}
+              </span>
+            </div>
+
+            <div class="prompt-field">
+              <div
+                v-if="showMentionMenu && mentionableAssets.length"
+                ref="mentionMenuRef"
+                class="mention-menu"
+                :style="mentionMenuStyle"
+                role="listbox"
+                aria-label="选择参考素材"
+              >
+                <button
+                  v-for="(item, index) in mentionableAssets"
+                  :key="item.url"
+                  type="button"
+                  class="mention-item"
+                  :class="{ active: index === activeMentionIndex }"
+                  @mousedown.prevent="insertMentionReference(item)"
+                  @mouseenter="activeMentionIndex = index"
+                >
+                  <span class="mention-item-tag">{{ item.refLabel }}</span>
+                  <span class="mention-item-name">{{ item.name }}</span>
+                </button>
+              </div>
+
+              <textarea
+                ref="promptInputRef"
+                v-model="inputText"
+                class="prompt-input"
+                :placeholder="inputPlaceholder"
+                rows="1"
+                @input="handlePromptInput"
+                @keyup="handlePromptInput"
+                @click="handlePromptInput"
+                @keydown="handleComposerKeydown"
+              />
+
+              <div class="prompt-buttons">
+                <button
+                  class="ghost-pill"
+                  type="button"
+                  :disabled="isPolishing || activeSessionGenerating || !hasPromptPolishModelConfigured"
+                  :title="hasPromptPolishModelConfigured ? '用 AI 把简短描述扩写成更专业的镜头提示词' : polishDisabledReason"
+                  @click="handlePolishPrompt"
+                >
+                  {{ isPolishing ? '润色中…' : 'AI 润色' }}
+                </button>
+                <button
+                  class="generate-btn"
+                  type="button"
+                  :disabled="!canSend || activeSessionGenerating"
+                  @click="handleSend"
+                >
+                  <template v-if="activeSessionGenerating">
+                    <span class="generate-spinner" aria-hidden="true" />
+                    {{ generatingProgress }}%
+                  </template>
+                  <template v-else>
+                    生成
+                    <span class="generate-kbd">⌘↵</span>
+                  </template>
+                </button>
+              </div>
+            </div>
+
+            <div class="prompt-chips">
+              <span class="pchip pchip-model">{{ selectedModelLabel }}</span>
+              <span class="pchip">{{ activeGenerateModeLabel }}</span>
+              <span class="pchip">{{ settingsStore.aspectRatio }}</span>
+              <span class="pchip">{{ selectedVideoDurationLabel }}</span>
+              <span v-if="isMinimaxH3VideoModel" class="pchip">{{ settingsStore.videoResolution }}</span>
+              <span class="pchip">{{ settingsStore.batchSize }} 个</span>
+              <span v-if="materialSummaryLabel" class="pchip" :class="{ 'pchip-warn': needsMaterialAttention }">
+                {{ materialSummaryLabel }}
+              </span>
+              <button class="pchip pchip-action" type="button" @click="paramsOpen = true">参数</button>
             </div>
           </div>
         </section>
 
-        <section class="composer-dock">
-          <div class="composer-bar">
-            <div class="composer-tabs" aria-label="创作模式">
-              <span class="composer-tab is-active composer-tab-static">视频模式</span>
-            </div>
-            <span class="composer-bar-model" :title="`${selectedModelLabel} ${selectedVideoDurationLabel}`">
-              <span class="composer-bar-dot" aria-hidden="true" />
-              {{ selectedModelLabel }}
-              <span v-if="settingsStore.mediaType === 'video'" class="composer-bar-extra">{{ selectedVideoDurationLabel }}</span>
-            </span>
+        <!-- 右侧参数栏 -->
+        <aside class="param-rail" :class="{ 'is-open': paramsOpen }">
+          <div class="rail-head">
+            <span class="rail-title">参数</span>
+            <button class="rail-close" type="button" aria-label="收起参数" @click="paramsOpen = false">✕</button>
           </div>
 
-          <div class="composer-console">
-            <div id="composer-control-panel" class="composer-control-panel">
-              <div class="composer-section-head">
-                <span class="composer-section-title">参数设置</span>
-                <span class="composer-section-meta">
-                  <span class="composer-section-chip">{{ mediaTypeLabel }}</span>
-                  <span class="composer-section-chip">{{ activeGenerateModeLabel }}</span>
-                  <span
-                    v-if="materialSummaryLabel"
-                    class="composer-section-chip"
-                    :class="{ attention: needsMaterialAttention }"
-                  >
-                    {{ materialSummaryLabel }}
-                  </span>
-                </span>
+          <div class="rail-scroll">
+            <section class="rail-card">
+              <span class="rail-label">模型</span>
+              <ModelSelector
+                key="video-model"
+                v-model="settingsStore.selectedModel"
+                media-type="video"
+                compact
+                @update:model-value="settingsStore.saveToStorage()"
+              />
+            </section>
+
+            <section class="rail-card">
+              <span class="rail-label">生成方式</span>
+              <div class="chip-row">
+                <button
+                  v-for="option in activeVideoModeOptions"
+                  :key="option.value"
+                  class="chip"
+                  :class="{ active: videoMode === option.value }"
+                  type="button"
+                  @click="setVideoMode(option.value)"
+                >
+                  {{ option.label }}
+                </button>
               </div>
-              <div class="composer-meta-row composer-meta-row-top">
-                <div class="dock-pills dock-pills-primary">
-              <div class="meta-pill meta-pill-model">
-                <span class="meta-pill-label">模型选择</span>
-                <div class="model-slot compact-model-slot">
-                  <ModelSelector
-                    :key="settingsStore.mediaType"
-                    :mediaType="settingsStore.mediaType"
-                    compact
-                    :disabled="isExpandMode"
-                    v-model="settingsStore.selectedModel"
-                    @update:modelValue="settingsStore.saveToStorage()"
-                  />
-                </div>
+            </section>
+
+            <section class="rail-card">
+              <span class="rail-label">比例</span>
+              <div class="ratio-grid">
+                <button
+                  v-for="option in aspectRatioOptions"
+                  :key="option.value"
+                  class="ratio-chip"
+                  :class="{ active: settingsStore.aspectRatio === option.value }"
+                  type="button"
+                  :disabled="isFrameRatioLocked || isEditVideoMode || isReferenceVideoRatioLocked"
+                  @click="selectAspectRatio(option.value)"
+                >
+                  <span class="ratio-box" :style="{ width: `${option.boxWidth}px`, height: `${option.boxHeight}px` }" />
+                  <span class="ratio-text">{{ option.label }}</span>
+                </button>
               </div>
+              <p v-if="isFrameRatioLocked" class="rail-hint">图生 / 尾帧 / 首尾帧模式下，视频比例由上传图片决定。</p>
+              <p v-if="isEditVideoMode" class="rail-hint">编辑视频模式下，输出比例与时长跟随被编辑的原视频。</p>
+              <p v-if="isReferenceVideoRatioLocked" class="rail-hint">带参考视频时，输出比例跟随参考视频。</p>
+            </section>
 
-              <div v-if="settingsStore.mediaType === 'image'" class="meta-pill meta-pill-mode">
-                <span class="meta-pill-label">生成方式</span>
-                <div class="video-mode-switch compact-switch" role="tablist" aria-label="图片生成方式">
-                  <button
-                    v-for="option in imageModeOptions"
-                    :key="option.value"
-                    class="switch-btn mode-switch-btn"
-                    :class="{ active: imageMode === option.value }"
-                    type="button"
-                    :disabled="option.value === 'image2image' && !supportsImageReferenceMode"
-                    @click="setImageMode(option.value)"
-                  >
-                    {{ option.label }}
-                  </button>
-                </div>
+            <section v-if="isMinimaxH3VideoModel" class="rail-card">
+              <span class="rail-label">分辨率</span>
+              <div class="chip-row">
+                <button
+                  class="chip"
+                  :class="{ active: settingsStore.videoResolution === '768P' }"
+                  type="button"
+                  @click="selectVideoResolution('768P')"
+                >
+                  768P
+                </button>
+                <button
+                  class="chip"
+                  :class="{ active: settingsStore.videoResolution === '2K' }"
+                  type="button"
+                  @click="selectVideoResolution('2K')"
+                >
+                  2K
+                </button>
               </div>
+            </section>
 
-              <div v-else-if="usesViduLikeVideoMode" class="meta-pill meta-pill-mode">
-                <span class="meta-pill-label">生成方式</span>
-                <div class="video-mode-switch compact-switch" role="tablist" aria-label="视频生成方式">
-                  <button
-                    v-for="option in activeVideoModeOptions"
-                    :key="option.value"
-                    class="switch-btn mode-switch-btn"
-                    :class="{ active: videoMode === option.value }"
-                    type="button"
-                    @click="setVideoMode(option.value)"
-                  >
-                    {{ option.label }}
-                  </button>
-                </div>
+            <section class="rail-card">
+              <span class="rail-label">时长</span>
+              <div class="chip-row">
+                <button
+                  v-for="option in videoDurationOptions"
+                  :key="option.value"
+                  class="chip"
+                  :class="{ active: settingsStore.videoDuration === option.value }"
+                  type="button"
+                  :disabled="isEditVideoMode"
+                  @click="selectVideoDuration(option.value)"
+                >
+                  {{ option.label }}
+                </button>
               </div>
+              <p v-if="isEditVideoMode" class="rail-hint">输出时长跟随被编辑的原视频。</p>
+            </section>
 
-              <div class="meta-pill meta-pill-ratio" :class="{ 'ratio-locked': isFrameRatioLocked || isReferenceVideoRatioLocked }">
-                <span class="meta-pill-label">{{ isExpandMode ? '扩图比例' : '比例' }}</span>
-                <div class="duration-selector">
-                  <div class="duration-select-wrap">
-                    <select
-                      v-if="isFrameRatioLocked || isEditVideoMode || isReferenceVideoRatioLocked"
-                      class="duration-select"
-                      disabled
-                      :aria-label="isEditVideoMode ? '比例由被编辑的原视频决定' : isReferenceVideoRatioLocked ? '比例由参考视频决定' : '比例由上传图片决定'"
-                    >
-                      <option>{{ isReferenceVideoRatioLocked ? '跟随参考视频' : isEditVideoMode ? '跟随原视频' : '跟随图片' }}</option>
-                    </select>
-                    <select
-                      v-else
-                      class="duration-select"
-                      :value="settingsStore.aspectRatio"
-                      aria-label="选择比例"
-                      @change="onAspectRatioSelect"
-                    >
-                      <option v-for="option in aspectRatioOptions" :key="option.value" :value="option.value">
-                        {{ option.label }}
-                      </option>
-                    </select>
-                    <span class="duration-caret" aria-hidden="true">▾</span>
-                  </div>
-                </div>
+            <section class="rail-card">
+              <span class="rail-label">单轮数量</span>
+              <div class="chip-row">
+                <button
+                  v-for="size in [1, 2, 4, 5]"
+                  :key="size"
+                  class="chip chip-count"
+                  :class="{ active: settingsStore.batchSize === size }"
+                  type="button"
+                  @click="selectVideoBatchSize(size)"
+                >
+                  {{ size }}
+                </button>
               </div>
+              <p class="rail-hint">每个任务独立计时，整体上限 60 分钟。</p>
+            </section>
 
-              <div v-if="isMinimaxH3VideoModel" class="meta-pill meta-pill-duration">
-                <span class="meta-pill-label">分辨率</span>
-                <div class="duration-selector">
-                  <div class="duration-select-wrap">
-                    <select
-                      id="video-resolution"
-                      v-model="settingsStore.videoResolution"
-                      class="duration-select"
-                      @change="settingsStore.saveToStorage()"
-                    >
-                      <option value="768P">768P</option>
-                      <option value="2K">2K</option>
-                    </select>
-                    <span class="duration-caret" aria-hidden="true">▾</span>
-                  </div>
-                </div>
-              </div>
-
-              <div v-if="settingsStore.mediaType === 'video'" class="meta-pill meta-pill-duration duration-slot">
-                <span class="meta-pill-label">时长</span>
-                <div class="duration-selector">
-                  <div class="duration-select-wrap">
-                    <select
-                      v-if="isEditVideoMode"
-                      id="video-duration"
-                      class="duration-select"
-                      disabled
-                      aria-label="时长由被编辑的原视频决定"
-                    >
-                      <option>跟随原视频</option>
-                    </select>
-                    <select
-                      v-else
-                      id="video-duration"
-                      v-model="settingsStore.videoDuration"
-                      class="duration-select"
-                      @change="settingsStore.saveToStorage()"
-                    >
-                      <option v-for="option in videoDurationOptions" :key="option.value" :value="option.value">
-                        {{ option.label }}
-                      </option>
-                    </select>
-                    <span class="duration-caret" aria-hidden="true">▾</span>
-                  </div>
-                </div>
-              </div>
-
-              <div v-if="!isExpandMode" class="meta-pill meta-pill-duration duration-slot batch-size-slot">
-                <span class="meta-pill-label">单轮数量</span>
-                <div class="duration-selector">
-                  <div class="duration-select-wrap">
-                    <select
-                      id="batch-size"
-                      v-model.number="settingsStore.batchSize"
-                      class="duration-select"
-                      @change="settingsStore.saveToStorage()"
-                    >
-                      <option v-for="size in [1, 2, 4, 5]" :key="size" :value="size">{{ size }} 个</option>
-                    </select>
-                    <span class="duration-caret" aria-hidden="true">▾</span>
-                  </div>
-                </div>
-              </div>
-
-              <div v-if="isMossImageModel && !isExpandMode" class="meta-pill meta-pill-layout">
-                <span class="meta-pill-label">分层布局</span>
-                <div class="video-mode-switch compact-switch" role="tablist" aria-label="Moss 分层布局">
-                  <button
-                    class="switch-btn mode-switch-btn"
-                    :class="{ active: mossLayoutEnabled }"
-                    type="button"
-                    @click="mossLayoutEnabled = true"
-                  >
-                    按图层
-                  </button>
-                  <button
-                    class="switch-btn mode-switch-btn"
-                    :class="{ active: !mossLayoutEnabled }"
-                    type="button"
-                    @click="mossLayoutEnabled = false"
-                  >
-                    整图
-                  </button>
-                </div>
-              </div>
-
-            </div>
-
-            <p v-if="isFrameRatioLocked" class="ratio-lock-note">
-              图生 / 尾帧 / 首尾帧模式下，视频比例由上传图片决定，不支持手动调整
-            </p>
-            <p v-if="isEditVideoMode" class="ratio-lock-note">
-              编辑视频模式下，输出比例与时长跟随被编辑的原视频（原视频需 4-30 秒）
-            </p>
-            <p v-if="isReferenceVideoRatioLocked" class="ratio-lock-note">
-              多模态参考带参考视频时，输出比例跟随参考视频（自适应），不支持手动调整
-            </p>
-            <p v-if="videoMode === 'startEnd2video'" class="ratio-lock-note">
-              首尾帧上传图片比例需要一致
-            </p>
-            <p v-if="isExpandMode" class="ratio-lock-note expand-mode-note">
-              扩图模式固定使用 Qwen-Image-2.0-Pro；请上传原图并选择与原图不同的目标比例。
-            </p>
-            <p v-if="isExpandMode && isExpandRatioSame" class="ratio-lock-note expand-ratio-warning">
-              当前扩图比例与原图一致，请选择其他比例后再发送。
-            </p>
-            <p v-if="isMossImageModel && mossLayoutEnabled && !isExpandMode" class="ratio-lock-note">
-              会先用文本模型把描述拆成图层与位置（约 5-10 秒），再用 Moss 按布局出图；生成后可在结果卡片点「图层」进入编辑。
-            </p>
-
-
-
-            <!-- 运镜指令（MiniMax 海螺系列：文生 / 图生 / 首尾帧）单独一行，避免挤压上方胶囊 -->
-            <div v-if="showCameraGuide" class="camera-guide-row">
+            <section v-if="showCameraGuide" class="rail-card">
+              <span class="rail-label">运镜指令</span>
               <CameraMovementGuide compact @insert="insertCameraCommand" />
-            </div>
+            </section>
 
-            <div v-if="showReferenceField" class="reference-strip">
+            <section v-if="showReferenceField" class="rail-card rail-card-upload">
+              <span class="rail-label">素材</span>
 
               <template v-if="usesViduLikeVideoMode">
 
@@ -714,99 +739,85 @@
                 class="reference-input"
                 placeholder="粘贴参考图片或视频链接"
               />
-              </div>
 
-              <SkillPicker v-if="!isExpandMode" upload-only />
+            </section>
+
+            <SkillPicker v-if="!isExpandMode" upload-only />
+          </div>
+        </aside>
+
+        <div v-if="paramsOpen" class="rail-backdrop" @click="paramsOpen = false" />
+      </div>
+    </div>
+
+    <!-- 历史抽屉 -->
+    <Teleport to="body">
+      <div v-if="historyOpen" class="history-mask" @click.self="historyOpen = false">
+        <aside class="history-panel">
+          <header class="history-head">
+            <div>
+              <span class="history-kicker">History</span>
+              <h3>生成历史</h3>
             </div>
-            <p class="composer-panel-foot">
-              {{ isExpandMode ? '扩图模式固定使用 Qwen-Image-2.0-Pro；上传原图、选择目标比例即可开始。' : '参数会随模型自动收窄；内容较多时可上下滚动。' }}
-            </p>
-          </div>
-          </div>
+            <button class="history-close" type="button" aria-label="关闭历史" @click="historyOpen = false">✕</button>
+          </header>
 
-          <div v-if="referencedMentions.length" class="referenced-mentions" aria-label="已引用素材">
-            <span class="referenced-mentions-label">已引用</span>
-            <span
-              v-for="item in referencedMentions"
-              :key="item.url"
-              class="referenced-chip"
-              :class="`referenced-chip-${mentionKind(item)}`"
+          <p v-if="!videoBatches.length" class="history-empty">还没有生成记录，先写下第一句镜头描述吧。</p>
+
+          <ul v-else class="history-list">
+            <li
+              v-for="batch in videoBatches"
+              :key="batch.id"
+              class="history-item"
+              :class="{ active: currentVideoBatch?.id === batch.id }"
             >
-              <span class="referenced-chip-dot" aria-hidden="true" />
-              {{ item.refLabel }}
-            </span>
-          </div>
-
-          <div class="input-shell">
-            <div
-              v-if="showMentionMenu && mentionableAssets.length"
-              ref="mentionMenuRef"
-              class="mention-menu"
-              :style="mentionMenuStyle"
-              role="listbox"
-              aria-label="选择参考素材"
-            >
-              <button
-                v-for="(item, index) in mentionableAssets"
-                :key="item.url"
-                type="button"
-                class="mention-item"
-                :class="{ active: index === activeMentionIndex }"
-                @mousedown.prevent="insertMentionReference(item)"
-                @mouseenter="activeMentionIndex = index"
-              >
-                <span class="mention-item-tag">{{ item.refLabel }}</span>
-                <span class="mention-item-name">{{ item.name }}</span>
-              </button>
-            </div>
-            <textarea
-              ref="promptInputRef"
-              v-model="inputText"
-              :placeholder="inputPlaceholder"
-              :style="{ height: `${composerTextareaHeight}px` }"
-              @input="handlePromptInput"
-              @keyup="handlePromptInput"
-              @click="handlePromptInput"
-              @keydown="handleComposerKeydown"
-            />
-
-
-            <div class="composer-actions">
-              <span class="composer-hint">支持 @ 引用素材</span>
-              <button
-                class="polish-btn"
-                :disabled="isPolishing || activeSessionGenerating || !hasPromptPolishModelConfigured"
-                :title="!hasPromptPolishModelConfigured ? polishDisabledReason : ''"
-                :aria-label="!hasPromptPolishModelConfigured ? polishDisabledReason : 'AI 润色'"
-                @click="handlePolishPrompt"
-              >
-                {{ isPolishing ? '润色中…' : 'AI 润色' }}
-              </button>
-              <button
-                class="send-btn send-icon-btn"
-                :class="{ ready: canSend && !activeSessionGenerating }"
-                :disabled="!canSend || activeSessionGenerating"
-                @click="handleSend"
-              >
-                <span class="send-gradient-icon" :class="{ 'is-ready': canSend && !activeSessionGenerating }" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <path d="M4 12.75L19.5 4.5L15.75 19.5L11.25 13.5L4 12.75Z" :stroke="canSend && !activeSessionGenerating ? 'currentColor' : 'url(#chatSendGradient)'" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                    <path d="M10.75 13.25L19.5 4.5" :stroke="canSend && !activeSessionGenerating ? 'currentColor' : 'url(#chatSendGradient)'" stroke-width="1.8" stroke-linecap="round" />
-                    <defs>
-                      <linearGradient id="chatSendGradient" x1="4" y1="4.5" x2="19.5" y2="19.5" gradientUnits="userSpaceOnUse">
-                        <stop offset="0" stop-color="#24262d" />
-                        <stop offset="0.55" stop-color="#3a3f47" />
-                        <stop offset="1" stop-color="#0a84ff" />
-                      </linearGradient>
-                    </defs>
-                  </svg>
+              <button class="history-item-btn" type="button" @click="selectBatch(batch.id)">
+                <span class="history-thumb">
+                  <img v-if="batch.results[0]" :src="batch.results[0].thumbnail || batch.results[0].url" alt="" loading="lazy" />
+                  <span v-else class="history-thumb-empty">{{ batch.status === 'failed' ? '!' : '…' }}</span>
+                </span>
+                <span class="history-copy">
+                  <span class="history-prompt">{{ batch.prompt || '视频生成' }}</span>
+                  <span class="history-meta">
+                    {{ formatTime(batch.createdAt) }} · {{ batch.results.length }} 条
+                    <template v-if="batch.aspectRatio"> · {{ batch.aspectRatio }}</template>
+                  </span>
                 </span>
               </button>
+            </li>
+          </ul>
+        </aside>
+      </div>
+    </Teleport>
+
+    <!-- 视频预览 -->
+    <Teleport to="body">
+      <div v-if="previewOpen && previewResult" class="video-preview-mask" @click.self="closeVideoPreview">
+        <div class="video-preview" role="dialog" aria-modal="true" aria-label="视频预览">
+          <header class="video-preview-head">
+            <div>
+              <span class="video-preview-kicker">Preview</span>
+              <h3>视频预览</h3>
             </div>
-          </div>
-        </section>
-      </main>
-    </div>
+            <button class="video-preview-close" type="button" aria-label="关闭预览" @click="closeVideoPreview">✕</button>
+          </header>
+          <video
+            :src="previewResult.url"
+            :poster="previewResult.thumbnail || undefined"
+            controls
+            autoplay
+            playsinline
+          />
+          <footer class="video-preview-foot">
+            <span>{{ videoMetaLabel(previewResult) }}</span>
+            <div class="video-preview-actions">
+              <button class="ghost-pill" type="button" @click="downloadVideoResult(previewResult)">下载</button>
+              <button class="ghost-pill" type="button" @click="regenerateCurrent(); closeVideoPreview()">重生成</button>
+            </div>
+          </footer>
+        </div>
+      </div>
+    </Teleport>
 
     <Teleport to="body">
       <div v-if="quickExpandResult" class="expand-modal-mask" @click.self="closeQuickExpand">
@@ -895,7 +906,6 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted, computed, watch, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
-import ChatBubble from '@/components/ChatBubble.vue'
 import MossLayerEditor from '@/components/MossLayerEditor.vue'
 import ModelSelector from '@/components/ModelSelector.vue'
 import CameraMovementGuide from '@/components/CameraMovementGuide.vue'
@@ -924,9 +934,9 @@ import {
 } from '@/types/model'
 import { showErrorMessage } from '@/utils/errors'
 import { getReadableErrorMessage, validatePromptOrThrow } from '@/utils/errorHandling'
-import type { GenerateResult, ImageGenerationMode, Message, UploadedFile } from '@/types/chat'
+import type { GenerateResult, GenerateStatus, ImageGenerationMode, Message, UploadedFile } from '@/types/chat'
 import type { MossLayout } from '@/types/layout'
-import { createLayoutFromImage, isMossLayoutModel } from '@/features/layout/mossLayout'
+import { createLayoutFromImage } from '@/features/layout/mossLayout'
 import { pickClosestAspectRatio } from '@/features/generate/aspectRatio'
 import { resolveGenerateIoType } from '@/features/generate/media'
 import { createExpandedUploadedFile, getExpandTargetSize } from '@/features/generate/expand'
@@ -956,7 +966,6 @@ const skillStore = useSkillStore()
 const { generate } = useGenerate()
 const LANDING_REFERENCE_STORAGE_KEY = 'artrealm_landing_reference_image'
 
-const chatAreaRef = ref<HTMLElement | null>(null)
 const promptInputRef = ref<HTMLTextAreaElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const viduStartInput = ref<HTMLInputElement | null>(null)
@@ -964,9 +973,6 @@ const viduEndInput = ref<HTMLInputElement | null>(null)
 const motionControlImageInput = ref<HTMLInputElement | null>(null)
 const motionControlVideoInput = ref<HTMLInputElement | null>(null)
 const isPolishing = ref(false)
-const COMPOSER_TEXTAREA_DEFAULT = 104
-const COMPOSER_TEXTAREA_MOBILE = 88
-const composerTextareaHeight = ref(COMPOSER_TEXTAREA_DEFAULT)
 const isMobileViewport = () => window.matchMedia('(max-width: 980px)').matches
 // 移动端页面高度跟随可视视口（地址栏收缩、软键盘弹出时保持输入区可见）
 const appHeight = ref('100dvh')
@@ -992,39 +998,204 @@ const inputText = ref('')
 // 空状态快捷示例：点击后直接填入提示词，不自动发送。
 const quickStarts = [
   {
-    title: '产品主视觉',
-    desc: '磨砂玻璃香水瓶 · 柔光侧逆光 · 极简石台',
+    title: '电影运镜',
+    desc: '雨夜霓虹街头 · 缓慢横移 · 青橙色调',
     prompt:
-      '一只磨砂玻璃质感的香水瓶立在浅灰色石台上，柔和侧逆光，极简背景，高级产品主视觉，8K 细节。',
+      '镜头缓慢横移，雨夜霓虹街头，人物侧脸回望，浅景深，青橙色调，胶片颗粒，35mm 镜头，电影级调色。',
   },
   {
-    title: '电影感人像',
-    desc: '雨夜霓虹街头 · 浅景深 · 青橙色调',
+    title: '产品广告',
+    desc: '磨砂玻璃香水瓶 · 环绕运镜 · 柔光',
     prompt:
-      '电影感中景：雨夜霓虹街头，人物侧脸回望，浅景深，青橙色调，胶片颗粒，35mm 镜头。',
+      '镜头环绕一只磨砂玻璃质感的香水瓶，浅灰色石台，柔和侧逆光，水珠细节，高级产品广告质感。',
   },
   {
-    title: '场景概念',
-    desc: '未来城市空中花园 · 黄昏暖光',
+    title: '自然纪录',
+    desc: '晨雾森林 · 向前推进 · 丁达尔光',
     prompt:
-      '未来城市空中花园概念场景，黄昏暖光穿过玻璃连廊，宏大远景，概念艺术风格，细腻光影。',
+      '镜头缓慢向前推进，穿过晨雾中的森林，阳光穿透树叶形成丁达尔光束，空气感颗粒，电影级调色。',
   },
   {
-    title: '视频运镜',
-    desc: '晨雾森林 · 缓慢推进镜头',
+    title: '城市延时',
+    desc: '黄昏天际线 · 云层流动 · 广角',
     prompt:
-      '镜头缓慢向前推进，穿过晨雾中的森林，阳光穿透树叶形成丁达尔光束，电影级调色。',
+      '黄昏时分的城市天际线，广角镜头固定机位，云层快速流动，楼宇灯光依次亮起，延时摄影质感。',
   },
 ]
 
 function applyQuickPrompt(text: string) {
   inputText.value = text
   nextTick(() => {
+    autoGrowPrompt()
     const el = promptInputRef.value
     if (!el) return
     el.focus()
     el.setSelectionRange(text.length, text.length)
   })
+}
+
+/* ---------- 画廊 / 历史 / 预览 ---------- */
+
+interface VideoBatch {
+  id: string
+  assistantId: string
+  prompt: string
+  createdAt: number
+  status: GenerateStatus
+  progress: number
+  results: GenerateResult[]
+  error?: string
+  partialError?: string
+  aspectRatio?: string
+  model?: string
+  duration?: number
+  batchSize?: number
+}
+
+const historyOpen = ref(false)
+const paramsOpen = ref(false)
+const selectedBatchId = ref('')
+const previewOpen = ref(false)
+const previewIndex = ref(0)
+
+/** 从消息流里还原「一轮视频生成」：user 提示词 + 下一条视频 assistant 结果。 */
+const videoBatches = computed<VideoBatch[]>(() => {
+  const list = chatStore.messages
+  const result: VideoBatch[] = []
+  for (let index = 0; index < list.length; index += 1) {
+    const message = list[index]
+    if (message.type !== 'user') continue
+    const next = list[index + 1]
+    if (!next || next.type !== 'assistant' || next.generateType !== 'video') continue
+    result.push({
+      id: message.id,
+      assistantId: next.id,
+      prompt: message.content,
+      createdAt: message.timestamp,
+      status: next.generateStatus || 'idle',
+      progress: next.progress || 0,
+      results: next.generateResults?.length
+        ? next.generateResults
+        : next.generateResult
+          ? [next.generateResult]
+          : [],
+      error: next.error,
+      partialError: next.partialError,
+      aspectRatio: message.aspectRatio,
+      model: message.model,
+      duration: message.duration,
+      batchSize: message.batchSize,
+    })
+  }
+  return result.reverse()
+})
+
+const currentVideoBatch = computed<VideoBatch | null>(() => {
+  if (!videoBatches.value.length) return null
+  if (selectedBatchId.value) {
+    const hit = videoBatches.value.find((batch) => batch.id === selectedBatchId.value)
+    if (hit) return hit
+  }
+  return videoBatches.value[0]
+})
+
+const pendingCount = computed(() => {
+  const batch = currentVideoBatch.value
+  if (!batch) return 0
+  if (batch.status !== 'pending' && batch.status !== 'processing') return 0
+  return Math.max(0, (batch.batchSize || 1) - batch.results.length)
+})
+
+const gridColumns = computed(() => {
+  const count = (currentVideoBatch.value?.results.length || 0) + pendingCount.value
+  if (count <= 1) return 1
+  if (count <= 4) return 2
+  return 3
+})
+
+const generatingProgress = computed(() => {
+  if (!activeSessionGenerating.value) return 0
+  const batch = videoBatches.value[0]
+  if (!batch) return 0
+  return Math.min(99, Math.max(batch.progress || 0, 1))
+})
+
+const previewResult = computed<GenerateResult | null>(
+  () => currentVideoBatch.value?.results[previewIndex.value] || null,
+)
+
+function openHistory() {
+  historyOpen.value = true
+}
+
+function selectBatch(id: string) {
+  selectedBatchId.value = id
+  historyOpen.value = false
+}
+
+function openVideoPreview(index: number) {
+  previewIndex.value = index
+  previewOpen.value = true
+}
+
+function closeVideoPreview() {
+  previewOpen.value = false
+}
+
+function reusePrompt(batch: VideoBatch) {
+  inputText.value = batch.prompt
+  nextTick(() => {
+    autoGrowPrompt()
+    promptInputRef.value?.focus()
+  })
+}
+
+function regenerateBatch(batch: VideoBatch) {
+  const message = chatStore.messages.find((item) => item.id === batch.assistantId)
+  if (message) void handleRegenerate(message)
+}
+
+function regenerateCurrent() {
+  const batch = currentVideoBatch.value
+  if (batch) regenerateBatch(batch)
+}
+
+function downloadVideoResult(result: GenerateResult) {
+  const link = document.createElement('a')
+  link.href = result.url
+  link.download = `aiping-video-${Date.now()}.mp4`
+  link.target = '_blank'
+  link.rel = 'noopener noreferrer'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+}
+
+function videoMetaLabel(result: GenerateResult) {
+  return [
+    result.aspectRatio,
+    result.duration ? `${result.duration}s` : '',
+    result.model,
+  ].filter(Boolean).join(' · ')
+}
+
+function formatTime(timestamp: number) {
+  return new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+function selectVideoDuration(value: number) {
+  settingsStore.videoDuration = value
+  settingsStore.saveToStorage()
+}
+
+function selectVideoResolution(value: '768P' | '2K') {
+  settingsStore.videoResolution = value
+  settingsStore.saveToStorage()
+}
+
+function selectVideoBatchSize(size: number) {
+  settingsStore.batchSize = size
+  settingsStore.saveToStorage()
 }
 type ImageMode = ImageGenerationMode
 type VideoMode = VideoGenerationMode
@@ -1123,33 +1294,11 @@ const minimaxH3VideoModeOptions: Array<{ value: VideoMode; label: string }> = [
 ]
 
 
-const hasPromptPolishModelConfigured = computed(() => !!settingsStore.promptPolishModel.trim())
-const polishDisabledReason = '请前往设置完成 AI 润色模型设置'
+const hasPromptPolishModelConfigured = computed(
+  () => settingsStore.promptPolishEnabled && !!settingsStore.promptPolishModel.trim(),
+)
+const polishDisabledReason = '提示词增强已在设置中关闭，可在设置里重新开启'
 
-/**
- * 视频页只展示视频对话：图片页共用的 chatStore 里可能还有图文记录，
- * 这里把「user + image assistant」整轮过滤掉，避免视频页出现无关历史。
- */
-const activeMessages = computed(() => {
-  const list = chatStore.messages
-  const result: Message[] = []
-  for (let index = 0; index < list.length; index += 1) {
-    const message = list[index]
-    if (message.type === 'user') {
-      const next = list[index + 1]
-      if (next && next.type === 'assistant' && next.generateType === 'image') {
-        index += 1
-        continue
-      }
-      result.push(message)
-      continue
-    }
-    if (message.type === 'assistant' && message.generateType === 'image') continue
-    result.push(message)
-  }
-  return result
-})
-const hasUserMessages = computed(() => activeMessages.value.some((m) => m.type === 'user'))
 const activeSessionGenerating = computed(() => chatStore.isGenerating)
 const modelCapability = computed(() => getModelCapability(settingsStore.selectedModel))
 // Moss-Image 原生支持结构化布局，是唯一可做「分层布局 / 图层编辑」的图片模型。
@@ -1361,7 +1510,6 @@ const aspectRatioOptions = computed(() => {
 
 const videoDurationOptions = computed(() => getSupportedVideoDurations(settingsStore.selectedModel) ?? [{ value: 6, label: '6s' }])
 
-const mediaTypeLabel = computed(() => (settingsStore.mediaType === 'image' ? '图像' : '视频'))
 const selectedModelLabel = computed(() => settingsStore.selectedModel || '未选择模型')
 const selectedVideoDurationLabel = computed(() => {
   return videoDurationOptions.value.find((option) => option.value === settingsStore.videoDuration)?.label || `${settingsStore.videoDuration}s`
@@ -1523,44 +1671,6 @@ const canSend = computed(() => {
   return !!uploadedFile.value || !!referenceUrl.value.trim()
 })
 
-function buildSessionWelcomeMessage(): Omit<Message, 'id' | 'timestamp'> {
-  return {
-    type: 'system',
-    content: [
-      '👋 欢迎来到 ArtRealm AI「视频生成」！用一句话描述镜头与运动，就能生成一段视频。',
-      '',
-      '🎬 视频模式：覆盖文生视频、图生视频、首尾帧生视频、主体参考视频与动作控制等多种玩法。',
-      '📐 参数可调：可自由选择画面比例、时长与单轮数量，快速匹配不同创作场景。',
-      '🎨 Skill：视频生成仅使用你自行上传的 Skill，内置风格规范只作用于图片。',
-      '✨ AI 润色：一键把简短描述扩写成更专业的镜头提示词（需先在「设置」中配置润色模型）。',
-      '',
-      '💡 上手很简单：选择模型与生成方式 → 写下镜头描述 → 点击发送即可开始生成。',
-    ].join('\n'),
-
-
-  }
-}
-
-
-function ensureWelcomeMessage() {
-  if (chatStore.messages.length > 0) return
-  chatStore.addMessage(buildSessionWelcomeMessage())
-}
-
-function setImageMode(mode: ImageMode) {
-
-  if (mode === 'image2image' && !supportsImageReferenceMode.value) return
-  if (imageMode.value === mode) return
-  if (mode === 'expand') {
-    // 扩图模式固定 Qwen-Image-2.0-Pro，并锁定模型选择。
-    settingsStore.selectedModel = EXPAND_MODEL_ID
-    settingsStore.saveToStorage()
-  }
-  imageMode.value = mode
-  removeUploadedFile()
-  referenceUrl.value = ''
-}
-
 function setVideoMode(mode: VideoMode) {
   if (videoMode.value === mode) return
   videoMode.value = mode
@@ -1583,11 +1693,6 @@ function selectAspectRatio(value: string) {
   if (!aspectRatioOptions.value.some((option) => option.value === value)) return
   settingsStore.aspectRatio = value
   settingsStore.saveToStorage()
-}
-
-function onAspectRatioSelect(event: Event) {
-  if (isFrameRatioLocked.value) return
-  selectAspectRatio((event.target as HTMLSelectElement).value)
 }
 
 function ensureSupportedAspectRatio() {
@@ -2103,7 +2208,16 @@ function insertMentionReference(item: UploadedFile) {
 }
 
 /** 监听输入，检测末尾的 @ 以触发引用菜单。 */
+/** 提示词输入框随内容自动长高，最多 180px。 */
+function autoGrowPrompt() {
+  const textarea = promptInputRef.value
+  if (!textarea) return
+  textarea.style.height = 'auto'
+  textarea.style.height = `${Math.min(textarea.scrollHeight, 180)}px`
+}
+
 function handlePromptInput(event?: Event) {
+  autoGrowPrompt()
   if (!isMentionReferenceMode.value || !mentionableAssets.value.length) {
     showMentionMenu.value = false
     return
@@ -2175,7 +2289,7 @@ async function handlePolishPrompt() {
 
   const model = settingsStore.promptPolishModel.trim()
   if (!model) {
-    showErrorMessage('请先在设置中填写用于 AI 润色的模型 ID。')
+    showErrorMessage('提示词增强已关闭，请先在设置中开启后再使用 AI 润色。')
     return
   }
 
@@ -2206,12 +2320,6 @@ async function handlePolishPrompt() {
   }
 }
 
-async function handleCopyPrompt(prompt: string) {
-  inputText.value = prompt
-  await nextTick()
-  promptInputRef.value?.focus()
-}
-
 /**
  * 插入运镜指令 / 示例到提示词（MiniMax 海螺系列）。
  * 优先在光标处插入，否则追加到末尾，并自动处理空格。
@@ -2237,17 +2345,10 @@ function insertCameraCommand(text: string) {
   })
 }
 
-function scrollChatToBottom() {
-  chatAreaRef.value?.scrollTo({ top: chatAreaRef.value.scrollHeight, behavior: 'smooth' })
-}
-
 onMounted(async () => {
   settingsStore.loadFromStorage()
   skillStore.loadFromStorage()
   sessionStorage.removeItem('artrealm_landing_pending_prompt')
-  if (isMobileViewport()) {
-    composerTextareaHeight.value = COMPOSER_TEXTAREA_MOBILE
-  }
   syncAppHeight()
   window.visualViewport?.addEventListener('resize', syncAppHeight)
   // 视频页固定使用视频模型，页面内不再提供图像 / 视频切换。
@@ -2257,7 +2358,6 @@ onMounted(async () => {
   }
   ensureSupportedAspectRatio()
   ensureSupportedVideoDuration()
-  ensureWelcomeMessage()
   restoreLandingReferenceImage()
   const initialPrompt = typeof route.query.prompt === 'string' ? route.query.prompt.trim() : ''
   if (initialPrompt) {
@@ -2328,7 +2428,6 @@ watch(
   () => chatStore.messages.length,
   async () => {
     await nextTick()
-    scrollChatToBottom()
   }
 )
 
@@ -2365,41 +2464,6 @@ async function runExpandGeneration(source: UploadedFile, ratio: string, prompt =
 
   settingsStore.saveToStorage()
   await nextTick()
-  scrollChatToBottom()
-}
-
-function handleExpandImage(result: GenerateResult) {
-  quickExpandResult.value = result
-}
-
-function handleEditLayers(result: GenerateResult) {
-  if (!result.layout) return
-  // 带背景层的布局来自通用图片模型的「近似分层」，其余走 Moss 原生布局。
-  const hasBackground = result.layout.items.some((item) => item.role === 'background')
-  const mode: LayerEditorState['mode'] = hasBackground
-    ? 'global'
-    : isMossLayoutModel(result.model)
-      ? 'moss'
-      : 'global'
-  // 结果里的 model 可能来自上游的完整 id，无法识别时回落到当前选择的模型。
-  const modelName = getModelCapability(result.model) ? result.model : settingsStore.selectedModel || result.model
-  layerEditorState.value = {
-    imageUrl: result.url,
-    layout: result.layout,
-    mode,
-    modelName,
-    baseFile:
-      mode === 'global'
-        ? {
-            name: `图层底图-${Date.now()}.png`,
-            type: 'image',
-            url: result.url,
-            size: 0,
-            dimensions: result.size,
-          }
-        : null,
-    prompt: '',
-  }
 }
 
 /** 图层编辑完成后，按新布局重新生成一张图。 */
@@ -2442,7 +2506,6 @@ async function handleLayerRegenerate(layout: MossLayout) {
     )
 
     await nextTick()
-    scrollChatToBottom()
     return
   }
 
@@ -2467,7 +2530,6 @@ async function handleLayerRegenerate(layout: MossLayout) {
   )
 
   await nextTick()
-  scrollChatToBottom()
 }
 
 function closeQuickExpand() {
@@ -2595,7 +2657,6 @@ async function handleSend() {
   const ioType = resolveGenerateIoType(settingsStore.mediaType, primaryFile)
 
   await nextTick()
-  scrollChatToBottom()
   // 内置质量/风格 Skill 只作用于图片；视频只使用用户上传的 Skill（最多 3 份）。
   const imageSkillContents =
     ioType === 'text2image' || ioType === 'image2image'
@@ -2613,12 +2674,12 @@ async function handleSend() {
   settingsStore.saveToStorage()
 
   await nextTick()
-  scrollChatToBottom()
 }
 
 async function handleRegenerate(message: Message) {
-  const idx = activeMessages.value.findIndex((m) => m.id === message.id)
-  const userMsg = idx > 0 ? activeMessages.value[idx - 1] : null
+  const list = chatStore.messages
+  const idx = list.findIndex((m) => m.id === message.id)
+  const userMsg = idx > 0 ? list[idx - 1] : null
   if (userMsg && userMsg.type === 'user') {
     const aspectRatio = userMsg.aspectRatio || settingsStore.aspectRatio
     const source = userMsg.uploadedFiles?.[0] || userMsg.uploadedFile
@@ -2654,7 +2715,6 @@ async function handleRegenerate(message: Message) {
       },
     )
     await nextTick()
-    scrollChatToBottom()
   }
 }
 </script>
@@ -6847,4 +6907,1188 @@ async function handleRegenerate(message: Message) {
     flex-direction: column;
   }
 }
+
+/* =========================================================================
+ * 视频工作台：与图片页对齐（左侧结果画廊 + 底部提示词条 + 右侧参数栏）
+ * 追加在文件末尾，用于覆盖早期对话式布局的遗留规则。
+ * ========================================================================= */
+
+.video-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100dvh;
+  padding: 0 10px 10px;
+  overflow: hidden;
+  color: #fff;
+  background:
+    radial-gradient(circle at 8% -6%, rgba(143, 182, 255, 0.12), transparent 34%),
+    radial-gradient(circle at 92% 8%, rgba(217, 205, 184, 0.08), transparent 30%),
+    #07080b;
+}
+
+.video-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.026) 1px, transparent 1px);
+  background-size: 76px 76px;
+  mask-image: radial-gradient(circle at 50% 22%, #000 0 28%, transparent 76%);
+}
+
+.video-shell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: min(100%, var(--page-max-width, 1480px));
+  min-height: 0;
+  margin: 0 auto;
+}
+
+@media (min-width: 981px) and (max-width: 1760px) {
+  .video-shell {
+    padding-left: 64px;
+  }
+}
+
+/* ---------- 头部操作 ---------- */
+
+.header-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 15px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.header-action:hover {
+  border-color: rgba(143, 182, 255, 0.36);
+  background: rgba(143, 182, 255, 0.12);
+  color: #fff;
+}
+
+.header-action-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(143, 182, 255, 0.22);
+  color: #e8f0ff;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 主体 ---------- */
+
+.video-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 352px;
+  gap: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 18px 4px;
+}
+
+.workbench {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ---------- 结果画廊 ---------- */
+
+.gallery-area {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 8px 8px 2px;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(143, 182, 255, 0.3) rgba(255, 255, 255, 0.04);
+  overscroll-behavior: contain;
+}
+
+.gallery-area::-webkit-scrollbar {
+  width: 9px;
+}
+
+.gallery-area::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.gallery-area::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(143, 182, 255, 0.34);
+  background-clip: padding-box;
+}
+
+.gallery-empty {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px 12px 40px;
+  text-align: center;
+}
+
+.empty-mark {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(143, 182, 255, 0.82);
+}
+
+.empty-mark svg {
+  width: 26px;
+  height: 26px;
+}
+
+.gallery-empty h2 {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.94);
+  font-size: clamp(20px, 2vw, 26px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.gallery-empty p {
+  max-width: 520px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.44);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.starters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+  width: min(100%, 860px);
+  margin-top: 8px;
+}
+
+.starter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.starter:hover {
+  border-color: rgba(143, 182, 255, 0.34);
+  background: rgba(143, 182, 255, 0.09);
+  transform: translateY(-1px);
+}
+
+.starter-title {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.starter-desc {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.batch-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 2px 4px 0;
+}
+
+.batch-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.batch-prompt {
+  margin: 0;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.batch-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.36);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.batch-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.batch-warning,
+.batch-error {
+  flex: 0 0 auto;
+  padding: 9px 12px;
+  border-radius: 12px;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.batch-warning {
+  border: 1px solid rgba(246, 196, 83, 0.24);
+  background: rgba(246, 196, 83, 0.08);
+  color: #f3dfae;
+}
+
+.batch-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.26);
+  background: rgba(248, 113, 113, 0.08);
+  color: #ffc9c9;
+}
+
+.batch-error p {
+  margin: 0;
+}
+
+/* ---------- 视频结果网格 ---------- */
+
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr));
+  gap: 10px;
+  align-content: start;
+}
+
+.video-grid.is-single .video-tile {
+  width: min(100%, 880px);
+  justify-self: center;
+}
+
+.video-tile {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  aspect-ratio: 16 / 9;
+  background: #0b0c10;
+  cursor: pointer;
+  transition: border-color 0.22s ease, transform 0.22s ease;
+}
+
+.video-tile:hover {
+  border-color: rgba(143, 182, 255, 0.4);
+  transform: translateY(-2px);
+}
+
+.video-tile video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #05060a;
+}
+
+.tile-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 50%;
+  background: rgba(8, 10, 16, 0.55);
+  color: rgba(255, 255, 255, 0.9);
+  transform: translate(-50%, -50%);
+  backdrop-filter: blur(10px);
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.video-tile:hover .tile-play {
+  background: rgba(143, 182, 255, 0.35);
+  transform: translate(-50%, -50%) scale(1.06);
+}
+
+.tile-play svg {
+  width: 20px;
+  height: 20px;
+  margin-left: 2px;
+}
+
+.tile-index {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(8, 8, 10, 0.6);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(8px);
+}
+
+.tile-overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 26px 10px 10px;
+  background: linear-gradient(180deg, transparent, rgba(6, 7, 10, 0.86));
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.video-tile:hover .tile-overlay,
+.video-tile:focus-within .tile-overlay {
+  opacity: 1;
+}
+
+.tile-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tile-btn {
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(16, 18, 24, 0.72);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.tile-btn:hover {
+  border-color: rgba(143, 182, 255, 0.45);
+  background: rgba(143, 182, 255, 0.22);
+  color: #fff;
+}
+
+.tile-size {
+  margin-left: auto;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tile-pending {
+  display: grid;
+  place-items: center;
+  cursor: default;
+}
+
+.tile-pending:hover {
+  border-color: rgba(255, 255, 255, 0.08);
+  transform: none;
+}
+
+.tile-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0.02) 20%,
+    rgba(255, 255, 255, 0.07) 42%,
+    rgba(255, 255, 255, 0.02) 64%
+  );
+  background-size: 220% 100%;
+  animation: video-shimmer 1.5s linear infinite;
+}
+
+@keyframes video-shimmer {
+  from {
+    background-position: 140% 0;
+  }
+  to {
+    background-position: -60% 0;
+  }
+}
+
+.tile-pending-text {
+  position: relative;
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 提示词条 ---------- */
+
+.prompt-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 12px 14px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(22, 23, 28, 0.92), rgba(13, 14, 18, 0.92));
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: border-color 0.24s ease;
+}
+
+.prompt-card:focus-within {
+  border-color: rgba(143, 182, 255, 0.32);
+}
+
+.prompt-field {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.prompt-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 46px;
+  max-height: 180px;
+  padding: 11px 2px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.94);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.55;
+  resize: none;
+  outline: none;
+}
+
+.prompt-input::placeholder {
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.prompt-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding-bottom: 4px;
+}
+
+.ghost-pill {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.ghost-pill:hover:not(:disabled) {
+  border-color: rgba(143, 182, 255, 0.36);
+  background: rgba(143, 182, 255, 0.14);
+  color: #fff;
+}
+
+.ghost-pill:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.generate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #eaf1ff, #b9ccf0);
+  color: #0f1626;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow: 0 12px 26px rgba(96, 140, 220, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+.generate-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 32px rgba(96, 140, 220, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.68);
+}
+
+.generate-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.generate-kbd {
+  color: rgba(15, 22, 38, 0.42);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.generate-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(15, 22, 38, 0.24);
+  border-top-color: #0f1626;
+  border-radius: 50%;
+  animation: video-spin 0.9s linear infinite;
+}
+
+@keyframes video-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.prompt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pchip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 220px;
+  min-height: 24px;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pchip-model {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.pchip-warn {
+  border-color: rgba(246, 196, 83, 0.3);
+  background: rgba(246, 196, 83, 0.1);
+  color: #f3dfae;
+}
+
+.pchip-action {
+  display: none;
+  margin-left: auto;
+  border-color: rgba(143, 182, 255, 0.34);
+  color: #e8f0ff;
+  cursor: pointer;
+}
+
+/* ---------- 右侧参数栏 ---------- */
+
+.param-rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(20, 21, 26, 0.92), rgba(12, 13, 17, 0.94));
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.rail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.rail-title {
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.rail-close {
+  display: none;
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.rail-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 12px 8px 12px 12px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(143, 182, 255, 0.36) rgba(255, 255, 255, 0.05);
+  overscroll-behavior: contain;
+}
+
+.rail-scroll > * {
+  flex: 0 0 auto;
+}
+
+.rail-scroll::-webkit-scrollbar {
+  width: 9px;
+}
+
+.rail-scroll::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.rail-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(143, 182, 255, 0.4);
+  background-clip: padding-box;
+}
+
+.rail-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.028);
+}
+
+.rail-label {
+  color: rgba(255, 255, 255, 0.46);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.rail-hint {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.36);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+.rail-card-upload {
+  gap: 10px;
+}
+
+.rail-card-upload :deep(.camera-guide-row) {
+  width: 100%;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  min-height: 30px;
+  padding: 0 13px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.chip:hover:not(:disabled) {
+  border-color: rgba(143, 182, 255, 0.34);
+  color: #fff;
+}
+
+.chip.active {
+  border-color: transparent;
+  background: linear-gradient(135deg, #eaf1ff, #b9ccf0);
+  color: #0f1626;
+}
+
+.chip:disabled {
+  opacity: 0.36;
+  cursor: not-allowed;
+}
+
+.chip-count {
+  min-width: 38px;
+  padding: 0;
+}
+
+.ratio-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ratio-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 4px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.ratio-chip:hover:not(:disabled) {
+  border-color: rgba(143, 182, 255, 0.34);
+  color: #fff;
+}
+
+.ratio-chip.active {
+  border-color: rgba(143, 182, 255, 0.6);
+  background: rgba(143, 182, 255, 0.16);
+  color: #edf3ff;
+}
+
+.ratio-chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ratio-box {
+  display: block;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  opacity: 0.8;
+}
+
+.ratio-text {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 参数栏内的素材控件沿用旧控制台样式，这里只修一下间距。 */
+.rail-card-upload :deep(.reference-strip) {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.rail-card-upload :deep(.upload-mini-row) {
+  border-radius: 14px;
+}
+
+.rail-backdrop {
+  display: none;
+}
+
+/* ---------- 历史抽屉 ---------- */
+
+.history-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(4, 5, 8, 0.62);
+  backdrop-filter: blur(6px);
+}
+
+.history-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 400px);
+  padding: 18px 16px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0b0c10;
+  animation: video-slide-in 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes video-slide-in {
+  from {
+    transform: translateX(18px);
+    opacity: 0.4;
+  }
+}
+
+.history-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.history-kicker {
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.history-head h3 {
+  margin: 3px 0 0;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.history-close {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.history-empty {
+  margin: 22px 2px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 12px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.history-item-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.history-item-btn:hover {
+  border-color: rgba(143, 182, 255, 0.34);
+  background: rgba(143, 182, 255, 0.08);
+}
+
+.history-item.active .history-item-btn {
+  border-color: rgba(143, 182, 255, 0.48);
+  background: rgba(143, 182, 255, 0.12);
+}
+
+.history-thumb {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.history-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.history-thumb-empty {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 13px;
+}
+
+.history-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.history-prompt {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.history-meta {
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 视频预览 ---------- */
+
+.video-preview-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 118;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(3, 4, 8, 0.78);
+  backdrop-filter: blur(10px);
+}
+
+.video-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(100%, 920px);
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 22px;
+  background: #0d0e13;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
+}
+
+.video-preview-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.video-preview-kicker {
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.video-preview-head h3 {
+  margin: 3px 0 0;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.video-preview-close {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.video-preview video {
+  width: 100%;
+  max-height: min(64vh, 620px);
+  border-radius: 14px;
+  background: #05060a;
+}
+
+.video-preview-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.video-preview-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ---------- 响应式 ---------- */
+
+@media (max-width: 1200px) {
+  .video-body {
+    grid-template-columns: minmax(0, 1fr) 320px;
+    padding: 0 12px 4px;
+  }
+
+  .starters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .video-page {
+    padding: 0 8px 8px;
+  }
+
+  .video-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0 6px 4px 62px;
+  }
+
+  .pchip-action {
+    display: inline-flex;
+  }
+
+  .param-rail {
+    position: fixed;
+    right: 8px;
+    bottom: 8px;
+    left: 8px;
+    z-index: 112;
+    max-height: min(76vh, 620px);
+    border-radius: 20px;
+    transform: translateY(calc(100% + 20px));
+    pointer-events: none;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .param-rail.is-open {
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .rail-close {
+    display: block;
+  }
+
+  .rail-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 111;
+    display: block;
+    background: rgba(4, 5, 8, 0.55);
+    backdrop-filter: blur(4px);
+  }
+
+  .batch-bar {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .batch-actions {
+    margin-left: 0;
+  }
+
+  .video-grid {
+    grid-template-columns: repeat(min(var(--cols, 2), 2), minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .prompt-field {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .prompt-buttons {
+    justify-content: flex-end;
+    padding-bottom: 0;
+  }
+
+  .starters {
+    grid-template-columns: 1fr;
+  }
+
+  .video-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .history-panel {
+    width: 100%;
+    border-left: 0;
+  }
+}
+
 </style>

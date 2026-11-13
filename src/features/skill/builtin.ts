@@ -81,6 +81,8 @@ interface StyleMeta {
   id: string
   name: string
   description: string
+  /** 非方形或特殊来源的示例图可显式指定，默认 /skill-previews/<id>.webp。 */
+  thumbnail?: string
 }
 
 const STYLE_META: StyleMeta[] = [
@@ -99,6 +101,27 @@ const STYLE_META: StyleMeta[] = [
   { id: 'acid-graphics', name: 'Acid Graphics', description: '荧光酸绿与橙、扭曲字体、液态铬与 HUD。' },
   { id: 'japandi', name: 'Japandi', description: '原木燕麦、侘寂肌理、极简线条与自然光。' },
   { id: 'dopamine', name: '多巴胺配色', description: '高饱和快乐色块、圆润形状、明快对比。' },
+  // 首页精选：来自 public/skills 的可下载 Skill，同步注册后生图页也能直接选中。
+  {
+    id: 'wkw-neon-loneliness-style',
+    name: '王家卫霓虹孤独',
+    description: '霓虹单光源、湿面反光、长曝光拖影与胶片颗粒。',
+  },
+  {
+    id: 'papercut-stop-motion-explainer',
+    name: '剪纸定格动画',
+    description: '分层纸艺布景、可见剪边与逐帧手工运动。',
+  },
+  {
+    id: 'handdrawn-live-video-generator',
+    name: '手绘发光实拍融合',
+    description: '粗糙蜡笔发光线条在真实空间里变形逃跑。',
+  },
+  {
+    id: 'photo-to-minimal-vector-travel-poster',
+    name: '极简旅行海报',
+    description: '提炼照片主视觉，重构成留白克制的矢量海报。',
+  },
 ]
 
 // 示例图文件名必须与 Skill id 完全一致（/skill-previews/<id>.webp）；
@@ -110,7 +133,7 @@ const STYLE_SKILLS: BuiltinSkill[] = STYLE_META.map((meta) => ({
   description: meta.description,
   category: 'style',
   content: readBuiltin(meta.id),
-  thumbnail: `/skill-previews/${meta.id}.webp`,
+  thumbnail: meta.thumbnail || `/skill-previews/${meta.id}.webp`,
 }))
 
 export const BUILTIN_SKILLS: BuiltinSkill[] = [

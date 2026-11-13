@@ -10,7 +10,7 @@ import { validatePromptOrThrow } from '@/utils/errorHandling'
 import { normalizeErrorMessage, showErrorMessage } from '@/utils/errors'
 import { buildImageParams, buildVideoParams } from '@/features/generate/buildParams'
 import { aspectRatioToDimensions } from '@/features/generate/aspectRatio'
-import { pollVideoStatus } from '@/features/generate/video'
+import { GLOBAL_VIDEO_TIMEOUT_MS, pollVideoStatus } from '@/features/generate/video'
 import { resolveRealCost } from '@/utils/format'
 import { buildEffectivePrompt } from '@/features/skill/apply'
 import type { MossLayout } from '@/types/layout'
@@ -338,6 +338,9 @@ export function useGenerate() {
         return
       }
 
+      // 全局视频预算：任务创建 + 轮询合计不超过 1 小时，批量任务共享同一截止时间。
+      const videoDeadline = Date.now() + GLOBAL_VIDEO_TIMEOUT_MS
+
       const videoParams = await buildVideoParams(
         effectivePrompt,
         model,
@@ -375,6 +378,7 @@ export function useGenerate() {
             duration,
             resolution: videoResolution,
             hasReferenceMedia,
+            deadline: videoDeadline,
           },
         )
 
@@ -461,6 +465,7 @@ export function useGenerate() {
               duration,
               resolution: videoResolution,
               hasReferenceMedia,
+              deadline: videoDeadline,
             },
           )
           const videoResult = buildVideoResult(finalStatus, model, aspectRatio)
@@ -494,7 +499,7 @@ export function useGenerate() {
     } catch (e: unknown) {
       const isTimeout = e instanceof Error && (e.message.includes('timeout') || e.message.includes('超时'))
       const errorMessage = isTimeout
-        ? (e instanceof Error && e.message.startsWith('视频生成超时')
+        ? (e instanceof Error && (e.message.startsWith('视频生成超时') || e.message.startsWith('视频生成已经超时'))
             ? e.message
             : '生成超时，请更换模型或重试')
         : normalizeErrorMessage(e, '生成失败，请重试')

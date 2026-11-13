@@ -2,7 +2,7 @@
 // 简易模式与无限画布共用同一套逻辑：先把多个 Skill 合并压缩，再拼接用户提示词。
 
 import { getModels, polishPrompt } from '@/api/aiping'
-import { useSettingsStore } from '@/stores/settingsStore'
+import { DEFAULT_PROMPT_POLISH_MODEL, useSettingsStore } from '@/stores/settingsStore'
 
 const SKILL_COMPRESSION_SYSTEM_PROMPT = `你是一名专业的视频/图像 Skill 压缩助手。
 用户可能同时提供多份 Skill：质量规范、风格规范、手绘规范，以及用户自行上传的 Skill。
@@ -61,12 +61,12 @@ function fallbackCompressSkills(skillContents: string[]): string {
 
 async function resolveSkillCompressionModel(): Promise<string> {
   const settingsStore = useSettingsStore()
-  const configured = settingsStore.promptPolishModel.trim()
+  const configured = settingsStore.promptPolishModel.trim() || DEFAULT_PROMPT_POLISH_MODEL
   if (configured) return configured
 
   const models = await getModels()
   const candidates = Array.isArray(models?.data) ? models.data : []
-  const preferredIds = ['DeepSeek-V3-0324', 'Qwen3-32B', 'Qwen3-14B', 'DeepSeek-V3']
+  const preferredIds = ['DeepSeek-V4.1-Flash-1017', 'DeepSeek-V3-0324', 'Qwen3-32B', 'Qwen3-14B', 'DeepSeek-V3']
   const preferred = candidates.find((model) => preferredIds.includes(model.id))
   const firstLlm = candidates.find((model) => {
     const modelType = (model as any).model_type

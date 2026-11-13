@@ -12,9 +12,21 @@ const MAX_POLL_RETRIES = 8
 
 /** 默认视频轮询预算（非多模态长耗时模型）。 */
 const DEFAULT_POLL_TIMEOUT_MS = 8 * 60_000
-/** Seedance 2 系列：1080p 8s 常见 3~5 分钟，带多模态参考素材时更久。 */
-const SEEDANCE_POLL_TIMEOUT_MS = 15 * 60_000
-const SEEDANCE_REFERENCE_POLL_TIMEOUT_MS = 20 * 60_000
+/**
+ * 全局视频生成上限：从创建任务开始计时，创建 + 轮询总共不超过 1 小时。
+ * 这是一个硬上限，任何单任务预算都会被它截断。
+ */
+export const GLOBAL_VIDEO_TIMEOUT_MS = 60 * 60_000
+/**
+ * Seedance 2 系列的轮询预算按视频时长线性放大：
+ * 实测 SD2.5 30s 单任务需要接近 35 分钟，因此基准为「每 1 秒视频给 70 秒轮询」，
+ * 30s → 35min、15s → 17.5min、10s → 约 11.7min，其余档位以此类推。
+ * 2 个任务并发时各自拥有独立预算，互不占用。
+ */
+const SEEDANCE_POLL_TIMEOUT_PER_SECOND_MS = 70_000
+/** Seedance 系列兜底预算：短时长任务也至少给 8 分钟。 */
+const SEEDANCE_POLL_TIMEOUT_MS = 8 * 60_000
+const SEEDANCE_REFERENCE_POLL_TIMEOUT_MS = 10 * 60_000
 /** MiniMax-H3 768P：4~15s 常规任务。 */
 const MINIMAX_H3_POLL_TIMEOUT_MS = 20 * 60_000
 const MINIMAX_H3_LONG_POLL_TIMEOUT_MS = 30 * 60_000
@@ -27,6 +39,8 @@ export interface VideoPollOptions {
   interval?: number
   /** 显式指定超时预算；不传则按 provider / 分辨率 / 时长推导。 */
   timeoutMs?: number
+  /** 全局截止时间（毫秒时间戳）；本次生成的所有任务共享，超过后统一报超时。 */
+  deadline?: number
   provider?: string
   providerCreateEndpoint?: string
   /** 视频时长（秒），用于放宽长视频任务预算。 */
@@ -64,6 +78,12 @@ export function resolveVideoPollTimeoutMs(options: VideoPollOptions = {}): numbe
   }
 
   if (provider === 'seedance') {
+    if (duration > 0) {
+      const base = options.hasReferenceMedia
+        ? SEEDANCE_REFERENCE_POLL_TIMEOUT_MS
+        : SEEDANCE_POLL_TIMEOUT_MS
+      return Math.max(base, duration * SEEDANCE_POLL_TIMEOUT_PER_SECOND_MS)
+    }
     return options.hasReferenceMedia
       ? SEEDANCE_REFERENCE_POLL_TIMEOUT_MS
       : SEEDANCE_POLL_TIMEOUT_MS
@@ -121,7 +141,18 @@ export async function pollVideoStatus(
   const interval = options.interval ?? 3000
   const timeoutMs = resolveVideoPollTimeoutMs(options)
   const startedAt = Date.now()
-  const deadline = startedAt + timeoutMs
+  const taskDeadline = startedAt + timeoutMs
+  // 单任务预算与全局预算取更早者：批量任务共享全局截止时间，避免累计等待超过 1 小时。
+  const deadline = options.deadline ? Math.min(taskDeadline, options.deadline) : taskDeadline
+  const hitGlobalDeadline = () => !!options.deadline && Date.now() >= options.deadline
+
+  if (Date.now() >= deadline) {
+    throw new Error(
+      hitGlobalDeadline()
+        ? '视频生成已经超时，请合理调整生成时长和生成次数后重试。'
+        : `视频生成超时（单任务等待上限约 ${Math.round(timeoutMs / 60_000)} 分钟），请合理调整生成时长和生成次数后重试。`,
+    )
+  }
 
   let retries = 0
   let lastStatus: VideoStatusResponse | undefined
@@ -175,10 +206,15 @@ export async function pollVideoStatus(
   const waitedLabel = waitedMs >= 60_000
     ? `${Math.round(waitedMs / 60_000)} 分钟`
     : `${Math.max(1, Math.round(waitedMs / 1000))} 秒`
+  if (hitGlobalDeadline()) {
+    throw new Error(
+      `视频生成已经超时（已等待约 ${waitedLabel}），请合理调整生成时长和生成次数后重试。`,
+    )
+  }
   const upstreamState = lastStatus?.status || lastStatus?.state
   const stateHint = upstreamState ? `，上游最后状态：${upstreamState}` : ''
   throw new Error(
-    `视频生成超时（已等待约 ${waitedLabel}${stateHint}）。任务可能仍在生成，请稍后重试或切换模型。`,
+    `视频生成超时（已等待约 ${waitedLabel}${stateHint}）。请合理调整生成时长和生成次数后重试。`,
   )
 }
 

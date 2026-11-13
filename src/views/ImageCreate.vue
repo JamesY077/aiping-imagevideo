@@ -136,7 +136,7 @@
                   class="ghost-pill"
                   type="button"
                   :disabled="isPolishing || isGenerating || !hasPolishModel"
-                  :title="hasPolishModel ? '用 AI 把简短描述扩写成更专业的提示词' : '请先在设置中配置 AI 润色模型'"
+                  :title="hasPolishModel ? '用 AI 把简短描述扩写成更专业的提示词' : '提示词增强已在设置中关闭'"
                   @click="handlePolish"
                 >
                   {{ isPolishing ? '润色中…' : 'AI 润色' }}
@@ -507,7 +507,7 @@ const supportsImageReferenceMode = computed(
 )
 const modelLabel = computed(() => settingsStore.selectedModel || '未选择模型')
 const selectedStyleCount = computed(() => skillStore.selectedStyleSkillIds.length)
-const hasPolishModel = computed(() => !!settingsStore.promptPolishModel.trim())
+const hasPolishModel = computed(() => settingsStore.promptPolishEnabled && !!settingsStore.promptPolishModel.trim())
 const imageAccept = computed(() => getLocalUploadAccept(settingsStore.selectedModel) || IMAGE_FILE_ACCEPT)
 
 const modeOptions = computed(() => [
@@ -951,7 +951,7 @@ async function handlePolish() {
   }
   const model = settingsStore.promptPolishModel.trim()
   if (!model) {
-    showErrorMessage('请先在设置中填写用于 AI 润色的模型 ID。')
+    showErrorMessage('提示词增强已关闭，请先在设置中开启后再使用 AI 润色。')
     return
   }
   isPolishing.value = true
@@ -1188,7 +1188,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  width: min(100%, 1560px);
+  width: min(100%, var(--page-max-width, 1480px));
   min-height: 0;
   margin: 0 auto;
 }
