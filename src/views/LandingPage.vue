@@ -1,144 +1,335 @@
 <template>
-  <div class="home-page">
-    <div class="aurora aurora-a" aria-hidden="true" />
-    <div class="aurora aurora-b" aria-hidden="true" />
-    <div class="aurora aurora-c" aria-hidden="true" />
-    <div class="grain" aria-hidden="true" />
+  <div class="loot-home">
+    <div class="page-progress" aria-hidden="true">
+      <span :style="{ transform: `scaleX(${pageProgress / 100})` }" />
+    </div>
+    <div class="noise" aria-hidden="true" />
 
-    <header class="home-header">
-      <button class="brand-logo" type="button" aria-label="ArtRealm 首页" @click="router.push('/')">
-        <img class="brand-mark" :src="assetUrl('/logo1.webp')" alt="" />
-        <span class="brand-name">ArtRealm</span>
-      </button>
-
-      <nav class="home-nav" aria-label="主导航">
-        <a class="nav-link" href="#zones" @click.prevent="scrollToZones">创作分区</a>
-        <a class="nav-link" href="#inspiration" @click.prevent="scrollToInspiration">灵感模板</a>
-      </nav>
-
-      <button class="login-btn" type="button" @click="router.push('/setup')">
-        {{ hasSession ? '创作工坊' : 'Login' }}
-      </button>
-    </header>
-
-    <main class="home-main">
-      <section class="hero" aria-labelledby="home-title">
-        <p class="hero-kicker">AI Creative Studio</p>
-        <h1 id="home-title">
-          三个工作台，<br />
-          <span class="hero-gradient">一条完整的创作动线</span>
-        </h1>
-        <p class="hero-subtitle">
-          从一句灵感到成片，从画面到声音。选择你的创作分区，其余交给模型与画布。
-        </p>
-
-        <div class="typewriter-card" aria-label="创作灵感">
-          <span class="typewriter-label">Creative Prompt</span>
-          <p class="typewriter-line">{{ typewriterText }}<span class="typewriter-caret" aria-hidden="true" /></p>
-        </div>
-      </section>
-
-      <section id="zones" class="zone-grid" aria-label="创作分区">
-        <article
-          v-for="zone in zones"
-          :key="zone.key"
-          class="zone-card"
-          :class="[`zone-${zone.key}`, { 'is-soon': zone.soon }]"
-          role="button"
-          tabindex="0"
-          :aria-label="zone.cta"
-          @click="enterZone(zone)"
-          @keydown.enter.prevent="enterZone(zone)"
-          @keydown.space.prevent="enterZone(zone)"
-        >
-          <span class="zone-index" aria-hidden="true">{{ zone.index }}</span>
-          <span class="zone-glow" aria-hidden="true" />
-
-          <span class="zone-head">
-            <span class="zone-icon" aria-hidden="true">{{ zone.icon }}</span>
-            <span v-if="zone.soon" class="zone-badge">即将上线</span>
-          </span>
-
-          <h2 class="zone-title">{{ zone.title }}</h2>
-          <p class="zone-desc">{{ zone.desc }}</p>
-
-          <div class="zone-tags">
-            <span v-for="tag in zone.tags" :key="tag" class="zone-tag">{{ tag }}</span>
-          </div>
-
-          <span class="zone-cta">
-            {{ zone.cta }}
-            <span class="zone-arrow" aria-hidden="true">→</span>
-          </span>
-        </article>
-      </section>
-    </main>
-
-    <section id="inspiration" class="template-section skill-template-section" aria-labelledby="skill-template-title">
-      <div class="template-head">
-        <div>
-          <p class="section-kicker">Reusable Workflow</p>
-          <h2 id="skill-template-title">Skill 模板库</h2>
-        </div>
-      </div>
-
-      <div class="template-grid">
-        <article
-          v-for="item in skillTemplates"
-          :key="item.title"
-          class="template-card skill-template-card"
-          role="button"
-          tabindex="0"
-          @click="handleSkillTemplateClick"
-          @keydown.enter.prevent="handleSkillTemplateClick"
-          @keydown.space.prevent="handleSkillTemplateClick"
-        >
-          <span class="template-visual" :class="[item.theme, { 'has-image': item.image }]">
-            <img v-if="item.image" :src="item.image" alt="" class="template-image" loading="lazy" decoding="async" />
-            <span v-else class="visual-glow" />
-            <button
-              class="skill-download-btn"
-              type="button"
-              :aria-label="`下载 ${item.title} Skill 文件`"
-              @click.stop="handleSkillDownloadClick(item)"
-            >
-              下载
-            </button>
-          </span>
-          <strong>{{ item.title }}</strong>
-        </article>
-      </div>
-    </section>
-
-    <section class="template-section prompt-template-section" aria-labelledby="template-title">
-      <div class="template-head">
-        <div>
-          <p class="section-kicker">Prompt Inspiration</p>
-          <h2 id="template-title">提示词模板库</h2>
-        </div>
-      </div>
-
-      <div class="template-grid">
-        <button
-          v-for="item in templates"
-          :key="item.title"
-          class="template-card"
-          type="button"
-          @click="handleTemplateClick(item)"
-        >
-          <span class="template-visual" :class="[item.theme, { 'has-image': item.image, 'is-zoomed': item.title === '影视爆炸现场' }]">
-            <img v-if="item.image" :src="item.image" alt="" class="template-image" loading="lazy" decoding="async" />
-            <span v-else class="visual-glow" />
-          </span>
-          <strong>{{ item.title }}</strong>
+    <header class="loot-nav" :class="{ 'is-scrolled': scrolled }">
+      <div class="nav-left">
+        <button class="brand" type="button" aria-label="ArtRealm 首页" @click="router.push('/')">
+          <img class="brand-mark" :src="assetUrl('/logo1.webp')" alt="" />
+          <span class="brand-text">ARTREALM<span class="brand-dot">.</span></span>
         </button>
       </div>
-    </section>
+
+      <nav class="nav-pill" aria-label="主导航">
+        <a href="#zones" @click.prevent="scrollToZones">创作分区</a>
+        <a href="#manifesto" @click.prevent="scrollToManifesto">创作流程</a>
+        <a href="#inspiration" @click.prevent="scrollToInspiration">模板库</a>
+        <span class="nav-divider" aria-hidden="true" />
+        <span class="nav-progress">{{ pageProgress }}%</span>
+      </nav>
+
+      <div class="nav-right">
+        <button class="nav-text-btn" type="button" @click="goModel3D">3D 建模</button>
+        <button class="cta-pill" type="button" @click="router.push('/setup')">
+          <span>{{ hasSession ? '进入工坊' : '开始创作' }}</span>
+          <span class="cta-pill-icon" aria-hidden="true">
+            <svg viewBox="0 0 14 14" fill="none">
+              <path
+                d="M3 11 11 3M4.4 3H11v6.6"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </span>
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <!-- Hero -->
+      <section class="loot-hero" aria-labelledby="home-title">
+        <div class="hero-atmosphere" :style="{ backgroundImage: `url(${assetUrl('/home-collage-bg.webp')})` }" aria-hidden="true" />
+
+        <div class="hero-grid">
+          <div class="hero-heading">
+            <p class="hero-eyebrow" data-reveal>AI Creative Studio · ArtRealm</p>
+            <h1 id="home-title" class="hero-title">
+              <span class="hero-line hero-line--1" data-reveal>把灵感</span>
+              <span class="hero-line hero-line--2" data-reveal>做成作品</span>
+            </h1>
+            <p class="hero-sub" data-reveal>
+              图片、视频、配音与 3D 模型，四条生产线在同一块画布上。
+              <span class="hero-sub-strong">从一句描述开始，到可交付的成片结束。</span>
+            </p>
+          </div>
+
+          <aside class="hero-cards" aria-label="创作概览">
+            <article
+              class="hero-card hero-card--a"
+              role="button"
+              tabindex="0"
+              data-reveal
+              @click="enterZone(zones[1])"
+              @keydown.enter.prevent="enterZone(zones[1])"
+              @keydown.space.prevent="enterZone(zones[1])"
+            >
+              <span class="hero-card-kicker">Workspaces</span>
+              <span class="hero-card-num">03</span>
+              <span class="hero-card-title">创作工作台</span>
+              <span class="hero-card-desc">Skill · 图片视频 · 配音</span>
+              <span class="hero-card-arrow" aria-hidden="true">↗</span>
+            </article>
+
+            <article
+              class="hero-card hero-card--b"
+              role="button"
+              tabindex="0"
+              data-reveal
+              @click="enterZone(zones[2])"
+              @keydown.enter.prevent="enterZone(zones[2])"
+              @keydown.space.prevent="enterZone(zones[2])"
+            >
+              <span class="hero-card-kicker">Model Matrix</span>
+              <div class="hero-chips">
+                <span>Seedream</span>
+                <span>Seedance</span>
+                <span>Kling</span>
+                <span>MiniMax</span>
+              </div>
+              <span class="hero-card-num">12<span class="num-plus">+</span></span>
+              <span class="hero-card-desc">图像 / 视频 / 语音 / 3D 模型</span>
+              <span class="hero-card-arrow" aria-hidden="true">↗</span>
+            </article>
+          </aside>
+        </div>
+
+        <div class="hero-foot">
+          <div class="hero-meta" data-reveal>
+            <span class="meta-index">(01)</span>
+            <p>
+              把日常的创作流程，压缩成<span class="hl">一次对话</span>。素材、模型、画布与导出，都在这里。
+            </p>
+          </div>
+
+          <button class="hero-ticker" type="button" data-reveal @click="useTypedPrompt">
+            <span class="ticker-label">Prompt</span>
+            <span class="ticker-text">{{ typewriterText }}<i class="ticker-caret" aria-hidden="true" /></span>
+            <span class="ticker-action" aria-hidden="true">
+              <svg viewBox="0 0 14 14" fill="none">
+                <path
+                  d="M3 11 11 3M4.4 3H11v6.6"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
+          </button>
+
+          <div class="hero-scroll" aria-hidden="true">
+            <span>Scroll</span>
+            <span class="hero-scroll-line" />
+          </div>
+        </div>
+      </section>
+
+      <!-- 滚动驱动的创作流程 -->
+      <section id="manifesto" class="manifesto" aria-label="创作流程">
+        <div class="manifesto-sticky">
+          <div class="manifesto-inner">
+            <div class="manifesto-words">
+              <p class="manifesto-kicker">How it works</p>
+              <div
+                v-for="(item, index) in manifestoWords"
+                :key="item.word"
+                class="manifesto-word"
+                :class="{ 'is-active': activeManifesto === index }"
+              >
+                <span class="mw-index">{{ item.index }}</span>
+                <span class="mw-text">{{ item.word }}</span>
+                <span class="mw-en">{{ item.en }}</span>
+              </div>
+            </div>
+
+            <div class="manifesto-side">
+              <span class="manifesto-side-label">Process</span>
+              <p>{{ manifestoWords[activeManifesto].desc }}</p>
+              <span class="manifesto-side-count">0{{ activeManifesto + 1 }} / 03</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 三大分区 -->
+      <section id="zones" class="loot-section zones-section">
+        <header class="section-head">
+          <div class="section-head-main">
+            <span class="section-index" data-reveal>02 / Workspaces</span>
+            <h2 class="section-title" data-reveal>
+              三个工作台<br />
+              <span class="title-accent">一条创作动线</span>
+            </h2>
+          </div>
+          <p class="section-desc" data-reveal>
+            从 Skill 规范到画面生成，再到声音演绎。选一个分区进入，其余交给模型与画布。
+          </p>
+        </header>
+
+        <div class="zone-grid">
+          <article
+            v-for="zone in zones"
+            :key="zone.key"
+            class="zone-card"
+            :class="[`zone-card--${zone.key}`, { 'is-soon': zone.soon }]"
+            role="button"
+            tabindex="0"
+            data-reveal
+            :aria-label="zone.cta"
+            @click="enterZone(zone)"
+            @keydown.enter.prevent="enterZone(zone)"
+            @keydown.space.prevent="enterZone(zone)"
+          >
+            <div v-if="zone.image" class="zone-media-layer">
+              <img :src="zone.image" alt="" loading="lazy" decoding="async" />
+            </div>
+            <div v-else class="zone-voice-art" aria-hidden="true">
+              <span
+                v-for="(height, index) in voiceWave"
+                :key="index"
+                class="voice-bar"
+                :style="{ height: `${height}%`, animationDelay: `${index * 55}ms` }"
+              />
+            </div>
+
+            <div class="zone-top">
+              <span class="zone-step">{{ zone.index }}</span>
+              <span class="zone-label">{{ zone.label }}</span>
+              <span v-if="zone.soon" class="zone-badge">即将上线</span>
+            </div>
+
+            <div class="zone-body">
+              <h3 class="zone-title">{{ zone.title }}</h3>
+              <p class="zone-desc">{{ zone.desc }}</p>
+              <div class="zone-tags">
+                <span v-for="tag in zone.tags" :key="tag">{{ tag }}</span>
+              </div>
+              <div class="zone-cta">
+                <span>{{ zone.cta }}</span>
+                <span class="zone-cta-icon" aria-hidden="true">↗</span>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- Skill 模板库 -->
+      <section id="inspiration" class="loot-section library-section">
+        <header class="section-head">
+          <div class="section-head-main">
+            <span class="section-index" data-reveal>03 / Skill Library</span>
+            <h2 class="section-title" data-reveal>
+              把风格<br />
+              <span class="title-accent">变成可复用的规范</span>
+            </h2>
+          </div>
+          <p class="section-desc" data-reveal>
+            一句需求拆成完整创作规范，沉淀成 Skill。下载后可直接放进工作台复用与修改。
+          </p>
+        </header>
+
+        <div class="skill-grid">
+          <article
+            v-for="(item, index) in skillTemplates"
+            :key="item.title"
+            class="skill-card"
+            role="button"
+            tabindex="0"
+            data-reveal
+            @click="handleSkillTemplateClick"
+            @keydown.enter.prevent="handleSkillTemplateClick"
+            @keydown.space.prevent="handleSkillTemplateClick"
+          >
+            <div class="skill-visual">
+              <img :src="item.image" alt="" loading="lazy" decoding="async" />
+              <span class="skill-index">{{ String(index + 1).padStart(2, '0') }}</span>
+              <button
+                class="skill-download"
+                type="button"
+                :aria-label="`下载 ${item.title} Skill 文件`"
+                @click.stop="handleSkillDownloadClick(item)"
+              >
+                下载 <span aria-hidden="true">↓</span>
+              </button>
+            </div>
+            <div class="skill-info">
+              <strong>{{ item.title }}</strong>
+              <span class="skill-arrow" aria-hidden="true">↗</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- 提示词模板库 -->
+      <section class="loot-section prompt-section">
+        <header class="section-head">
+          <div class="section-head-main">
+            <span class="section-index" data-reveal>04 / Prompt Library</span>
+            <h2 class="section-title" data-reveal>
+              复制一个起点<br />
+              <span class="title-accent">更快抵达成片</span>
+            </h2>
+          </div>
+          <p class="section-desc" data-reveal>
+            产品图、电影感场景、UI 概念稿。点开任意模板，提示词会直接带进创作工坊。
+          </p>
+        </header>
+
+        <div class="prompt-grid">
+          <button
+            v-for="(item, index) in templates"
+            :key="item.title"
+            class="prompt-card"
+            type="button"
+            data-reveal
+            @click="handleTemplateClick(item)"
+          >
+            <span class="prompt-visual">
+              <img :src="item.image" alt="" loading="lazy" decoding="async" />
+              <span class="prompt-index">{{ String(index + 1).padStart(2, '0') }}</span>
+              <span class="prompt-use">使用模板 ↗</span>
+            </span>
+            <span class="prompt-title">{{ item.title }}</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- 收尾 CTA -->
+      <section class="final-cta">
+        <div class="final-bg" :style="{ backgroundImage: `url(${assetUrl('/home-collage-bg.webp')})` }" aria-hidden="true" />
+
+        <div class="final-inner">
+          <p class="final-kicker" data-reveal>Start Creating</p>
+          <h2 class="final-title" data-reveal>
+            灵感不用等<br />
+            <span class="title-accent">现在就变成作品</span>
+          </h2>
+          <div class="final-actions" data-reveal>
+            <button class="final-btn" type="button" @click="router.push('/setup')">
+              <span>{{ hasSession ? '进入创作工坊' : '开始创作' }}</span>
+              <span class="final-btn-icon" aria-hidden="true">↗</span>
+            </button>
+            <button class="final-ghost" type="button" @click="goModel3D">先看看 3D 建模 →</button>
+          </div>
+        </div>
+
+        <div class="final-meta">
+          <span>ArtRealm © 2026</span>
+          <span>3D · Image · Video · Voice</span>
+          <button type="button" @click="scrollToTop">回到顶部 ↑</button>
+        </div>
+      </section>
+    </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { hasActiveApiSession } from '@/api/config'
 import { assetUrl } from '@/utils/assets'
@@ -151,12 +342,13 @@ const hasSession = ref(false)
 interface CreativeZone {
   key: 'skill' | 'media' | 'voice'
   index: string
-  icon: string
+  label: string
   title: string
   desc: string
   tags: string[]
   cta: string
   target: 'skill' | 'studio' | 'voice'
+  image?: string
   soon?: boolean
 }
 
@@ -164,27 +356,29 @@ const zones: CreativeZone[] = [
   {
     key: 'skill',
     index: '01',
-    icon: '✦',
+    label: 'Skill Studio',
     title: 'Skill 创作',
     desc: '把一句话需求拆成可复用的创作规范，沉淀为标准 Skill，随时应用与修改。',
     tags: ['模板库', '标准化 Markdown', '本地应用'],
     cta: '进入 Skill 工作台',
     target: 'skill',
+    image: assetUrl('/skill-wkw-neon-loneliness-style.webp'),
   },
   {
     key: 'media',
     index: '02',
-    icon: '◈',
+    label: 'Image & Video',
     title: '图片视频生成',
     desc: '文生图、图生视频、首尾帧与多模态参考，同一个工作台完成全部画面创作。',
     tags: ['Seedream', 'Seedance', 'MiniMax H3', 'Kling'],
     cta: '进入创作工坊',
     target: 'studio',
+    image: assetUrl('/template-f1.webp'),
   },
   {
     key: 'voice',
     index: '03',
-    icon: '♪',
+    label: 'Voice Studio',
     title: '配音创作',
     desc: '文本转语音与声音复刻：音色、语速、语调、音量都能调，10 秒样本就能复刻自己的声音。',
     tags: ['MiniMax Speech 2.8', '声音复刻', '情绪演绎'],
@@ -282,11 +476,53 @@ const typewriterPhrases = [
   '治愈系卡通兔子角色。',
 ]
 
+const manifestoWords = [
+  { index: '01', word: '生成', en: 'Generate', desc: '一句描述直接产出画面、视频或 3D 模型，不用来回切换工具。' },
+  { index: '02', word: '编排', en: 'Orchestrate', desc: '模板、参考图与镜头语言放在同一块画布上，边生成边调整。' },
+  { index: '03', word: '交付', en: 'Deliver', desc: '图片、视频、配音与 3D 资产一次导出，直接进入下一步工作。' },
+]
+
+/** 配音分区的等宽声波装饰（固定序列，避免每次渲染抖动）。 */
+const voiceWave = Array.from({ length: 34 }, (_, index) =>
+  16 + Math.round(Math.abs(Math.sin(index * 0.62)) * 66),
+)
+
 const typewriterText = ref('')
 let typewriterTimer: number | undefined
 let phraseIndex = 0
 let charIndex = 0
 let deleting = false
+
+/** 页面进度与滚动状态：顶部细进度条 + 导航百分比 + 流程分区的词语高亮。 */
+const pageProgress = ref(0)
+const scrolled = ref(false)
+const manifestoProgress = ref(0)
+const activeManifesto = computed(() =>
+  manifestoProgress.value < 1 / 3 ? 0 : manifestoProgress.value < 2 / 3 ? 1 : 2,
+)
+
+let scrollFrame = 0
+
+function readScroll() {
+  scrollFrame = 0
+
+  const doc = document.documentElement
+  const max = doc.scrollHeight - window.innerHeight
+  pageProgress.value = max > 0 ? Math.min(100, Math.max(0, Math.round((window.scrollY / max) * 100))) : 0
+  scrolled.value = window.scrollY > 32
+
+  const manifesto = document.getElementById('manifesto')
+  if (!manifesto) return
+  const rect = manifesto.getBoundingClientRect()
+  const span = rect.height - window.innerHeight
+  const passed = -rect.top
+  manifestoProgress.value = span > 0 ? Math.min(1, Math.max(0, passed / span)) : 0
+}
+
+function onScroll() {
+  if (scrollFrame) return
+  scrollFrame = window.requestAnimationFrame(readScroll)
+}
 
 function runTypewriter() {
   const phrase = typewriterPhrases[phraseIndex % typewriterPhrases.length]
@@ -318,8 +554,16 @@ function scrollToZones() {
   document.getElementById('zones')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
+function scrollToManifesto() {
+  document.getElementById('manifesto')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
 function scrollToInspiration() {
   document.getElementById('inspiration')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 function enterZone(zone: CreativeZone) {
@@ -334,6 +578,14 @@ function enterZone(zone: CreativeZone) {
   }
 
   router.push(zone.target === 'skill' ? '/skill' : '/studio')
+}
+
+function goModel3D() {
+  if (!hasActiveApiSession()) {
+    router.push({ path: '/setup', query: { redirect: '/model3d' } })
+    return
+  }
+  router.push('/model3d')
 }
 
 function handleTemplateClick(item: { prompt: string }) {
@@ -357,6 +609,12 @@ function handleTemplateClick(item: { prompt: string }) {
   router.push({ path: '/setup', query: { redirect: 'studio' } })
 }
 
+/** 点 hero 底部的打字机提示词，直接把完整句子带进工坊。 */
+function useTypedPrompt() {
+  const phrase = typewriterPhrases[phraseIndex % typewriterPhrases.length]
+  handleTemplateClick({ prompt: phrase })
+}
+
 function handleSkillTemplateClick() {
   if (hasActiveApiSession()) {
     router.push('/skill')
@@ -374,303 +632,587 @@ function handleSkillDownloadClick(item: { fileUrl: string; fileName: string }) {
   link.remove()
 }
 
+let revealObserver: IntersectionObserver | undefined
+
 onMounted(() => {
   hasSession.value = hasActiveApiSession()
   runTypewriter()
+
+  window.addEventListener('scroll', onScroll, { passive: true })
+  window.addEventListener('resize', onScroll, { passive: true })
+  readScroll()
+
+  revealObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return
+        entry.target.classList.add('is-visible')
+        revealObserver?.unobserve(entry.target)
+      })
+    },
+    { threshold: 0.04, rootMargin: '0px 0px -2% 0px' },
+  )
+  document.querySelectorAll('[data-reveal]').forEach((element) => revealObserver?.observe(element))
 })
 
 onBeforeUnmount(() => {
   if (typewriterTimer !== undefined) {
     window.clearTimeout(typewriterTimer)
   }
+  if (scrollFrame) {
+    window.cancelAnimationFrame(scrollFrame)
+  }
+  window.removeEventListener('scroll', onScroll)
+  window.removeEventListener('resize', onScroll)
+  revealObserver?.disconnect()
 })
 </script>
 
-
 <style scoped>
-.home-page {
+.loot-home {
+  --orange: #ec5a00;
+  --orange-bright: #ff7243;
+  --red: #641005;
+  --ink: #060504;
+  --line: rgba(255, 255, 255, 0.12);
+  --muted: rgba(245, 241, 236, 0.52);
+  --smooth: cubic-bezier(0.16, 1, 0.3, 1);
+
   position: relative;
-  min-height: 100dvh;
-  overflow-x: hidden;
-  color: #fff;
-  background:
-    radial-gradient(circle at 50% -10%, rgba(70, 60, 140, 0.30), transparent 55%),
-    linear-gradient(180deg, #05060b 0%, #06070d 42%, #04050a 100%);
   isolation: isolate;
+  width: 100%;
+  min-height: 100dvh;
+  overflow-x: clip;
+  background: var(--ink);
+  color: #f5f1ec;
 }
 
-.aurora {
-  position: absolute;
-  z-index: 0;
-  border-radius: 50%;
-  filter: blur(90px);
-  opacity: 0.55;
+/* ---------- 全局装饰 ---------- */
+
+.page-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 70;
+  width: 100%;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.08);
   pointer-events: none;
-  animation: aurora-drift 18s ease-in-out infinite alternate;
 }
 
-.aurora-a {
-  top: -220px;
-  left: 8%;
-  width: 620px;
-  height: 520px;
-  background: radial-gradient(circle, rgba(139, 122, 255, 0.55), transparent 68%);
+.page-progress span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, var(--orange), var(--orange-bright));
+  transition: transform 120ms linear;
 }
 
-.aurora-b {
-  top: -140px;
-  right: 4%;
-  width: 560px;
-  height: 480px;
-  background: radial-gradient(circle, rgba(52, 211, 235, 0.38), transparent 66%);
-  animation-delay: -6s;
-}
-
-.aurora-c {
-  top: 420px;
-  left: 38%;
-  width: 680px;
-  height: 420px;
-  background: radial-gradient(circle, rgba(255, 148, 120, 0.20), transparent 70%);
-  animation-delay: -11s;
-}
-
-@keyframes aurora-drift {
-  from {
-    transform: translate3d(-24px, 0, 0) scale(1);
-  }
-  to {
-    transform: translate3d(28px, 26px, 0) scale(1.08);
-  }
-}
-
-.grain {
+.noise {
   position: fixed;
   inset: 0;
-  z-index: 0;
+  z-index: 1;
   pointer-events: none;
-  opacity: 0.16;
-  background-image: radial-gradient(rgba(255, 255, 255, 0.22) 0.5px, transparent 0.5px);
+  opacity: 0.05;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.7) 0.5px, transparent 0.5px);
   background-size: 3px 3px;
   mix-blend-mode: overlay;
 }
 
-.home-header {
+[data-reveal] {
+  opacity: 0;
+  translate: 0 26px;
+  transition:
+    opacity 0.85s var(--smooth),
+    translate 0.85s var(--smooth);
+}
+
+[data-reveal].is-visible {
+  opacity: 1;
+  translate: 0 0;
+}
+
+/* ---------- 导航 ---------- */
+
+.loot-nav {
   position: fixed;
   top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 20;
-  width: min(100% - 48px, 1280px);
-  height: 86px;
+  left: 0;
+  z-index: 50;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 20px;
+  width: 100%;
+  padding: 18px 32px;
+  transition: background 0.4s ease, backdrop-filter 0.4s ease;
 }
 
-.brand-logo,
-.login-btn,
-.template-card {
-  border: 0;
-  font: inherit;
+.loot-nav.is-scrolled {
+  background: linear-gradient(180deg, rgba(6, 5, 4, 0.82), rgba(6, 5, 4, 0.18) 78%, transparent);
+  backdrop-filter: blur(12px);
 }
 
-.brand-logo {
-  justify-self: start;
+.nav-left {
+  display: flex;
+  align-items: center;
+}
+
+.brand {
   display: inline-flex;
   align-items: center;
   gap: 10px;
   padding: 0;
-  color: #fff;
+  border: 0;
   background: transparent;
+  color: inherit;
   cursor: pointer;
 }
 
 .brand-mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
   object-fit: cover;
-  box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.32),
-    0 0 34px rgba(255, 255, 255, 0.10),
-    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
-.brand-name {
+.brand-text {
   font-family: var(--font-family-display);
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: -0.06em;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
 }
 
-.home-nav {
+.brand-dot {
+  color: var(--orange-bright);
+}
+
+.nav-pill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 26px;
+  padding: 11px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
   border-radius: 999px;
-  background: rgba(11, 13, 22, 0.55);
-  backdrop-filter: blur(18px);
+  background: rgba(255, 255, 255, 0.045);
+  backdrop-filter: blur(24px) saturate(140%);
 }
 
-.nav-link {
-  padding: 8px 16px;
-  border-radius: 999px;
-  color: rgba(226, 232, 246, 0.66);
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
-  transition: color var(--transition-base), background var(--transition-base);
-}
-
-.nav-link:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.login-btn {
-  justify-self: end;
-  min-width: 92px;
-  min-height: 42px;
-  padding: 0 22px;
-  border: 1px solid var(--color-pale-glass-border);
-  border-radius: 999px;
-  background: var(--color-pale-glass-bg);
-  color: rgba(226, 234, 255, 0.96);
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(18px) saturate(140%);
-  transition: border-color var(--transition-base), background var(--transition-base);
-}
-
-.login-btn:hover {
-  border-color: rgba(255, 255, 255, 0.34);
-  background: var(--color-pale-glass-bg-hover);
-}
-
-.home-main {
-  position: relative;
-  z-index: 2;
-  width: min(100% - 48px, 1180px);
-  margin: 0 auto;
-  padding: 150px 0 20px;
-}
-
-.hero {
-  text-align: center;
-  margin-bottom: 56px;
-}
-
-.hero-kicker {
-  margin-bottom: 16px;
-  background: linear-gradient(135deg, #cfc4ff 0%, #8ee6ff 55%, #ffc9a8 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+.nav-pill a {
+  color: rgba(245, 241, 236, 0.62);
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.34em;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-decoration: none;
   text-transform: uppercase;
+  transition: color 0.25s ease;
 }
 
-.hero h1 {
-  color: rgba(255, 255, 255, 0.97);
+.nav-pill a:hover {
+  color: #fff;
+}
+
+.nav-divider {
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.nav-progress {
+  min-width: 34px;
+  color: var(--orange-bright);
   font-family: var(--font-family-display);
-  font-size: clamp(34px, 5.6vw, 68px);
-  font-weight: 800;
-  line-height: 1.05;
-  letter-spacing: -0.055em;
-  text-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  text-align: right;
 }
 
-.hero-gradient {
-  background: linear-gradient(100deg, #ffffff 0%, #d9d2ff 38%, #8fe7ff 72%, #ffd6b8 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.hero-subtitle {
-  width: min(100%, 560px);
-  margin: 20px auto 0;
-  color: rgba(214, 224, 245, 0.62);
-  font-size: 15px;
-  line-height: 1.75;
-}
-
-.typewriter-card {
-  position: relative;
-  width: min(100%, 760px);
-  min-height: 92px;
+.nav-right {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  margin: 34px auto 0;
-  padding: 20px 26px;
-  border: 1px solid rgba(190, 205, 255, 0.16);
-  border-radius: 24px;
-  background:
-    linear-gradient(180deg, rgba(19, 21, 35, 0.86), rgba(8, 9, 16, 0.82)),
-    radial-gradient(circle at 82% 0%, rgba(139, 122, 255, 0.20), transparent 0 42%);
-  box-shadow:
-    0 30px 90px rgba(0, 0, 0, 0.52),
-    inset 0 1px 0 rgba(255, 255, 255, 0.10);
-  backdrop-filter: blur(22px) saturate(120%);
+  justify-self: end;
+  gap: 18px;
 }
 
-.typewriter-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background:
-    linear-gradient(135deg, rgba(160, 170, 255, 0.12), transparent 40%),
-    linear-gradient(315deg, rgba(120, 220, 255, 0.08), transparent 46%);
-  mix-blend-mode: screen;
-}
-
-.typewriter-label {
-  background: linear-gradient(135deg, #cfc4ff 0%, #8ee6ff 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  font-family: "Georgia", "Times New Roman", serif;
-  font-style: italic;
-  font-size: 12px;
-  font-weight: 700;
+.nav-text-btn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(245, 241, 236, 0.62);
+  font-size: 11px;
+  font-weight: 500;
   letter-spacing: 0.18em;
   text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.25s ease;
 }
 
-.typewriter-line {
+.nav-text-btn:hover {
+  color: #fff;
+}
+
+.cta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  height: 44px;
+  padding: 0 6px 0 20px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--orange), var(--red));
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 16px 40px rgba(236, 90, 0, 0.24);
+  transition:
+    transform 0.45s var(--smooth),
+    box-shadow 0.45s var(--smooth);
+}
+
+.cta-pill:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 22px 54px rgba(236, 90, 0, 0.36);
+}
+
+.cta-pill-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.cta-pill svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* ---------- Hero ---------- */
+
+.loot-hero {
   position: relative;
-  z-index: 1;
-  min-height: 1.6em;
-  margin: 0;
-  color: rgba(240, 244, 255, 0.9);
-  font-family: var(--font-family-display);
-  font-size: clamp(14px, 1.1vw, 17px);
-  font-weight: 500;
-  line-height: 1.6;
-  text-align: center;
-  white-space: pre-wrap;
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  padding: 118px 40px 30px;
+  overflow: hidden;
 }
 
-.typewriter-caret {
+.hero-atmosphere {
+  position: absolute;
+  inset: -6% -8% 0;
+  z-index: 0;
+  background-position: center 28%;
+  background-size: cover;
+  opacity: 0.24;
+  filter: saturate(0.9) contrast(1.05);
+  -webkit-mask-image: radial-gradient(120% 92% at 68% 18%, #000 0%, transparent 70%);
+  mask-image: radial-gradient(120% 92% at 68% 18%, #000 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.loot-hero::before {
+  content: '';
+  position: absolute;
+  top: -32%;
+  right: -6%;
+  z-index: 0;
+  width: 780px;
+  height: 780px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(236, 90, 0, 0.22), transparent 66%);
+  filter: blur(30px);
+  pointer-events: none;
+}
+
+.hero-grid {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  align-items: end;
+  gap: 44px;
+  width: 100%;
+  max-width: 1560px;
+  margin: 0 auto;
+  padding-bottom: 40px;
+  flex: 1;
+}
+
+.hero-heading {
+  min-width: 0;
+}
+
+.hero-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: rgba(245, 241, 236, 0.42);
+  font-family: var(--font-family-display);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+
+.hero-eyebrow::before {
+  content: '';
+  width: 46px;
+  height: 1px;
+  background: var(--orange);
+}
+
+.hero-title {
+  margin: 28px 0 0;
+  font-family: var(--font-family-display);
+  font-weight: 500;
+  font-size: clamp(3.4rem, 9.6vw, 10.8rem);
+  line-height: 0.94;
+  letter-spacing: -0.055em;
+}
+
+.hero-line {
+  display: block;
+  width: fit-content;
+}
+
+.hero-line--1 {
+  background: linear-gradient(92deg, #ffffff 8%, #d9c8bf 76%, #b97967 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-line--2 {
+  margin-left: clamp(0px, 7vw, 150px);
+  background: linear-gradient(92deg, #ffffff 0%, #ffb27a 46%, #ec5a00 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-sub {
+  max-width: 430px;
+  margin-top: 32px;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.8;
+}
+
+.hero-sub-strong {
+  display: block;
+  margin-top: 6px;
+  color: rgba(245, 241, 236, 0.86);
+}
+
+.hero-cards {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 16px;
+  padding-bottom: 6px;
+}
+
+.hero-card:focus-visible {
+  border-color: var(--orange-bright);
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgba(236, 90, 0, 0.35),
+    0 30px 70px rgba(0, 0, 0, 0.45);
+}
+
+.hero-card {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  width: min(100%, 318px);
+  padding: 20px 22px 22px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 24px;
+  background:
+    linear-gradient(150deg, rgba(255, 255, 255, 0.11) 0%, rgba(255, 255, 255, 0.03) 52%, rgba(255, 255, 255, 0.06) 100%);
+  box-shadow:
+    0 30px 70px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(22px) saturate(135%);
+  cursor: pointer;
+  transition:
+    border-color 0.45s ease,
+    transform 0.65s var(--smooth),
+    box-shadow 0.65s var(--smooth);
+}
+
+.hero-card--a {
+  transform: rotate(-1.6deg);
+}
+
+.hero-card--b {
+  transform: rotate(1.2deg) translateX(-18px);
+}
+
+.hero-card:hover {
+  border-color: rgba(236, 90, 0, 0.55);
+  transform: rotate(0deg) translateY(-6px);
+  box-shadow:
+    0 40px 90px rgba(0, 0, 0, 0.55),
+    0 0 60px -18px rgba(236, 90, 0, 0.45);
+}
+
+.hero-card-kicker {
+  color: rgba(245, 241, 236, 0.42);
+  font-family: var(--font-family-display);
+  font-size: 9.5px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.hero-card-num {
+  font-family: var(--font-family-display);
+  font-size: 54px;
+  font-weight: 500;
+  line-height: 0.9;
+  letter-spacing: -0.05em;
+  background: linear-gradient(92deg, #fff 0%, #ffb27a 62%, #ec5a00 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.num-plus {
+  font-size: 0.5em;
+  vertical-align: super;
+}
+
+.hero-card-title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.hero-card-desc {
+  color: rgba(245, 241, 236, 0.46);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+
+.hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hero-chips span {
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  color: rgba(245, 241, 236, 0.6);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+}
+
+.hero-card-arrow {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  color: rgba(245, 241, 236, 0.4);
+  font-size: 14px;
+  transition: color 0.35s ease, transform 0.45s var(--smooth);
+}
+
+.hero-card:hover .hero-card-arrow {
+  color: var(--orange-bright);
+  transform: translate(2px, -2px);
+}
+
+.hero-foot {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 28px;
+  width: 100%;
+  max-width: 1560px;
+  margin: 0 auto;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+
+.hero-meta {
+  display: flex;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.65;
+}
+
+.meta-index {
+  flex: 0 0 auto;
+  padding-top: 2px;
+  color: var(--orange-bright);
+  font-family: var(--font-family-display);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+}
+
+.hl {
+  color: #fff;
+}
+
+.hero-ticker {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 13px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  text-align: left;
+  backdrop-filter: blur(18px);
+  cursor: pointer;
+  transition: border-color 0.35s ease, background 0.35s ease;
+}
+
+.hero-ticker:hover {
+  border-color: rgba(236, 90, 0, 0.45);
+  background: rgba(236, 90, 0, 0.07);
+}
+
+.ticker-label {
+  flex: 0 0 auto;
+  color: var(--orange-bright);
+  font-family: var(--font-family-display);
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.ticker-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(245, 241, 236, 0.78);
+  font-size: 12.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ticker-caret {
   display: inline-block;
-  width: 2px;
-  height: 1.05em;
+  width: 1px;
+  height: 1em;
   margin-left: 3px;
   vertical-align: -0.14em;
-  background: linear-gradient(180deg, #cfc4ff, #8ee6ff);
+  background: var(--orange-bright);
   animation: caret-blink 1s steps(1, end) infinite;
 }
 
@@ -684,382 +1226,975 @@ onBeforeUnmount(() => {
   }
 }
 
-/* ---------- 三大分区 ---------- */
+.ticker-action {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(245, 241, 236, 0.72);
+}
+
+.ticker-action svg {
+  width: 12px;
+  height: 12px;
+}
+
+.hero-ticker:hover .ticker-action {
+  background: var(--orange);
+  color: #fff;
+}
+
+.hero-scroll {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: rgba(245, 241, 236, 0.32);
+  font-family: var(--font-family-display);
+  font-size: 9px;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+}
+
+.hero-scroll-line {
+  width: 1px;
+  height: 44px;
+  background: linear-gradient(180deg, var(--orange), transparent);
+  animation: scroll-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes scroll-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scaleY(0.72);
+    transform-origin: top;
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(1);
+    transform-origin: top;
+  }
+}
+
+/* ---------- 滚动流程 ---------- */
+
+.manifesto {
+  position: relative;
+  height: 260vh;
+}
+
+.manifesto-sticky {
+  position: sticky;
+  top: 0;
+  display: grid;
+  place-items: center;
+  height: 100svh;
+  padding: 0 40px;
+  overflow: hidden;
+}
+
+.manifesto-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  align-items: end;
+  gap: 60px;
+  width: 100%;
+  max-width: 1560px;
+}
+
+.manifesto-words {
+  display: grid;
+  min-width: 0;
+}
+
+.manifesto-kicker {
+  margin-bottom: 26px;
+  color: rgba(245, 241, 236, 0.32);
+  font-family: var(--font-family-display);
+  font-size: 10px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+}
+
+.manifesto-word {
+  display: flex;
+  align-items: baseline;
+  gap: clamp(12px, 2vw, 32px);
+  color: rgba(245, 241, 236, 0.14);
+  font-family: var(--font-family-display);
+  font-size: clamp(3rem, 9vw, 9.6rem);
+  font-weight: 500;
+  line-height: 1.12;
+  letter-spacing: -0.05em;
+  transition:
+    color 0.5s ease,
+    transform 0.8s var(--smooth);
+}
+
+.manifesto-word.is-active {
+  color: #fff;
+  transform: translateX(clamp(12px, 3vw, 52px));
+}
+
+.manifesto-word.is-active .mw-text {
+  background: linear-gradient(92deg, #ffffff 0%, #ff9a5c 55%, var(--orange) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.mw-index {
+  color: rgba(245, 241, 236, 0.3);
+  font-size: 0.16em;
+  letter-spacing: 0.2em;
+}
+
+.manifesto-word.is-active .mw-index {
+  color: var(--orange);
+}
+
+.mw-en {
+  color: rgba(245, 241, 236, 0.22);
+  font-size: 0.13em;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.manifesto-word.is-active .mw-en {
+  color: rgba(255, 114, 67, 0.6);
+}
+
+.manifesto-side {
+  display: grid;
+  align-content: space-between;
+  gap: 16px;
+  min-height: 168px;
+  padding: 4px 0 6px 24px;
+  border-left: 1px solid var(--line);
+}
+
+.manifesto-side-label {
+  color: var(--orange-bright);
+  font-family: var(--font-family-display);
+  font-size: 9.5px;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+}
+
+.manifesto-side p {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.8;
+}
+
+.manifesto-side-count {
+  color: rgba(245, 241, 236, 0.32);
+  font-family: var(--font-family-display);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+}
+
+/* ---------- 分区通用 ---------- */
+
+.loot-section {
+  position: relative;
+  padding: clamp(90px, 10vw, 150px) 40px;
+}
+
+.section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 60px;
+  width: 100%;
+  max-width: 1560px;
+  margin: 0 auto 52px;
+  padding-bottom: 26px;
+  border-bottom: 1px solid var(--line);
+}
+
+.section-head-main {
+  display: grid;
+  gap: 18px;
+}
+
+.section-index {
+  color: var(--orange-bright);
+  font-family: var(--font-family-display);
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+
+.section-title {
+  font-family: var(--font-family-display);
+  font-size: clamp(2.5rem, 5.6vw, 6rem);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.045em;
+}
+
+.title-accent {
+  background: linear-gradient(92deg, #ffffff 0%, #ffb27a 42%, var(--orange) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.section-desc {
+  max-width: 330px;
+  padding-bottom: 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.8;
+}
+
+/* ---------- 三大工作台 ---------- */
+
+.zones-section {
+  scroll-margin-top: 96px;
+}
+
 .zone-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
-  scroll-margin-top: 110px;
+  gap: 20px;
+  width: 100%;
+  max-width: 1560px;
+  margin: 0 auto;
 }
 
 .zone-card {
-  --zone-accent: #b9a8ff;
-  --zone-accent-strong: #e6ddff;
-  --zone-glow: rgba(150, 120, 255, 0.34);
-
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  min-height: 336px;
-  padding: 26px 26px 24px;
+  min-height: 540px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 28px;
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.075) 0%, rgba(255, 255, 255, 0.022) 46%, rgba(255, 255, 255, 0.05) 100%);
-  box-shadow:
-    0 26px 70px rgba(0, 0, 0, 0.36),
-    inset 0 1px 0 rgba(255, 255, 255, 0.10);
-  backdrop-filter: blur(20px) saturate(130%);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 30px;
+  background: #0a0908;
   cursor: pointer;
   transition:
-    transform var(--transition-slow),
-    border-color var(--transition-slow),
-    box-shadow var(--transition-slow);
-}
-
-.zone-media {
-  --zone-accent: #7fe0ff;
-  --zone-accent-strong: #d6f7ff;
-  --zone-glow: rgba(56, 189, 248, 0.34);
-}
-
-.zone-voice {
-  --zone-accent: #ffcf8a;
-  --zone-accent-strong: #ffe9c9;
-  --zone-glow: rgba(251, 146, 60, 0.30);
+    transform 0.65s var(--smooth),
+    border-color 0.5s ease,
+    box-shadow 0.65s var(--smooth);
 }
 
 .zone-card:hover,
 .zone-card:focus-visible {
-  transform: translateY(-6px);
-  border-color: color-mix(in srgb, var(--zone-accent) 42%, transparent);
-  box-shadow:
-    0 40px 100px rgba(0, 0, 0, 0.46),
-    0 0 0 1px color-mix(in srgb, var(--zone-accent) 22%, transparent),
-    0 0 70px -12px var(--zone-glow);
+  border-color: rgba(236, 90, 0, 0.55);
   outline: none;
+  transform: translateY(-8px);
+  box-shadow: 0 42px 96px rgba(0, 0, 0, 0.58);
 }
 
-.zone-glow {
+.zone-media-layer,
+.zone-voice-art {
   position: absolute;
-  top: -60px;
-  right: -40px;
-  width: 220px;
-  height: 220px;
-  border-radius: 50%;
-  background: radial-gradient(circle, var(--zone-glow), transparent 68%);
-  filter: blur(28px);
-  opacity: 0.9;
-  pointer-events: none;
-  transition: opacity var(--transition-slow), transform var(--transition-slow);
-}
-
-.zone-card:hover .zone-glow {
-  opacity: 1;
-  transform: scale(1.12);
-}
-
-.zone-index {
-  position: absolute;
-  right: 20px;
-  bottom: 8px;
-  color: rgba(255, 255, 255, 0.05);
-  font-family: var(--font-family-display);
-  font-size: 96px;
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.08em;
+  inset: 0;
+  z-index: 0;
   pointer-events: none;
 }
 
-.zone-head {
+.zone-media-layer img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.6;
+  transform: scale(1.02);
+  transition:
+    transform 1.4s var(--smooth),
+    opacity 0.6s ease;
+}
+
+.zone-card:hover .zone-media-layer img {
+  opacity: 0.78;
+  transform: scale(1.08);
+}
+
+.zone-voice-art {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 34px;
+  background:
+    radial-gradient(120% 90% at 50% 32%, rgba(236, 90, 0, 0.36), transparent 58%),
+    radial-gradient(90% 80% at 18% 18%, rgba(100, 16, 5, 0.75), transparent 62%),
+    #0a0705;
 }
 
-.zone-icon {
-  display: inline-flex;
+.voice-bar {
+  flex: 1;
+  min-height: 4px;
+  max-height: 44%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ff9a5c, rgba(236, 90, 0, 0.18));
+  opacity: 0.8;
+  animation: voice-pulse 1.8s ease-in-out infinite alternate;
+}
+
+@keyframes voice-pulse {
+  from {
+    transform: scaleY(0.55);
+    opacity: 0.45;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 0.95;
+  }
+}
+
+.zone-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    180deg,
+    rgba(6, 5, 4, 0.04) 0%,
+    rgba(6, 5, 4, 0.62) 46%,
+    rgba(6, 5, 4, 0.95) 78%,
+    #060504 100%
+  );
+  pointer-events: none;
+}
+
+.zone-top {
+  position: relative;
+  z-index: 2;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  width: 46px;
-  height: 46px;
-  border: 1px solid color-mix(in srgb, var(--zone-accent) 34%, transparent);
-  border-radius: 15px;
-  background: color-mix(in srgb, var(--zone-accent) 12%, transparent);
-  color: var(--zone-accent-strong);
-  font-size: 20px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  gap: 12px;
+  padding: 24px 24px 0;
+}
+
+.zone-step {
+  color: var(--orange-bright);
+  font-family: var(--font-family-display);
+  font-size: 11.5px;
+  letter-spacing: 0.2em;
+}
+
+.zone-label {
+  color: rgba(245, 241, 236, 0.48);
+  font-family: var(--font-family-display);
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
 }
 
 .zone-badge {
-  padding: 5px 11px;
-  border: 1px solid color-mix(in srgb, var(--zone-accent) 40%, transparent);
+  margin-left: auto;
+  padding: 5px 10px;
+  border: 1px solid rgba(255, 178, 122, 0.4);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--zone-accent) 12%, transparent);
-  color: var(--zone-accent-strong);
-  font-size: 11px;
-  font-weight: 700;
+  background: rgba(236, 90, 0, 0.14);
+  color: #ffd0b3;
+  font-size: 10px;
   letter-spacing: 0.08em;
 }
 
+.zone-body {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 14px;
+  margin-top: auto;
+  padding: 24px;
+}
+
 .zone-title {
-  margin-top: 4px;
-  color: #fff;
   font-family: var(--font-family-display);
-  font-size: 25px;
-  font-weight: 800;
-  letter-spacing: -0.04em;
+  font-size: clamp(1.6rem, 2.2vw, 2.2rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
 }
 
 .zone-desc {
-  color: rgba(214, 224, 245, 0.60);
-  font-size: 13.5px;
-  line-height: 1.72;
+  max-width: 34ch;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.75;
 }
 
 .zone-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
-  margin-top: auto;
 }
 
-.zone-tag {
+.zone-tags span {
   padding: 5px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(220, 230, 250, 0.62);
-  font-size: 11.5px;
-  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(245, 241, 236, 0.66);
+  font-size: 10px;
+  letter-spacing: 0.05em;
 }
 
 .zone-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--zone-accent-strong);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.zone-arrow {
-  display: inline-block;
-  transition: transform var(--transition-base);
-}
-
-.zone-card:hover .zone-arrow {
-  transform: translateX(5px);
-}
-
-.zone-card.is-soon .zone-title {
-  color: rgba(255, 255, 255, 0.86);
-}
-
-/* ---------- 模板区 ---------- */
-.template-section {
-  position: relative;
-  z-index: 2;
-  width: min(100% - 48px, 1180px);
-  margin: 0 auto 64px;
-  padding-top: 20px;
-}
-
-.skill-template-section {
-  margin-top: 52px;
-  scroll-margin-top: 110px;
-}
-
-.prompt-template-section {
-  margin-top: 0;
-}
-
-.template-head {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
+  gap: 14px;
+  margin-top: 2px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.13);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
-.section-kicker {
-  margin-bottom: 6px;
-  color: rgba(190, 200, 230, 0.42);
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
+.zone-cta-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 50%;
+  font-size: 14px;
+  transition:
+    background 0.4s ease,
+    border-color 0.4s ease,
+    transform 0.5s var(--smooth);
 }
 
-.template-head h2 {
-  color: rgba(255, 255, 255, 0.88);
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -0.04em;
+.zone-card:hover .zone-cta-icon {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--orange), var(--red));
+  transform: translate(2px, -2px);
 }
 
-.template-grid {
+/* ---------- 模板库 ---------- */
+
+.library-section {
+  scroll-margin-top: 96px;
+}
+
+.skill-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
+  gap: 18px;
+  width: 100%;
+  max-width: 1560px;
+  margin: 0 auto;
 }
 
-.template-card {
-  min-width: 0;
-  padding: 0;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.76);
-  text-align: left;
-}
-
-.skill-template-card {
+.skill-card {
+  display: grid;
+  gap: 13px;
   cursor: pointer;
 }
 
-.template-card strong {
-  display: block;
-  margin-top: 10px;
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 15px;
-  font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.template-visual {
+.skill-visual {
   position: relative;
-  display: block;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 4 / 3;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 14px;
-  background: #0a0a0d;
-  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.28);
-  transition: transform var(--transition-base), border-color var(--transition-base);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: #0a0908;
 }
 
-.template-visual::before,
-.template-visual::after,
-.visual-glow {
-  content: '';
-  position: absolute;
-  inset: 0;
-}
-
-.template-visual::before {
-  opacity: 0.96;
-}
-
-.template-visual::after {
-  background: linear-gradient(180deg, transparent 50%, rgba(0, 0, 0, 0.36));
-}
-
-.visual-glow {
-  filter: blur(18px);
-  opacity: 0.58;
-}
-
-.template-image {
-  position: absolute;
-  inset: 0;
+.skill-visual img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;
+  filter: saturate(0.94);
+  transition:
+    transform 1.1s var(--smooth),
+    filter 0.5s ease;
 }
 
-.skill-download-btn {
+.skill-card:hover .skill-visual img {
+  filter: saturate(1.12);
+  transform: scale(1.06);
+}
+
+.skill-index {
   position: absolute;
-  right: 10px;
-  bottom: 10px;
-  z-index: 3;
+  top: 12px;
+  left: 13px;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(6, 5, 4, 0.52);
+  color: #fff;
+  font-family: var(--font-family-display);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  backdrop-filter: blur(8px);
+}
+
+.skill-download {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-width: 72px;
-  min-height: 34px;
-  padding: 0 14px;
+  gap: 6px;
+  padding: 7px 13px;
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 999px;
-  background: rgba(5, 12, 26, 0.58);
-  color: rgba(255, 255, 255, 0.92);
-  font: inherit;
+  background: rgba(6, 5, 4, 0.58);
+  color: #fff;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  opacity: 0;
+  transform: translateY(6px);
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+  transition:
+    opacity 0.35s ease,
+    transform 0.45s var(--smooth),
+    background 0.35s ease;
+}
+
+.skill-card:hover .skill-download,
+.skill-download:focus-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.skill-download:hover {
+  background: linear-gradient(90deg, var(--orange), var(--red));
+  border-color: transparent;
+}
+
+.skill-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.skill-info strong {
+  overflow: hidden;
+  color: rgba(245, 241, 236, 0.82);
   font-size: 13px;
-  font-weight: 700;
-  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(14px) saturate(140%);
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.skill-download-btn:hover {
-  border-color: rgba(105, 240, 255, 0.44);
-  background: rgba(9, 24, 52, 0.68);
+.skill-arrow {
+  color: rgba(245, 241, 236, 0.3);
+  font-size: 13px;
+  transition: color 0.3s ease, transform 0.4s var(--smooth);
 }
 
-.template-visual.has-image::before {
-  display: none;
+.skill-card:hover .skill-arrow {
+  color: var(--orange-bright);
+  transform: translate(2px, -2px);
 }
 
-.template-visual.is-zoomed .template-image {
-  transform: scale(1.08);
+.prompt-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+  max-width: 1560px;
+  margin: 0 auto;
 }
 
-.template-product::before {
-  background: linear-gradient(135deg, #101722, #741a48 70%), radial-gradient(circle at 36% 38%, #f3ebce, transparent 0 20%);
+.prompt-card {
+  display: grid;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.template-b2b::before {
-  background: linear-gradient(135deg, #2d7ab5, #d8eef6), radial-gradient(circle at 62% 44%, #ffffff, transparent 0 18%);
+.prompt-visual {
+  position: relative;
+  display: block;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #0a0908;
 }
 
-.template-tech::before {
-  background: radial-gradient(ellipse at 50% 50%, #dfeeff, transparent 0 16%), linear-gradient(135deg, #04080d, #182232);
+.prompt-visual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 1.1s var(--smooth);
 }
 
-.template-race::before {
-  background: linear-gradient(135deg, #d9e3e6, #1d2d36), radial-gradient(ellipse at 50% 68%, #101010, transparent 0 28%);
+.prompt-card:hover .prompt-visual img {
+  transform: scale(1.07);
 }
 
-.template-monster::before {
-  background: linear-gradient(135deg, #2d1e1b, #e07936), radial-gradient(circle at 50% 50%, #1a100c, transparent 0 24%);
+.prompt-visual::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(6, 5, 4, 0) 46%, rgba(6, 5, 4, 0.78) 100%);
+  pointer-events: none;
 }
 
-.template-commerce::before {
-  background: radial-gradient(circle at 64% 42%, #101010, transparent 0 18%), linear-gradient(135deg, #120303, #8e1113);
+.prompt-index {
+  position: absolute;
+  top: 11px;
+  left: 12px;
+  z-index: 2;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(6, 5, 4, 0.5);
+  color: #fff;
+  font-family: var(--font-family-display);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  backdrop-filter: blur(8px);
 }
 
-.template-hero::before {
-  background: linear-gradient(135deg, #bd2b23, #082f44 72%), radial-gradient(circle at 38% 45%, #f1a165, transparent 0 18%);
+.prompt-use {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  z-index: 2;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--orange), var(--red));
+  color: #fff;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity 0.35s ease,
+    transform 0.45s var(--smooth);
 }
 
-.template-stage::before {
-  background: linear-gradient(135deg, #dfe7ef, #46556d), radial-gradient(ellipse at 52% 74%, #ffffff, transparent 0 24%);
+.prompt-card:hover .prompt-use,
+.prompt-card:focus-visible .prompt-use {
+  opacity: 1;
+  transform: translateY(0);
 }
 
-.template-skill::before {
-  background:
-    radial-gradient(circle at 68% 36%, rgba(255, 176, 202, 0.28), transparent 0 16%),
-    linear-gradient(135deg, #061b2e, #3c0d3a 72%);
+.prompt-title {
+  display: block;
+  margin-top: 10px;
+  overflow: hidden;
+  color: rgba(245, 241, 236, 0.76);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.template-card:hover .template-visual {
-  transform: translateY(-2px);
-  border-color: rgba(116, 230, 255, 0.28);
+/* ---------- 收尾 ---------- */
+
+.final-cta {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 100svh;
+  padding: 130px 40px 150px;
+  overflow: hidden;
+  border-top: 1px solid var(--line);
 }
 
-@media (max-width: 1100px) {
-  .template-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+.final-bg {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  opacity: 0.26;
+  filter: saturate(0.9);
+  -webkit-mask-image: radial-gradient(92% 82% at 50% 42%, #000 0%, transparent 74%);
+  mask-image: radial-gradient(92% 82% at 50% 42%, #000 0%, transparent 74%);
+  pointer-events: none;
+}
+
+.final-cta::after {
+  content: '';
+  position: absolute;
+  bottom: -46%;
+  left: 50%;
+  width: 1100px;
+  height: 780px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(236, 90, 0, 0.26), transparent 64%);
+  filter: blur(30px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.final-inner {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+
+.final-kicker {
+  margin-bottom: 26px;
+  color: var(--orange-bright);
+  font-family: var(--font-family-display);
+  font-size: 10px;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+}
+
+.final-title {
+  font-family: var(--font-family-display);
+  font-size: clamp(2.9rem, 8.4vw, 9.4rem);
+  font-weight: 500;
+  line-height: 1.12;
+  letter-spacing: -0.05em;
+}
+
+.final-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  margin-top: 46px;
+}
+
+.final-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 18px;
+  height: 64px;
+  padding: 0 10px 0 30px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--orange), var(--red));
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 24px 60px rgba(236, 90, 0, 0.28);
+  transition:
+    transform 0.5s var(--smooth),
+    box-shadow 0.5s var(--smooth);
+}
+
+.final-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 32px 82px rgba(236, 90, 0, 0.42);
+}
+
+.final-btn-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  font-size: 16px;
+}
+
+.final-ghost {
+  padding: 6px 0;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: color 0.3s ease, border-color 0.3s ease;
+}
+
+.final-ghost:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #fff;
+}
+
+.final-meta {
+  position: absolute;
+  right: 40px;
+  bottom: 30px;
+  left: 40px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  color: rgba(245, 241, 236, 0.34);
+  font-family: var(--font-family-display);
+  font-size: 9.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.final-meta button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  transition: color 0.3s ease;
+}
+
+.final-meta button:hover {
+  color: #fff;
+}
+
+/* ---------- 响应式 ---------- */
+
+@media (max-width: 1180px) {
+  .nav-pill {
+    gap: 18px;
+  }
+
+  .hero-card {
+    width: min(100%, 280px);
+  }
+
+  .zone-card {
+    min-height: 500px;
   }
 }
 
-@media (max-width: 960px) {
-  .home-nav {
+/* 平板宽度下三列会挤到 300px，改成 2 列 + 整行第三张，排版更稳。 */
+@media (max-width: 1080px) and (min-width: 901px) {
+  .zone-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .zone-card:last-child {
+    grid-column: 1 / -1;
+    min-height: 420px;
+  }
+
+  .zone-card:last-child .zone-body {
+    max-width: 620px;
+  }
+}
+
+@media (max-width: 1080px) {
+  .loot-nav {
+    grid-template-areas:
+      'brand cta'
+      'nav nav';
+    grid-template-columns: 1fr auto;
+    row-gap: 10px;
+    padding-bottom: 12px;
+  }
+
+  .nav-left {
+    grid-area: brand;
+  }
+
+  .nav-right {
+    grid-area: cta;
+  }
+
+  .nav-pill {
+    grid-area: nav;
+    justify-self: center;
+    gap: 20px;
+    padding: 9px 18px;
+  }
+
+  .loot-hero {
+    padding-top: 150px;
+  }
+
+  .hero-grid {
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap: 32px;
+  }
+
+  .hero-card {
+    width: 100%;
+    padding: 18px;
+  }
+
+  .hero-card-num {
+    font-size: 44px;
+  }
+
+  .skill-grid,
+  .prompt-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .skill-grid > *:last-child,
+  .prompt-grid > *:last-child {
     display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .loot-nav {
+    padding: 14px 20px 12px;
+  }
+
+  .loot-hero {
+    padding: 140px 20px 24px;
+  }
+
+  .hero-grid {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 34px;
+    padding-top: 24px;
+  }
+
+  .hero-cards {
+    flex-direction: row;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding-bottom: 0;
+  }
+
+  .hero-card {
+    flex: 1 1 0;
+    width: auto;
+    transform: none !important;
+  }
+
+  .hero-card--b {
+    transform: none;
+  }
+
+  .hero-foot {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .hero-ticker {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .hero-scroll {
+    display: none;
+  }
+
+  .loot-section {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+
+  .section-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 22px;
+  }
+
+  .section-desc {
+    max-width: 46ch;
   }
 
   .zone-grid {
@@ -1067,118 +2202,228 @@ onBeforeUnmount(() => {
   }
 
   .zone-card {
-    min-height: 284px;
+    min-height: 430px;
   }
 
-  .template-grid {
+  .manifesto {
+    height: 200vh;
+  }
+
+  .manifesto-sticky {
+    padding: 0 20px;
+  }
+
+  .manifesto-inner {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 30px;
+    align-items: start;
+  }
+
+  .manifesto-side {
+    min-height: 0;
+    padding-left: 18px;
+  }
+
+  .skill-grid,
+  .prompt-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
 
-@media (max-width: 900px) {
-  .home-main {
-    width: min(100% - 28px, 1120px);
+  .skill-grid > *:last-child,
+  .prompt-grid > *:last-child {
+    display: block;
   }
 
-  .hero h1 {
-    font-size: clamp(30px, 8vw, 48px);
+  .final-cta {
+    padding: 110px 20px 140px;
   }
 
-  .typewriter-card {
-    min-height: 88px;
-    padding: 16px;
+  .final-meta {
+    right: 20px;
+    left: 20px;
   }
 
-  .typewriter-line {
-    font-size: 14px;
+  .final-meta span:nth-child(2) {
+    display: none;
   }
 }
 
 @media (max-width: 640px) {
-  .home-header {
-    height: 74px;
-    width: min(100% - 32px, 1280px);
-    grid-template-columns: 1fr auto;
+  .brand-text {
+    font-size: 12px;
+    letter-spacing: 0.14em;
   }
 
-  .brand-mark {
-    width: 30px;
-    height: 30px;
-    border-radius: 10px;
+  .nav-text-btn {
+    display: none;
   }
 
-  .brand-name {
-    font-size: 18px;
+  .cta-pill {
+    height: 40px;
+    padding-left: 15px;
+    font-size: 10px;
   }
 
-  .login-btn {
-    min-width: 76px;
-    min-height: 38px;
-    padding: 0 16px;
+  .cta-pill-icon {
+    width: 28px;
+    height: 28px;
   }
 
-  .home-main {
-    padding-top: 112px;
+  .loot-hero {
+    padding-top: 132px;
   }
 
-  .hero {
-    text-align: left;
-    margin-bottom: 36px;
+  .hero-title {
+    font-size: clamp(2.9rem, 12.4vw, 5rem);
+    line-height: 1.02;
   }
 
-  .hero-subtitle {
+  .hero-line--2 {
     margin-left: 0;
   }
 
-  .typewriter-card {
-    border-radius: 20px;
-    padding: 14px;
+  .hero-sub {
+    margin-top: 20px;
+    font-size: 12.5px;
+    line-height: 1.7;
   }
 
-  .typewriter-line {
-    font-size: 15px;
-  }
-
-  .zone-card {
-    min-height: 262px;
-    padding: 22px;
-    border-radius: 24px;
-  }
-
-  .zone-index {
-    font-size: 76px;
-  }
-
-  .template-section {
-    width: min(100% - 24px, 1180px);
-    margin-bottom: 44px;
-  }
-
-  .template-head h2 {
-    font-size: 18px;
-  }
-
-  .template-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .hero-cards {
+    flex-direction: column;
     gap: 10px;
   }
 
-  .template-card strong {
-    margin-top: 7px;
-    font-size: 13px;
+  .hero-card {
+    flex: none;
+    padding: 14px 16px;
+    border-radius: 18px;
+    gap: 6px;
   }
 
-  .template-visual {
-    border-radius: 10px;
+  .hero-card-num {
+    font-size: 34px;
   }
 
-  .skill-download-btn {
-    right: 7px;
-    bottom: 7px;
-    min-width: 56px;
-    min-height: 28px;
-    padding: 0 10px;
-    font-size: 11px;
+  .hero-foot {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .hero-meta {
+    grid-row: 2;
+  }
+
+  .hero-ticker {
+    grid-row: 1;
+  }
+
+  .manifesto-word {
+    font-size: clamp(2.6rem, 15vw, 4.4rem);
+    line-height: 1.16;
+  }
+
+  .manifesto-word.is-active {
+    transform: translateX(10px);
+  }
+
+  .mw-en {
+    display: none;
+  }
+
+  .section-title {
+    font-size: clamp(2.1rem, 10vw, 3.2rem);
+    line-height: 1.24;
+  }
+
+  .zone-card {
+    min-height: 400px;
+    border-radius: 24px;
+  }
+
+  .zone-body {
+    padding: 20px;
+  }
+
+  .skill-grid,
+  .prompt-grid {
+    gap: 12px;
+  }
+
+  .skill-visual {
+    border-radius: 14px;
+  }
+
+  .prompt-visual {
+    border-radius: 14px;
+  }
+
+  .skill-download {
+    opacity: 1;
+    transform: none;
+    right: 8px;
+    bottom: 8px;
+    padding: 6px 10px;
+  }
+
+  .skill-info strong,
+  .prompt-title {
+    font-size: 11.5px;
+  }
+
+  .final-title {
+    font-size: clamp(2.4rem, 11.5vw, 4rem);
+  }
+
+  .final-btn {
+    height: 58px;
+    padding-left: 24px;
+  }
+
+  .final-meta {
+    font-size: 8.5px;
+    letter-spacing: 0.14em;
+  }
+}
+
+/* 触屏设备没有 hover，下载与"使用模板"常驻显示 */
+@media (hover: none) {
+  .skill-download,
+  .prompt-use {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    opacity: 1;
+    translate: none;
+    transition: none;
+  }
+
+  .hero-scroll-line,
+  .voice-bar,
+  .ticker-caret {
+    animation: none;
+  }
+
+  .manifesto {
+    height: auto;
+  }
+
+  .manifesto-sticky {
+    position: static;
+    height: auto;
+    padding-top: 110px;
+    padding-bottom: 110px;
+  }
+
+  .manifesto-word {
+    color: rgba(245, 241, 236, 0.4);
+  }
+
+  .manifesto-word.is-active {
+    transform: none;
   }
 }
 </style>
