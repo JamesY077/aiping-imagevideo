@@ -2596,11 +2596,11 @@ async function handleSend() {
 
   await nextTick()
   scrollChatToBottom()
-  // 内置质量/风格 Skill 只作用于图片；视频仍沿用用户自行上传的单份 Skill。
+  // 内置质量/风格 Skill 只作用于图片；视频只使用用户上传的 Skill（最多 3 份）。
   const imageSkillContents =
     ioType === 'text2image' || ioType === 'image2image'
       ? skillStore.effectiveSkillContents
-      : skillStore.activeSkill?.content || null
+      : skillStore.activeSkillContents
 
   await generate(prompt, ioType, settingsStore.selectedModel, file, settingsStore.aspectRatio, settingsStore.videoDuration, false, imageSkillContents, settingsStore.videoResolution, settingsStore.batchSize, {
     videoGenerationMode: videoMode.value,
@@ -2644,7 +2644,7 @@ async function handleRegenerate(message: Message) {
       false,
       message.generateType === 'image'
         ? skillStore.effectiveSkillContents
-        : skillStore.activeSkill?.content || null,
+        : skillStore.activeSkillContents,
       settingsStore.videoResolution,
       batchSize,
       {

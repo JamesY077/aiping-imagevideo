@@ -12,11 +12,32 @@ import {
 
 const SKILL_STORAGE_KEY = 'artskills'
 
+/** 同时生效的上传 Skill 上限。 */
+export const MAX_ACTIVE_SKILLS = 3
+
 interface StoredSkillState {
   modelPreference?: ArtSkillsModelPreference
+  /** 旧版本的单份上传 Skill，读取时迁移进 activeSkills。 */
   activeSkill?: ParsedSkill | null
+  activeSkills?: ParsedSkill[]
   defaultQualitySkillStates?: Record<string, boolean>
   selectedStyleSkillIds?: string[]
+}
+
+/** 过滤空内容并按上限截断，避免旧缓存带入无效条目。 */
+function normalizeActiveSkills(input?: ParsedSkill[] | null): ParsedSkill[] {
+  if (!Array.isArray(input)) return []
+  const seen = new Set<string>()
+  const result: ParsedSkill[] = []
+  for (const skill of input) {
+    if (!skill || typeof skill.content !== 'string' || !skill.content.trim()) continue
+    const key = (skill.name || '').trim().toLowerCase()
+    if (key && seen.has(key)) continue
+    if (key) seen.add(key)
+    result.push(skill)
+    if (result.length >= MAX_ACTIVE_SKILLS) break
+  }
+  return result
 }
 
 /** 三个默认质量 Skill 默认全部开启；缺失的键回落到开启。 */
@@ -46,13 +67,15 @@ function normalizeSelectedIds(input?: string[]): string[] {
 /**
  * 全局 Skill 状态：
  * - modelPreference：设置里选择的 Skill 创作模型。
- * - activeSkill：用户自行上传/应用的单份 Skill，保持原有能力。
+ * - activeSkills：用户自行上传/应用的 Skill（最多 3 份）。
  * - defaultQualitySkillStates：内置质量 Skill 的开关（默认开启）。
  * - selectedStyleSkillIds：生图页多选的风格 Skill。
  */
 export const useSkillStore = defineStore('skill', () => {
   const modelPreference = ref<ArtSkillsModelPreference>(ARTSKILLS_AUTO_MODEL)
-  const activeSkill = ref<ParsedSkill | null>(null)
+  const activeSkills = ref<ParsedSkill[]>([])
+  /** 兼容旧调用：第一份上传 Skill。 */
+  const activeSkill = computed(() => activeSkills.value[0] || null)
   const defaultQualitySkillStates = ref<Record<string, boolean>>(normalizeDefaultStates())
   const selectedStyleSkillIds = ref<string[]>([])
 
@@ -68,6 +91,11 @@ export const useSkillStore = defineStore('skill', () => {
       .filter((skill): skill is NonNullable<typeof skill> => Boolean(skill)),
   )
 
+  /** 仅上传 Skill 的正文，视频生成使用。 */
+  const activeSkillContents = computed<string[]>(() =>
+    activeSkills.value.map((skill) => skill.content.trim()).filter(Boolean),
+  )
+
   /**
    * 生成时实际携带的 Skill 正文，顺序即优先级：
    * 默认质量规范 → 用户多选的风格/手绘 → 自行上传的 Skill。
@@ -77,7 +105,7 @@ export const useSkillStore = defineStore('skill', () => {
     const contents = [
       ...enabledDefaultQualitySkills.value.map((skill) => skill.content),
       ...selectedStyleSkills.value.map((skill) => skill.content),
-      activeSkill.value?.content || '',
+      ...activeSkills.value.map((skill) => skill.content),
     ]
     return contents.map((content) => content.trim()).filter(Boolean)
   })
@@ -92,25 +120,35 @@ export const useSkillStore = defineStore('skill', () => {
     try {
       const parsed = JSON.parse(saved) as StoredSkillState
       modelPreference.value = parsed.modelPreference || ARTSKILLS_AUTO_MODEL
-      activeSkill.value = parsed.activeSkill || null
+      // 优先新字段；旧版本只有 activeSkill，读入后自动迁移成单元素数组。
+      const storedSkills = Array.isArray(parsed.activeSkills) && parsed.activeSkills.length
+        ? parsed.activeSkills
+        : parsed.activeSkill ? [parsed.activeSkill] : []
+      activeSkills.value = normalizeActiveSkills(storedSkills)
       defaultQualitySkillStates.value = normalizeDefaultStates(parsed.defaultQualitySkillStates)
       selectedStyleSkillIds.value = normalizeSelectedIds(parsed.selectedStyleSkillIds)
     } catch {
+      activeSkills.value = []
       defaultQualitySkillStates.value = normalizeDefaultStates()
       selectedStyleSkillIds.value = []
     }
   }
 
   function saveToStorage() {
-    localStorage.setItem(
-      SKILL_STORAGE_KEY,
-      JSON.stringify({
-        modelPreference: modelPreference.value,
-        activeSkill: activeSkill.value,
-        defaultQualitySkillStates: defaultQualitySkillStates.value,
-        selectedStyleSkillIds: selectedStyleSkillIds.value,
-      }),
-    )
+    try {
+      localStorage.setItem(
+        SKILL_STORAGE_KEY,
+        JSON.stringify({
+          modelPreference: modelPreference.value,
+          activeSkills: activeSkills.value,
+          defaultQualitySkillStates: defaultQualitySkillStates.value,
+          selectedStyleSkillIds: selectedStyleSkillIds.value,
+        }),
+      )
+    } catch (error) {
+      // localStorage 配额有限，超大 Skill 写入失败时至少不要中断上传流程。
+      console.warn('Skill 状态保存失败，可能是上传文件过大。', error)
+    }
   }
 
   function setModelPreference(preference: ArtSkillsModelPreference) {
@@ -118,21 +156,50 @@ export const useSkillStore = defineStore('skill', () => {
     saveToStorage()
   }
 
-  /** 直接用一段 skill markdown 文本设为当前应用的 skill。 */
-  function setActiveSkillFromContent(content: string, fileName = 'skill.md') {
-    activeSkill.value = parseSkillContent(content, fileName)
+  /** 新增一份上传 Skill；超过上限或重名时返回 false。 */
+  function addActiveSkill(skill: ParsedSkill): boolean {
+    if (!skill?.content?.trim()) return false
+    if (activeSkills.value.length >= MAX_ACTIVE_SKILLS) return false
+    const key = (skill.name || '').trim().toLowerCase()
+    if (key && activeSkills.value.some((item) => (item.name || '').trim().toLowerCase() === key)) {
+      return false
+    }
+    activeSkills.value = [...activeSkills.value, skill]
+    saveToStorage()
+    return true
+  }
+
+  /** 直接用一段 skill markdown 文本新增一份上传 Skill。 */
+  function addActiveSkillFromContent(content: string, fileName = 'skill.md') {
+    return addActiveSkill(parseSkillContent(content, fileName))
+  }
+
+  /** 移除指定位置的上传 Skill。 */
+  function removeActiveSkill(index: number) {
+    if (index < 0 || index >= activeSkills.value.length) return
+    activeSkills.value = activeSkills.value.filter((_, i) => i !== index)
     saveToStorage()
   }
 
-  /** 使用已解析好的 skill 设为当前应用的 skill。 */
+  function clearActiveSkills() {
+    activeSkills.value = []
+    saveToStorage()
+  }
+
+  /** 兼容旧调用：设成唯一一份上传 Skill（传 null 清空）。 */
   function setActiveSkill(skill: ParsedSkill | null) {
-    activeSkill.value = skill
+    activeSkills.value = skill ? normalizeActiveSkills([skill]) : []
     saveToStorage()
   }
 
+  /** 兼容旧调用：用一段文本覆盖全部上传 Skill。 */
+  function setActiveSkillFromContent(content: string, fileName = 'skill.md') {
+    setActiveSkill(parseSkillContent(content, fileName))
+  }
+
+  /** 兼容旧调用：清空全部上传 Skill。 */
   function clearActiveSkill() {
-    activeSkill.value = null
-    saveToStorage()
+    clearActiveSkills()
   }
 
   /** 设置页：开启/关闭某个默认质量 Skill。 */
@@ -176,14 +243,20 @@ export const useSkillStore = defineStore('skill', () => {
   return {
     modelPreference,
     activeSkill,
+    activeSkills,
     defaultQualitySkillStates,
     selectedStyleSkillIds,
     enabledDefaultQualitySkills,
     selectedStyleSkills,
+    activeSkillContents,
     effectiveSkillContents,
     loadFromStorage,
     saveToStorage,
     setModelPreference,
+    addActiveSkill,
+    addActiveSkillFromContent,
+    removeActiveSkill,
+    clearActiveSkills,
     setActiveSkill,
     setActiveSkillFromContent,
     clearActiveSkill,

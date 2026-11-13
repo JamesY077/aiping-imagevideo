@@ -208,7 +208,9 @@
                 </button>
               </div>
               <p v-if="isExpandMode" class="rail-hint">以上传的原图为中心向外延展，比例需与原图不同。</p>
-              <p v-else-if="imageMode === 'image2image'" class="rail-hint">上传一张参考图，按提示词改写画面。</p>
+              <p v-else-if="imageMode === 'image2image'" class="rail-hint" :class="{ 'is-guide': expandHint }">
+                {{ expandHint ? '请先在下方上传原图，再点「扩图」。' : '上传一张参考图，按提示词改写画面。' }}
+              </p>
             </section>
 
             <section class="rail-card">
@@ -245,7 +247,12 @@
               </div>
             </section>
 
-            <section class="rail-card">
+            <section
+              v-if="imageMode !== 'text2image'"
+              ref="uploadCardRef"
+              class="rail-card upload-card"
+              :class="{ 'is-highlighted': uploadHighlight }"
+            >
               <span class="rail-label">{{ isExpandMode ? '原图' : '参考图' }}</span>
               <input
                 ref="fileInput"
@@ -261,12 +268,12 @@
                 </template>
                 <template v-else>
                   <span class="upload-plus">+</span>
-                  <span class="upload-copy">上传图片</span>
+                  <span class="upload-copy">{{ isExpandMode ? '上传原图' : '上传图片' }}</span>
                   <span class="upload-hint">{{ IMAGE_FORMAT_HINT }}</span>
                 </template>
               </button>
-              <button v-if="uploadedFile" class="rail-text-btn" type="button" @click="clearUploadedFile()">
-                移除参考图
+              <button v-if="uploadedFile" class="rail-text-btn" type="button" @click="clearUploadedReference()">
+                移除{{ isExpandMode ? '原图' : '参考图' }}
               </button>
             </section>
 
@@ -443,6 +450,10 @@ const inputText = ref('')
 const imageMode = ref<ImageMode>('text2image')
 const uploadedFile = ref<UploadedFile | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
+const uploadCardRef = ref<HTMLElement | null>(null)
+const uploadHighlight = ref(false)
+const expandHint = ref(false)
+let uploadHighlightTimer: number | null = null
 const promptInputRef = ref<HTMLTextAreaElement | null>(null)
 const isPolishing = ref(false)
 const mossLayoutEnabled = ref(true)
@@ -699,14 +710,41 @@ function setImageMode(mode: ImageMode) {
   if (imageMode.value === mode) return
   if (mode === 'image2image' && !supportsImageReferenceMode.value) return
   if (mode === 'expand' && !uploadedFile.value) {
-    showErrorMessage('请先上传需要扩展的原图。')
+    // 不弹通用错误：直接切到图生图，并把用户视线引到上传卡。
+    imageMode.value = 'image2image'
+    expandHint.value = true
+    highlightUploadCard()
     return
   }
   if (mode === 'expand') {
     settingsStore.selectedModel = EXPAND_MODEL_ID
     settingsStore.saveToStorage()
   }
+  expandHint.value = false
   imageMode.value = mode
+}
+
+/** 短暂高亮原图上传卡并滚动到可见区域，替代「请先上传」的报错弹窗。 */
+function highlightUploadCard() {
+  uploadHighlight.value = true
+  if (uploadHighlightTimer !== null) window.clearTimeout(uploadHighlightTimer)
+  uploadHighlightTimer = window.setTimeout(() => {
+    uploadHighlight.value = false
+    uploadHighlightTimer = null
+  }, 2200)
+  void nextTick(() => {
+    uploadCardRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  })
+}
+
+function clearUploadedReference() {
+  clearUploadedFile()
+  if (isExpandMode.value) {
+    // 扩图失去原图后回到图生图，避免停在一个无法生成的状态。
+    imageMode.value = 'image2image'
+    expandHint.value = true
+    highlightUploadCard()
+  }
 }
 
 function clearUploadedFile(options: { revoke?: boolean } = {}) {
@@ -734,6 +772,7 @@ function handleFileChange(event: Event) {
   const uploaded = createUploadedFile(file, 'image')
   uploadedFile.value = uploaded
   target.value = ''
+  expandHint.value = false
 
   // 图生图/扩图都需要参考图；文生图模式下上传后自动切到图生图更符合直觉。
   void resolveUploadedImageDimensions(uploaded).then(() => {
@@ -993,7 +1032,13 @@ async function handleSend() {
 
   if (isExpandMode.value) {
     const source = uploadedFile.value
-    if (!source) return
+    if (!source) {
+      setImageMode('image2image')
+      expandHint.value = true
+      highlightUploadCard()
+      return
+    }
+    expandHint.value = false
     const ratio = settingsStore.aspectRatio
     inputText.value = ''
     clearUploadedFile()
@@ -1104,6 +1149,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.visualViewport?.removeEventListener('resize', syncAppHeight)
+  if (uploadHighlightTimer !== null) window.clearTimeout(uploadHighlightTimer)
   releaseUploadedFile(uploadedFile.value)
 })
 </script>
@@ -1829,6 +1875,26 @@ onBeforeUnmount(() => {
   color: rgba(255, 255, 255, 0.36);
   font-size: 10.5px;
   line-height: 1.6;
+}
+
+.rail-hint.is-guide {
+  color: #ffb27a;
+}
+
+/* 扩图缺少原图时，用柔和高亮把视线引到上传卡，而不是弹错误框。 */
+.upload-card {
+  border-radius: 14px;
+  transition: box-shadow 0.3s ease, background 0.3s ease;
+}
+
+.upload-card.is-highlighted {
+  background: rgba(255, 154, 92, 0.06);
+  box-shadow: 0 0 0 1px rgba(255, 154, 92, 0.5), 0 0 18px rgba(255, 154, 92, 0.16);
+}
+
+.upload-card.is-highlighted .upload-drop {
+  border-color: rgba(255, 154, 92, 0.66);
+  background: rgba(255, 154, 92, 0.08);
 }
 
 .chip-row {

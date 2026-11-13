@@ -21,33 +21,84 @@
     </div>
 
     <div
-      v-if="!uploadOnly"
       class="skill-picker-rail"
       role="group"
-      aria-label="风格 Skill，可多选"
+      :aria-label="uploadOnly ? '上传 Skill，最多 3 个' : '风格 Skill 与上传 Skill'"
       @wheel="handleSkillRailWheel"
     >
+      <!-- 上传入口放在最前：打开参数栏即可看到，不和风格卡抢滚动位置。 -->
+      <input
+        ref="skillFileInput"
+        type="file"
+        accept=".md,text/markdown"
+        class="file-input"
+        multiple
+        @change="handleSkillFileChange"
+      />
       <button
-        v-for="skill in styleSkillOptions"
-        :key="skill.id"
-        class="skill-chip"
-        :class="{ active: skillStore.selectedStyleSkillIds.includes(skill.id) }"
+        class="skill-chip skill-chip-add"
         type="button"
-        :title="skill.description"
-        :aria-pressed="skillStore.selectedStyleSkillIds.includes(skill.id)"
-        @click="skillStore.toggleStyleSkill(skill.id)"
+        :class="{ 'is-full': isUploadFull }"
+        :disabled="isUploadFull"
+        :title="isUploadFull
+          ? `最多同时使用 ${MAX_ACTIVE_SKILLS} 个上传 Skill`
+          : '上传 .md Skill，可多选，生成时将严格遵循其规范'"
+        @click="skillFileInput?.click()"
       >
-        <img
-          v-if="skill.thumbnail"
-          class="skill-chip-thumb"
-          :src="assetUrl(skill.thumbnail)"
-          alt=""
-          loading="lazy"
-          decoding="async"
-        />
-        <span class="skill-chip-name">{{ skill.name }}</span>
-        <span class="skill-chip-check" aria-hidden="true">✓</span>
+        <span class="skill-chip-thumb skill-add-thumb" aria-hidden="true">
+          <span class="skill-add-plus">{{ isUploadFull ? '满' : '+' }}</span>
+          <span class="skill-add-label">{{ isUploadFull ? '已达上限' : '上传 Skill' }}</span>
+        </span>
+        <span class="skill-chip-name">
+          {{ isUploadFull ? `最多 ${MAX_ACTIVE_SKILLS} 个` : '支持 .md' }}
+        </span>
       </button>
+
+      <!-- 已上传的 Skill：与风格卡同尺寸，可单独移除。 -->
+      <div
+        v-for="(skill, index) in skillStore.activeSkills"
+        :key="`uploaded-${skill.name}-${index}`"
+        class="skill-chip skill-chip-uploaded"
+        :title="skill.description || skill.name"
+      >
+        <span class="skill-chip-thumb skill-chip-placeholder" aria-hidden="true">
+          {{ skillInitial(skill.name) }}
+        </span>
+        <button
+          class="skill-chip-remove"
+          type="button"
+          :aria-label="`移除 ${skill.name}`"
+          :title="`移除 ${skill.name}`"
+          @click="skillStore.removeActiveSkill(index)"
+        >
+          ×
+        </button>
+        <span class="skill-chip-name">{{ skill.name }}</span>
+      </div>
+
+      <template v-if="!uploadOnly">
+        <button
+          v-for="skill in styleSkillOptions"
+          :key="skill.id"
+          class="skill-chip"
+          :class="{ active: skillStore.selectedStyleSkillIds.includes(skill.id) }"
+          type="button"
+          :title="skill.description"
+          :aria-pressed="skillStore.selectedStyleSkillIds.includes(skill.id)"
+          @click="skillStore.toggleStyleSkill(skill.id)"
+        >
+          <img
+            v-if="skill.thumbnail"
+            class="skill-chip-thumb"
+            :src="assetUrl(skill.thumbnail)"
+            alt=""
+            loading="lazy"
+            decoding="async"
+          />
+          <span class="skill-chip-name">{{ skill.name }}</span>
+          <span class="skill-chip-check" aria-hidden="true">✓</span>
+        </button>
+      </template>
     </div>
 
     <div class="skill-picker-foot">
@@ -67,51 +118,30 @@
           设置
         </button>
       </div>
-
-      <div class="skill-upload-group" :class="{ 'is-solo': uploadOnly }">
-        <input
-          ref="skillFileInput"
-          type="file"
-          accept=".md,text/markdown"
-          class="file-input"
-          @change="handleSkillFileChange"
-        />
-        <button
-          class="skill-upload-btn-inline"
-          type="button"
-          :class="{ active: !!skillStore.activeSkill }"
-          :title="skillStore.activeSkill ? `已应用 Skill：${skillStore.activeSkill.name}（点击更换）` : '上传 .md Skill，生成时将严格遵循其规范'"
-          @click="skillFileInput?.click()"
-        >
-          {{ skillStore.activeSkill ? `已上传：${skillStore.activeSkill.name}` : '上传 Skill' }}
-        </button>
-        <button
-          v-if="skillStore.activeSkill"
-          class="skill-clear-inline"
-          type="button"
-          title="移除已上传的 Skill"
-          @click="skillStore.clearActiveSkill()"
-        >
-          ×
-        </button>
-      </div>
+      <span v-else class="skill-upload-count">
+        已上传 {{ skillStore.activeSkills.length }}/{{ MAX_ACTIVE_SKILLS }}
+      </span>
+      <span v-if="!uploadOnly" class="skill-upload-count">
+        上传 {{ skillStore.activeSkills.length }}/{{ MAX_ACTIVE_SKILLS }}
+      </span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useSkillStore } from '@/stores/skillStore'
+import { MAX_ACTIVE_SKILLS, useSkillStore } from '@/stores/skillStore'
 import { readSkillFile } from '@/features/skill/parse'
 import { STYLE_SKILL_OPTIONS } from '@/features/skill/builtin'
 import { showErrorMessage } from '@/utils/errors'
 import { assetUrl } from '@/utils/assets'
 
 /**
- * 内置风格 Skill 多选器。
- * layout=rail：横向滑动缩略图（原简易模式参数面板）；
+ * 内置风格 Skill 多选器 + 上传 Skill 卡片。
+ * layout=rail：横向滑动缩略图（视频页 / 简易参数面板）；
  * layout=grid：多列网格（图片页右侧参数栏）。
+ * 上传 Skill 最多 3 个，与内置风格卡同尺寸展示。
  */
 withDefaults(defineProps<{
   layout?: 'rail' | 'grid'
@@ -124,6 +154,17 @@ const skillStore = useSkillStore()
 const styleSkillOptions = STYLE_SKILL_OPTIONS
 const skillFileInput = ref<HTMLInputElement | null>(null)
 
+const isUploadFull = computed(() => skillStore.activeSkills.length >= MAX_ACTIVE_SKILLS)
+/** 单份 Skill 只用于生成规范，超过 512KB 基本是误传，也容易撑爆 localStorage。 */
+const MAX_SKILL_FILE_BYTES = 512 * 1024
+
+function skillInitial(name: string): string {
+  const trimmed = (name || '').trim()
+  if (!trimmed) return 'S'
+  // 中文取首字，英文取首字母，避免卡片里全是 skill 后缀。
+  return trimmed.replace(/\.md$/i, '').slice(0, 2).toUpperCase()
+}
+
 function handleSkillRailWheel(event: WheelEvent) {
   const rail = event.currentTarget as HTMLElement | null
   if (!rail) return
@@ -135,16 +176,43 @@ function handleSkillRailWheel(event: WheelEvent) {
 
 async function handleSkillFileChange(e: Event) {
   const target = e.target as HTMLInputElement
-  const file = target.files?.[0]
-  if (!file) return
-  try {
-    const content = await readSkillFile(file)
-    skillStore.setActiveSkillFromContent(content, file.name)
-  } catch (error: any) {
-    showErrorMessage(error?.message || 'Skill 文件读取失败，请确认是 .md 文件。')
-  } finally {
-    target.value = ''
+  const files = Array.from(target.files || [])
+  if (!files.length) return
+
+  const remaining = MAX_ACTIVE_SKILLS - skillStore.activeSkills.length
+  let added = 0
+  let duplicated = 0
+  let failed = 0
+
+  for (const file of files.slice(0, Math.max(0, remaining))) {
+    if (file.size > MAX_SKILL_FILE_BYTES) {
+      failed += 1
+      continue
+    }
+    try {
+      const content = await readSkillFile(file)
+      if (skillStore.addActiveSkillFromContent(content, file.name)) {
+        added += 1
+      } else {
+        duplicated += 1
+      }
+    } catch {
+      failed += 1
+    }
   }
+
+  const skipped = Math.max(0, files.length - Math.max(0, remaining))
+  if (!added && duplicated) {
+    showErrorMessage('这些 Skill 已经上传过了，请换一个文件。')
+  } else if (!added && skipped) {
+    showErrorMessage(`最多同时使用 ${MAX_ACTIVE_SKILLS} 个上传 Skill，请先移除一个。`)
+  } else if (!added && failed) {
+    showErrorMessage('Skill 文件读取失败：请确认是 .md 文件，且不超过 512KB。')
+  } else if (added && skipped) {
+    showErrorMessage(`已添加 ${added} 个，最多同时使用 ${MAX_ACTIVE_SKILLS} 个上传 Skill。`)
+  }
+
+  target.value = ''
 }
 </script>
 
@@ -311,6 +379,99 @@ async function handleSkillFileChange(e: Event) {
   transform: scale(1);
 }
 
+/* 上传的 Skill：用同样的尺寸占位，避免和内置缩略图错位。 */
+.skill-chip-uploaded {
+  cursor: default;
+}
+
+.skill-chip-placeholder {
+  display: grid;
+  place-items: center;
+  background:
+    linear-gradient(145deg, rgba(255, 154, 92, 0.24), rgba(255, 255, 255, 0.04)),
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.16), transparent 60%);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.skill-chip-uploaded:hover .skill-chip-thumb {
+  filter: none;
+  transform: none;
+}
+
+.skill-chip-remove {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 50%;
+  background: rgba(8, 8, 10, 0.72);
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.skill-chip-remove:hover {
+  border-color: rgba(255, 154, 92, 0.72);
+  background: rgba(169, 61, 24, 0.86);
+  color: #fff;
+}
+
+/* 上传入口：与 sample skill 同尺寸的虚线卡。 */
+.skill-chip-add {
+  border: 0;
+}
+
+.skill-add-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.skill-chip-add:hover .skill-add-thumb {
+  border-color: rgba(255, 154, 92, 0.62);
+  background: rgba(255, 154, 92, 0.08);
+  color: #ffb27a;
+  filter: none;
+}
+
+.skill-chip-add.is-full {
+  cursor: not-allowed;
+}
+
+.skill-chip-add.is-full .skill-add-thumb {
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.skill-add-plus {
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.skill-add-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
 .skill-picker-foot {
   display: flex;
   flex-wrap: wrap;
@@ -365,11 +526,11 @@ async function handleSkillFileChange(e: Event) {
   color: #fff;
 }
 
-.skill-upload-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.skill-upload-count {
   margin-left: auto;
+  color: rgba(255, 255, 255, 0.36);
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 /* 侧栏网格版：三列铺满，方便快速扫视风格 */
@@ -392,16 +553,12 @@ async function handleSkillFileChange(e: Event) {
 }
 
 .skill-picker-grid .skill-picker-foot {
-  flex-direction: column;
   flex-wrap: nowrap;
-  align-items: stretch;
+  align-items: center;
   gap: 8px;
 }
 
-/* 侧栏较窄：让脚注两行各自占满，标签在内部自行换行，避免撑出容器。 */
-.skill-picker-grid .skill-defaults,
-.skill-picker-grid .skill-upload-group {
-  width: 100%;
+.skill-picker-grid .skill-defaults {
   min-width: 0;
 }
 
@@ -409,15 +566,6 @@ async function handleSkillFileChange(e: Event) {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.skill-picker-grid .skill-upload-group {
-  margin-left: 0;
-}
-
-.skill-picker .skill-upload-group.is-solo {
-  width: 100%;
-  margin-left: 0;
 }
 
 @media (max-width: 560px) {
@@ -439,11 +587,6 @@ async function handleSkillFileChange(e: Event) {
     width: 100%;
     height: auto;
     aspect-ratio: 1;
-  }
-
-  .skill-upload-group {
-    width: 100%;
-    margin-left: 0;
   }
 }
 </style>
