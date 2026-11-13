@@ -3,10 +3,10 @@
     <StudioIsland />
     <div class="workspace-shell single-session-layout">
       <StudioHeader
-        kicker="Image & Video Studio"
-        title="图片视频生成"
-        subtitle="输入主体、风格、光线与构图，批量生成后逐条返回结果"
-        accent="#d9cdb8"
+        kicker="Video Studio"
+        title="视频生成"
+        subtitle="用一句话描述镜头、运动与氛围，选好时长与比例后开始生成"
+        accent="#8fb6ff"
       />
 
 
@@ -87,7 +87,7 @@
         <section class="composer-dock">
           <div class="composer-bar">
             <div class="composer-tabs" aria-label="创作模式">
-              <span class="composer-tab is-active composer-tab-static">图片视频模式</span>
+              <span class="composer-tab is-active composer-tab-static">视频模式</span>
             </div>
             <span class="composer-bar-model" :title="`${selectedModelLabel} ${selectedVideoDurationLabel}`">
               <span class="composer-bar-dot" aria-hidden="true" />
@@ -114,14 +114,6 @@
               </div>
               <div class="composer-meta-row composer-meta-row-top">
                 <div class="dock-pills dock-pills-primary">
-              <div class="meta-pill meta-pill-type">
-                <span class="meta-pill-label">创作类型</span>
-                <div class="media-switch compact-switch" role="tablist" aria-label="生成类型">
-                  <button class="switch-btn" :class="{ active: settingsStore.mediaType === 'image' }" @click="handleMediaTypeChange('image')">图像</button>
-                  <button class="switch-btn" :class="{ active: settingsStore.mediaType === 'video' }" @click="handleMediaTypeChange('video')">视频</button>
-                </div>
-              </div>
-
               <div class="meta-pill meta-pill-model">
                 <span class="meta-pill-label">模型选择</span>
                 <div class="model-slot compact-model-slot">
@@ -724,93 +716,7 @@
               />
               </div>
 
-              <div v-if="!isExpandMode" class="skill-picker">
-                <div class="skill-picker-head">
-                  <span class="skill-picker-title">风格 Skill</span>
-                  <span class="skill-picker-meta">
-                    {{ skillStore.selectedStyleSkillIds.length ? `已选 ${skillStore.selectedStyleSkillIds.length} 个 · 横向滑动` : '可多选 · 横向滑动' }}
-                  </span>
-                  <button
-                    v-if="skillStore.selectedStyleSkillIds.length"
-                    class="skill-picker-clear"
-                    type="button"
-                    @click="skillStore.clearStyleSkills()"
-                  >
-                    清空
-                  </button>
-                </div>
-
-                <div class="skill-picker-rail" role="group" aria-label="风格 Skill，可多选" @wheel="handleSkillRailWheel">
-                  <button
-                    v-for="skill in styleSkillOptions"
-                    :key="skill.id"
-                    class="skill-chip"
-                    :class="{ active: skillStore.selectedStyleSkillIds.includes(skill.id) }"
-                    type="button"
-                    :title="skill.description"
-                    :aria-pressed="skillStore.selectedStyleSkillIds.includes(skill.id)"
-                    @click="skillStore.toggleStyleSkill(skill.id)"
-                  >
-                    <img
-                      v-if="skill.thumbnail"
-                      class="skill-chip-thumb"
-                      :src="assetUrl(skill.thumbnail)"
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                    />
-                    <span class="skill-chip-name">{{ skill.name }}</span>
-                    <span class="skill-chip-check" aria-hidden="true">✓</span>
-                  </button>
-                </div>
-
-                <div class="skill-picker-foot">
-                  <div class="skill-defaults">
-                    <span class="skill-defaults-label">默认规范</span>
-                    <span
-                      v-for="skill in skillStore.enabledDefaultQualitySkills"
-                      :key="skill.id"
-                      class="skill-default-tag"
-                    >
-                      {{ skill.name }}
-                    </span>
-                    <span v-if="!skillStore.enabledDefaultQualitySkills.length" class="skill-defaults-off">
-                      已全部关闭
-                    </span>
-                    <button class="skill-settings-link" type="button" @click="router.push('/settings')">
-                      设置
-                    </button>
-                  </div>
-
-                  <div class="skill-upload-group">
-                    <input
-                      ref="skillFileInput"
-                      type="file"
-                      accept=".md,text/markdown"
-                      class="file-input"
-                      @change="handleSkillFileChange"
-                    />
-                    <button
-                      class="skill-upload-btn-inline"
-                      type="button"
-                      :class="{ active: !!skillStore.activeSkill }"
-                      :title="skillStore.activeSkill ? `已应用 Skill：${skillStore.activeSkill.name}（点击更换）` : '上传 .md Skill，生成时将严格遵循其规范'"
-                      @click="skillFileInput?.click()"
-                    >
-                      {{ skillStore.activeSkill ? `已上传：${skillStore.activeSkill.name}` : '上传 Skill' }}
-                    </button>
-                    <button
-                      v-if="skillStore.activeSkill"
-                      class="skill-clear-inline"
-                      type="button"
-                      title="移除已上传的 Skill"
-                      @click="skillStore.clearActiveSkill()"
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <SkillPicker v-if="!isExpandMode" upload-only />
             </div>
             <p class="composer-panel-foot">
               {{ isExpandMode ? '扩图模式固定使用 Qwen-Image-2.0-Pro；上传原图、选择目标比例即可开始。' : '参数会随模型自动收窄；内容较多时可上下滚动。' }}
@@ -988,7 +894,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick, onMounted, computed, watch, onBeforeUnmount } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import ChatBubble from '@/components/ChatBubble.vue'
 import MossLayerEditor from '@/components/MossLayerEditor.vue'
 import ModelSelector from '@/components/ModelSelector.vue'
@@ -996,14 +902,12 @@ import CameraMovementGuide from '@/components/CameraMovementGuide.vue'
 import AudioLibraryPicker from '@/components/AudioLibraryPicker.vue'
 import StudioHeader from '@/components/StudioHeader.vue'
 import StudioIsland from '@/components/StudioIsland.vue'
+import SkillPicker from '@/components/SkillPicker.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { DEFAULT_EXPAND_SYSTEM_PROMPT, DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT } from '@/stores/settingsStore'
 import { useGenerate } from '@/composables/useGenerate'
 import { useChatStore } from '@/stores/chatStore'
 import { useSkillStore } from '@/stores/skillStore'
-import { readSkillFile } from '@/features/skill/parse'
-import { STYLE_SKILL_OPTIONS } from '@/features/skill/builtin'
-import { assetUrl } from '@/utils/assets'
 
 import { polishPrompt } from '@/api/aiping'
 import {
@@ -1016,7 +920,6 @@ import {
   modelRequiresReference,
   modelSupportsLocalUpload,
   type AspectRatioOption,
-  type MediaType,
   type VideoGenerationMode,
 } from '@/types/model'
 import { showErrorMessage } from '@/utils/errors'
@@ -1027,6 +930,14 @@ import { createLayoutFromImage, isMossLayoutModel } from '@/features/layout/moss
 import { pickClosestAspectRatio } from '@/features/generate/aspectRatio'
 import { resolveGenerateIoType } from '@/features/generate/media'
 import { createExpandedUploadedFile, getExpandTargetSize } from '@/features/generate/expand'
+import {
+  createUploadedFile,
+  dataUrlToFile,
+  getImageDimensions,
+  releaseUploadedFile,
+  resolveUploadedImageDimensions,
+  type ImageDimensions,
+} from '@/features/generate/localFile'
 import {
   IMAGE_FILE_ACCEPT,
   IMAGE_FORMAT_HINT,
@@ -1039,44 +950,11 @@ import { loadVoiceLibrary } from '@/features/voice/library'
 import type { VoiceLibraryItem } from '@/features/voice/types'
 
 const route = useRoute()
-const router = useRouter()
 const settingsStore = useSettingsStore()
 const chatStore = useChatStore()
 const skillStore = useSkillStore()
 const { generate } = useGenerate()
-const styleSkillOptions = STYLE_SKILL_OPTIONS
 const LANDING_REFERENCE_STORAGE_KEY = 'artrealm_landing_reference_image'
-
-// Skill 上传入口（简易模式，非必填）：上传后生成会携带该 skill 规范。
-const skillFileInput = ref<HTMLInputElement | null>(null)
-
-function handleSkillRailWheel(event: WheelEvent) {
-  const rail = event.currentTarget as HTMLElement | null
-  if (!rail || rail.scrollWidth <= rail.clientWidth) return
-  if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
-  event.preventDefault()
-  rail.scrollLeft += event.deltaY
-}
-
-async function handleSkillFileChange(e: Event) {
-  const target = e.target as HTMLInputElement
-  const file = target.files?.[0]
-  if (!file) return
-  if (!file.name.toLowerCase().endsWith('.md')) {
-    showErrorMessage('Skill 文件需为 .md（Markdown）格式。')
-    target.value = ''
-    return
-  }
-  try {
-    const content = await readSkillFile(file)
-    skillStore.setActiveSkillFromContent(content, file.name)
-  } catch (error) {
-    showErrorMessage(getReadableErrorMessage(error, 'Skill 文件读取失败，请重试。'))
-  } finally {
-    target.value = ''
-  }
-}
-
 
 const chatAreaRef = ref<HTMLElement | null>(null)
 const promptInputRef = ref<HTMLTextAreaElement | null>(null)
@@ -1157,10 +1035,6 @@ const EXPAND_MODEL_ID = 'Qwen-Image-2.0-Pro'
 const quickExpandResult = ref<GenerateResult | null>(null)
 
 
-interface ImageDimensions {
-  width: number
-  height: number
-}
 const imageMode = ref<ImageMode>('text2image')
 const videoMode = ref<VideoMode>('text2video')
 // 多模态参考（Seedance 2.0 系列）：图片 0~9 / 视频 0~3 / 音频 0~3
@@ -1252,8 +1126,30 @@ const minimaxH3VideoModeOptions: Array<{ value: VideoMode; label: string }> = [
 const hasPromptPolishModelConfigured = computed(() => !!settingsStore.promptPolishModel.trim())
 const polishDisabledReason = '请前往设置完成 AI 润色模型设置'
 
-const activeMessages = computed(() => chatStore.messages)
-const hasUserMessages = computed(() => chatStore.messages.some((m) => m.type === 'user'))
+/**
+ * 视频页只展示视频对话：图片页共用的 chatStore 里可能还有图文记录，
+ * 这里把「user + image assistant」整轮过滤掉，避免视频页出现无关历史。
+ */
+const activeMessages = computed(() => {
+  const list = chatStore.messages
+  const result: Message[] = []
+  for (let index = 0; index < list.length; index += 1) {
+    const message = list[index]
+    if (message.type === 'user') {
+      const next = list[index + 1]
+      if (next && next.type === 'assistant' && next.generateType === 'image') {
+        index += 1
+        continue
+      }
+      result.push(message)
+      continue
+    }
+    if (message.type === 'assistant' && message.generateType === 'image') continue
+    result.push(message)
+  }
+  return result
+})
+const hasUserMessages = computed(() => activeMessages.value.some((m) => m.type === 'user'))
 const activeSessionGenerating = computed(() => chatStore.isGenerating)
 const modelCapability = computed(() => getModelCapability(settingsStore.selectedModel))
 // Moss-Image 原生支持结构化布局，是唯一可做「分层布局 / 图层编辑」的图片模型。
@@ -1631,14 +1527,14 @@ function buildSessionWelcomeMessage(): Omit<Message, 'id' | 'timestamp'> {
   return {
     type: 'system',
     content: [
-      '👋 欢迎来到 ArtRealm AI「简易模式」！这里专为快速出图、灵感速写而设计，一句话即可生成图像或视频。',
+      '👋 欢迎来到 ArtRealm AI「视频生成」！用一句话描述镜头与运动，就能生成一段视频。',
       '',
-      '🖼️ 图像生成：支持「文生图」与「图生图」两种方式，快速把创意变成画面。',
-      '🎬 视频生成：覆盖文生视频、图生视频、首尾帧生视频、主体参考视频与动作控制等多种玩法。',
-      '📐 参数可调：可自由选择画面比例、单轮数量与视频时长，快速匹配不同创作场景。',
-      '✨ AI 润色：一键把简短描述扩写成更专业的提示词（需先在「设置」中配置润色模型）。',
+      '🎬 视频模式：覆盖文生视频、图生视频、首尾帧生视频、主体参考视频与动作控制等多种玩法。',
+      '📐 参数可调：可自由选择画面比例、时长与单轮数量，快速匹配不同创作场景。',
+      '🎨 Skill：视频生成仅使用你自行上传的 Skill，内置风格规范只作用于图片。',
+      '✨ AI 润色：一键把简短描述扩写成更专业的镜头提示词（需先在「设置」中配置润色模型）。',
       '',
-      '💡 上手很简单：选择创作类型与模型 → 写下你的创意描述 → 点击发送即可开始生成。',
+      '💡 上手很简单：选择模型与生成方式 → 写下镜头描述 → 点击发送即可开始生成。',
     ].join('\n'),
 
 
@@ -1650,20 +1546,6 @@ function ensureWelcomeMessage() {
   if (chatStore.messages.length > 0) return
   chatStore.addMessage(buildSessionWelcomeMessage())
 }
-
-function handleMediaTypeChange(nextType: MediaType) {
-  settingsStore.setMediaType(nextType)
-  ensureSupportedAspectRatio()
-  imageMode.value = 'text2image'
-  videoMode.value = activeVideoModeOptions.value[0]?.value || 'text2video'
-  removeUploadedFile()
-  removeViduFrames()
-  removeMotionControlFiles()
-  clearMultimodalAssets()
-  clearEditFiles()
-  referenceUrl.value = ''
-}
-
 
 function setImageMode(mode: ImageMode) {
 
@@ -1723,34 +1605,6 @@ function ensureSupportedVideoDuration() {
   settingsStore.saveToStorage()
 }
 
-function releaseUploadedFile(file: UploadedFile | null | undefined) {
-  if (file?.file && file.url.startsWith('blob:')) {
-    URL.revokeObjectURL(file.url)
-  }
-}
-
-function createUploadedFile(file: File, type: UploadedFile['type'], dimensions?: ImageDimensions): UploadedFile {
-  return {
-    name: file.name,
-    type,
-    url: URL.createObjectURL(file),
-    size: file.size,
-    file,
-    dimensions,
-  }
-}
-
-function dataUrlToFile(dataUrl: string, name: string, type: string): File {
-  const [meta, base64] = dataUrl.split(',')
-  const mime = type || meta.match(/data:([^;]+)/)?.[1] || 'image/png'
-  const binary = atob(base64 || '')
-  const bytes = new Uint8Array(binary.length)
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index)
-  }
-  return new File([bytes], name, { type: mime })
-}
-
 function restoreLandingReferenceImage() {
   if (route.query.reference !== 'landing') return
   const raw = sessionStorage.getItem(LANDING_REFERENCE_STORAGE_KEY)
@@ -1795,38 +1649,6 @@ function parseAspectRatio(value: string | undefined | null): number | null {
 
 function hasSameAspectRatio(a: ImageDimensions, b: ImageDimensions): boolean {
   return a.width * b.height === b.width * a.height
-}
-
-function getImageDimensions(file: File): Promise<ImageDimensions> {
-  return new Promise((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(file)
-    const image = new Image()
-    image.onload = () => {
-      const dimensions = {
-        width: image.naturalWidth,
-        height: image.naturalHeight,
-      }
-      URL.revokeObjectURL(objectUrl)
-      if (!dimensions.width || !dimensions.height) {
-        reject(new Error('无法读取图片尺寸'))
-        return
-      }
-      resolve(dimensions)
-    }
-    image.onerror = () => {
-      URL.revokeObjectURL(objectUrl)
-      reject(new Error('无法读取图片尺寸'))
-    }
-    image.src = objectUrl
-  })
-}
-
-async function resolveUploadedImageDimensions(uploadedFile: UploadedFile): Promise<ImageDimensions | null> {
-  if (uploadedFile.dimensions) return uploadedFile.dimensions
-  if (!uploadedFile.file) return null
-  const dimensions = await getImageDimensions(uploadedFile.file)
-  uploadedFile.dimensions = dimensions
-  return dimensions
 }
 
 /**
@@ -2428,10 +2250,8 @@ onMounted(async () => {
   }
   syncAppHeight()
   window.visualViewport?.addEventListener('resize', syncAppHeight)
-  if (route.query.type === 'image') {
-    settingsStore.setMediaType('image')
-    imageMode.value = 'text2image'
-  }
+  // 视频页固定使用视频模型，页面内不再提供图像 / 视频切换。
+  settingsStore.setMediaType('video')
   if (!activeVideoModeOptions.value.some((option) => option.value === videoMode.value)) {
     videoMode.value = activeVideoModeOptions.value[0]?.value || 'text2video'
   }
@@ -7025,245 +6845,6 @@ async function handleRegenerate(message: Message) {
   .expand-modal-foot {
     align-items: flex-start;
     flex-direction: column;
-  }
-}
-/* ---------- 内置风格 Skill 多选 ---------- */
-
-.skill-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  width: 100%;
-  min-width: 0;
-  overflow: hidden;
-  contain: inline-size;
-  padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.028);
-}
-
-.skill-picker-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.skill-picker-title {
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.66);
-}
-
-.skill-picker-meta {
-  font-size: 10.5px;
-  color: rgba(255, 255, 255, 0.38);
-}
-
-.skill-picker-clear {
-  margin-left: auto;
-  padding: 2px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 999px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 10px;
-  cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease;
-}
-
-.skill-picker-clear:hover {
-  border-color: rgba(255, 154, 92, 0.5);
-  color: #ffb27a;
-}
-
-.skill-picker-rail {
-  display: flex;
-  gap: 8px;
-  width: 100%;
-  min-width: 0;
-  padding-bottom: 3px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
-}
-
-.skill-picker-rail::-webkit-scrollbar {
-  height: 5px;
-}
-
-.skill-picker-rail::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
-}
-
-.skill-picker-rail::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.skill-chip {
-  position: relative;
-  flex: 0 0 auto;
-  width: 78px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-
-.skill-chip-thumb {
-  display: block;
-  width: 78px;
-  height: 78px;
-  border-radius: 11px;
-  object-fit: cover;
-  filter: saturate(0.86) brightness(0.74);
-  outline: 1px solid rgba(255, 255, 255, 0.1);
-  outline-offset: -1px;
-  transition:
-    filter 0.3s ease,
-    outline-color 0.3s ease,
-    transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.skill-chip:hover .skill-chip-thumb {
-  filter: saturate(1) brightness(0.9);
-  transform: translateY(-2px);
-}
-
-.skill-chip.active .skill-chip-thumb {
-  filter: saturate(1) brightness(1);
-  outline: 2px solid rgba(247, 247, 242, 0.92);
-  outline-offset: -2px;
-}
-
-.skill-chip-name {
-  display: block;
-  margin-top: 5px;
-  overflow: hidden;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 10.5px;
-  font-weight: 600;
-  line-height: 1.3;
-  text-align: center;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  transition: color 0.25s ease;
-}
-
-.skill-chip.active .skill-chip-name {
-  color: #fff;
-}
-
-.skill-chip-check {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  display: grid;
-  place-items: center;
-  width: 17px;
-  height: 17px;
-  border-radius: 50%;
-  background: #f7f7f2;
-  color: #08080a;
-  font-size: 10px;
-  font-weight: 800;
-  box-shadow: 0 0 0 1.5px rgba(8, 8, 10, 0.3);
-  opacity: 0;
-  transform: scale(0.6);
-  transition:
-    opacity 0.25s ease,
-    transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.skill-chip.active .skill-chip-check {
-  opacity: 1;
-  transform: scale(1);
-}
-
-.skill-picker-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-}
-
-.skill-defaults {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-}
-
-.skill-defaults-label {
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.34);
-}
-
-.skill-default-tag {
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.54);
-  font-size: 9.5px;
-  white-space: nowrap;
-}
-
-.skill-defaults-off {
-  color: #ffb27a;
-  font-size: 10px;
-}
-
-.skill-settings-link {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.45);
-  font-size: 10px;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
-}
-
-.skill-settings-link:hover {
-  color: #fff;
-}
-
-.skill-upload-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-}
-
-@media (max-width: 560px) {
-  .skill-picker {
-    padding: 9px;
-  }
-
-  .skill-chip,
-  .skill-chip-thumb {
-    width: 70px;
-  }
-
-  .skill-chip-thumb {
-    height: 70px;
-  }
-
-  .skill-upload-group {
-    width: 100%;
-    margin-left: 0;
   }
 }
 </style>

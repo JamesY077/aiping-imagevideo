@@ -1,0 +1,2264 @@
+<template>
+  <div class="image-page" :style="{ height: appHeight, '--app-height': appHeight }">
+    <!-- 参数抽屉打开时收起悬浮岛，避免图标压在抽屉上层。 -->
+    <StudioIsland v-show="!paramsOpen" />
+    <div class="image-shell">
+      <StudioHeader
+        kicker="Image Studio"
+        title="图片生成"
+        subtitle="写好一句提示词，挑一种风格，一次出一组可以横向比较的画面"
+        accent="#d9cdb8"
+      >
+        <template #actions>
+          <button class="header-action" type="button" @click="openHistory">
+            历史
+            <span v-if="batches.length" class="header-action-count">{{ batches.length }}</span>
+          </button>
+        </template>
+      </StudioHeader>
+
+      <div class="image-body">
+        <section class="workbench">
+          <!-- 提示词条 -->
+          <div class="prompt-card" :class="{ 'is-expand': isExpandMode }">
+            <div class="prompt-field">
+              <textarea
+                ref="promptInputRef"
+                v-model="inputText"
+                class="prompt-input"
+                :placeholder="promptPlaceholder"
+                rows="1"
+                @input="autoGrow"
+                @keydown="onPromptKeydown"
+              />
+              <div class="prompt-buttons">
+                <button
+                  class="ghost-pill"
+                  type="button"
+                  :disabled="isPolishing || isGenerating || !hasPolishModel"
+                  :title="hasPolishModel ? '用 AI 把简短描述扩写成更专业的提示词' : '请先在设置中配置 AI 润色模型'"
+                  @click="handlePolish"
+                >
+                  {{ isPolishing ? '润色中…' : 'AI 润色' }}
+                </button>
+                <button
+                  class="generate-btn"
+                  type="button"
+                  :disabled="!canSend"
+                  @click="handleSend"
+                >
+                  <template v-if="isGenerating">
+                    <span class="generate-spinner" aria-hidden="true" />
+                    {{ generatingProgress }}%
+                  </template>
+                  <template v-else>
+                    生成
+                    <span class="generate-kbd">⌘↵</span>
+                  </template>
+                </button>
+              </div>
+            </div>
+
+            <div class="prompt-chips">
+              <span class="pchip pchip-model">{{ modelLabel }}</span>
+              <span class="pchip">{{ modeLabel }}</span>
+              <span class="pchip">{{ settingsStore.aspectRatio }}</span>
+              <span class="pchip">{{ effectiveBatchSize }} 张</span>
+              <span v-if="selectedStyleCount" class="pchip pchip-accent">风格 × {{ selectedStyleCount }}</span>
+              <span v-if="isMossImageModel && mossLayoutEnabled" class="pchip">分层布局</span>
+              <button class="pchip pchip-action" type="button" @click="paramsOpen = true">参数</button>
+            </div>
+          </div>
+
+          <!-- 结果区 -->
+          <div class="gallery-area" :class="{ 'has-result': !!currentBatch }">
+            <div v-if="!batches.length" class="gallery-empty">
+              <span class="empty-mark" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="4.5" width="18" height="15" rx="3.2" />
+                  <circle cx="9" cy="10" r="1.6" />
+                  <path d="M4 16.6 9.4 12l4 3.6 2.6-2.2 4 3.6" />
+                </svg>
+              </span>
+              <h2>从一句话开始，出第一组图。</h2>
+              <p>越具体越好：主体、材质、光线、镜头、用途。生成后可以在这里比较、放大、扩图或重生成。</p>
+              <div class="starters">
+                <button
+                  v-for="item in quickStarts"
+                  :key="item.title"
+                  class="starter"
+                  type="button"
+                  @click="applyQuickPrompt(item.prompt)"
+                >
+                  <span class="starter-title">{{ item.title }}</span>
+                  <span class="starter-desc">{{ item.desc }}</span>
+                </button>
+              </div>
+            </div>
+
+            <template v-else-if="currentBatch">
+              <header class="batch-bar">
+                <div class="batch-copy">
+                  <p class="batch-prompt">{{ currentBatch.prompt || '以参考图向外扩展' }}</p>
+                  <div class="batch-meta">
+                    <span>{{ currentBatch.model || modelLabel }}</span>
+                    <span v-if="currentBatch.aspectRatio">{{ currentBatch.aspectRatio }}</span>
+                    <span v-if="currentBatch.results.length">{{ currentBatch.results.length }} 张</span>
+                    <span>{{ formatTime(currentBatch.createdAt) }}</span>
+                  </div>
+                </div>
+                <div class="batch-actions">
+                  <button class="ghost-pill" type="button" :disabled="isGenerating" @click="regenerate(currentBatch)">
+                    重生成
+                  </button>
+                  <button class="ghost-pill" type="button" @click="reusePrompt(currentBatch)">
+                    用这段提示词
+                  </button>
+                </div>
+              </header>
+
+              <div v-if="currentBatch.partialError" class="batch-warning">
+                {{ currentBatch.partialError }}
+              </div>
+
+              <div v-if="currentBatch.status === 'failed'" class="batch-error">
+                <p>{{ currentBatch.error || '这一轮生成失败了。' }}</p>
+                <button class="ghost-pill" type="button" :disabled="isGenerating" @click="regenerate(currentBatch)">
+                  再试一次
+                </button>
+              </div>
+
+              <div
+                class="gallery-grid"
+                :class="{ 'is-single': gridColumns === 1 }"
+                :style="{ '--cols': gridColumns, '--tile-ratio': tileRatio }"
+              >
+                <figure
+                  v-for="(result, index) in currentBatch.results"
+                  :key="result.url"
+                  class="tile"
+                  @click="openLightbox(index)"
+                >
+                  <img :src="result.url" alt="生成的图片" referrerpolicy="no-referrer" loading="lazy" decoding="async" />
+                  <span class="tile-index">{{ index + 1 }}</span>
+                  <figcaption class="tile-overlay">
+                    <div class="tile-tools">
+                      <button class="tile-btn" type="button" @click.stop="openLightbox(index)">查看</button>
+                      <button class="tile-btn" type="button" @click.stop="downloadResult(result)">下载</button>
+                      <button class="tile-btn" type="button" @click.stop="expandFromResult(result)">扩图</button>
+                      <button class="tile-btn" type="button" @click.stop="regenerate(currentBatch)">重生成</button>
+                      <button
+                        v-if="result.layout"
+                        class="tile-btn tile-btn-layer"
+                        type="button"
+                        @click.stop="editLayers(result)"
+                      >
+                        图层
+                      </button>
+                    </div>
+                    <span class="tile-size">{{ sizeLabel(result) }}</span>
+                  </figcaption>
+                </figure>
+
+                <div v-for="n in pendingCount" :key="`pending-${n}`" class="tile tile-pending">
+                  <span class="tile-shimmer" aria-hidden="true" />
+                  <span class="tile-pending-text">
+                    {{ currentBatch.progress ? `生成中 ${currentBatch.progress}%` : '排队中' }}
+                  </span>
+                </div>
+              </div>
+            </template>
+          </div>
+        </section>
+
+        <!-- 右侧参数栏 -->
+        <aside class="param-rail" :class="{ 'is-open': paramsOpen }">
+          <div class="rail-head">
+            <span class="rail-title">参数</span>
+            <button class="rail-close" type="button" aria-label="收起参数" @click="paramsOpen = false">✕</button>
+          </div>
+
+          <div class="rail-scroll">
+            <section class="rail-card">
+              <span class="rail-label">模型</span>
+              <ModelSelector
+                key="image-model"
+                v-model="settingsStore.selectedModel"
+                media-type="image"
+                compact
+                :disabled="isExpandMode"
+                @update:model-value="settingsStore.saveToStorage()"
+              />
+              <p v-if="isExpandMode" class="rail-hint">扩图固定使用 Qwen-Image-2.0-Pro。</p>
+            </section>
+
+            <section class="rail-card">
+              <span class="rail-label">生成方式</span>
+              <div class="chip-row">
+                <button
+                  v-for="option in modeOptions"
+                  :key="option.value"
+                  class="chip"
+                  :class="{ active: imageMode === option.value }"
+                  type="button"
+                  :disabled="option.disabled"
+                  @click="setImageMode(option.value)"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
+              <p v-if="isExpandMode" class="rail-hint">以上传的原图为中心向外延展，比例需与原图不同。</p>
+              <p v-else-if="imageMode === 'image2image'" class="rail-hint">上传一张参考图，按提示词改写画面。</p>
+            </section>
+
+            <section class="rail-card">
+              <span class="rail-label">比例</span>
+              <div class="ratio-grid">
+                <button
+                  v-for="option in ratioOptions"
+                  :key="option.value"
+                  class="ratio-chip"
+                  :class="{ active: settingsStore.aspectRatio === option.value }"
+                  type="button"
+                  @click="selectRatio(option.value)"
+                >
+                  <span class="ratio-box" :style="{ width: `${option.boxWidth}px`, height: `${option.boxHeight}px` }" />
+                  <span class="ratio-text">{{ option.label }}</span>
+                </button>
+              </div>
+            </section>
+
+            <section class="rail-card">
+              <span class="rail-label">数量</span>
+              <div class="chip-row">
+                <button
+                  v-for="count in batchOptions"
+                  :key="count"
+                  class="chip chip-count"
+                  :class="{ active: settingsStore.batchSize === count }"
+                  type="button"
+                  :disabled="isExpandMode"
+                  @click="selectBatchSize(count)"
+                >
+                  {{ count }}
+                </button>
+              </div>
+            </section>
+
+            <section class="rail-card">
+              <span class="rail-label">{{ isExpandMode ? '原图' : '参考图' }}</span>
+              <input
+                ref="fileInput"
+                type="file"
+                :accept="imageAccept"
+                class="hidden-input"
+                @change="handleFileChange"
+              />
+              <button class="upload-drop" type="button" @click="fileInput?.click()">
+                <template v-if="uploadedFile">
+                  <img :src="uploadedFile.url" alt="已上传参考图" />
+                  <span class="upload-name">{{ uploadedFile.name }}</span>
+                </template>
+                <template v-else>
+                  <span class="upload-plus">+</span>
+                  <span class="upload-copy">上传图片</span>
+                  <span class="upload-hint">{{ IMAGE_FORMAT_HINT }}</span>
+                </template>
+              </button>
+              <button v-if="uploadedFile" class="rail-text-btn" type="button" @click="clearUploadedFile()">
+                移除参考图
+              </button>
+            </section>
+
+            <SkillPicker layout="grid" />
+
+            <section v-if="isMossImageModel" class="rail-card">
+              <div class="rail-switch-row">
+                <span class="rail-label">分层布局</span>
+                <button
+                  class="mini-switch"
+                  :class="{ on: mossLayoutEnabled }"
+                  type="button"
+                  role="switch"
+                  :aria-checked="mossLayoutEnabled"
+                  @click="mossLayoutEnabled = !mossLayoutEnabled"
+                >
+                  <span class="mini-knob" aria-hidden="true" />
+                </button>
+              </div>
+              <p class="rail-hint">开启后先拆成可编辑图层再出图，结果里可继续调图层。</p>
+            </section>
+          </div>
+        </aside>
+
+        <!-- 放在 .image-shell 内部：shell 是独立 stacking context，
+             背板与参数栏必须同层比较 z-index，否则参数栏会被背板盖住。 -->
+        <div v-if="paramsOpen" class="rail-backdrop" @click="paramsOpen = false" />
+      </div>
+    </div>
+
+    <!-- 历史抽屉 -->
+    <Teleport to="body">
+      <div v-if="historyOpen" class="history-mask" @click.self="historyOpen = false">
+        <aside class="history-panel">
+          <header class="history-head">
+            <div>
+              <span class="history-kicker">History</span>
+              <h3>生成历史</h3>
+            </div>
+            <button class="history-close" type="button" aria-label="关闭历史" @click="historyOpen = false">✕</button>
+          </header>
+
+          <p v-if="!batches.length" class="history-empty">还没有生成记录，先写下第一句提示词吧。</p>
+
+          <ul v-else class="history-list">
+            <li
+              v-for="batch in batches"
+              :key="batch.id"
+              class="history-item"
+              :class="{ active: currentBatch?.id === batch.id }"
+            >
+              <button class="history-item-btn" type="button" @click="selectBatch(batch.id)">
+                <span class="history-thumb">
+                  <img v-if="batch.results[0]" :src="batch.results[0].url" alt="" loading="lazy" />
+                  <span v-else class="history-thumb-empty">{{ batch.status === 'failed' ? '!' : '…' }}</span>
+                </span>
+                <span class="history-copy">
+                  <span class="history-prompt">{{ batch.prompt || '扩图' }}</span>
+                  <span class="history-meta">
+                    {{ formatTime(batch.createdAt) }} · {{ batch.results.length }} 张
+                    <template v-if="batch.aspectRatio"> · {{ batch.aspectRatio }}</template>
+                  </span>
+                </span>
+              </button>
+            </li>
+          </ul>
+        </aside>
+      </div>
+    </Teleport>
+
+    <ImageLightbox
+      v-if="lightboxOpen"
+      v-model:index="lightboxIndex"
+      :results="currentBatch?.results || []"
+      :prompt="currentBatch?.prompt"
+      @close="lightboxOpen = false"
+      @regenerate="currentBatch && regenerate(currentBatch)"
+      @expand="lightboxResult && expandFromResult(lightboxResult)"
+      @edit-layers="lightboxResult && editLayers(lightboxResult)"
+    />
+
+    <MossLayerEditor
+      v-if="layerEditorState"
+      :image-url="layerEditorState.imageUrl"
+      :layout="layerEditorState.layout"
+      :mode="layerEditorState.mode"
+      :model-name="layerEditorState.modelName"
+      :generating="isGenerating"
+      @close="layerEditorState = null"
+      @regenerate="handleLayerRegenerate"
+    />
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import StudioHeader from '@/components/StudioHeader.vue'
+import StudioIsland from '@/components/StudioIsland.vue'
+import ModelSelector from '@/components/ModelSelector.vue'
+import SkillPicker from '@/components/SkillPicker.vue'
+import ImageLightbox from '@/components/ImageLightbox.vue'
+import MossLayerEditor from '@/components/MossLayerEditor.vue'
+import { useSettingsStore, DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT } from '@/stores/settingsStore'
+import { useChatStore } from '@/stores/chatStore'
+import { useSkillStore } from '@/stores/skillStore'
+import { useGenerate } from '@/composables/useGenerate'
+import { polishPrompt } from '@/api/aiping'
+import {
+  ASPECT_RATIO_OPTIONS,
+  getLocalUploadAccept,
+  getModelCapability,
+  getSupportedAspectRatios,
+  type AspectRatioOption,
+} from '@/types/model'
+import { createExpandedUploadedFile, getExpandTargetSize } from '@/features/generate/expand'
+import {
+  createUploadedFile,
+  dataUrlToFile,
+  releaseUploadedFile,
+  resolveUploadedImageDimensions,
+} from '@/features/generate/localFile'
+import {
+  IMAGE_FILE_ACCEPT,
+  IMAGE_FORMAT_HINT,
+  classifySupportedFile,
+} from '@/features/generate/fileFormats'
+import { isMossLayoutModel } from '@/features/layout/mossLayout'
+import { getReadableErrorMessage, validatePromptOrThrow } from '@/utils/errorHandling'
+import { showErrorMessage } from '@/utils/errors'
+import type { GenerateResult, GenerateStatus, ImageGenerationMode, UploadedFile } from '@/types/chat'
+import type { MossLayout } from '@/types/layout'
+
+type ImageMode = ImageGenerationMode
+
+interface ImageBatch {
+  id: string
+  assistantId: string
+  prompt: string
+  createdAt: number
+  status: GenerateStatus
+  progress: number
+  results: GenerateResult[]
+  error?: string
+  partialError?: string
+  aspectRatio?: string
+  model?: string
+  imageMode?: ImageMode
+  batchSize?: number
+  uploadedFile?: UploadedFile
+  uploadedFiles?: UploadedFile[]
+}
+
+interface LayerEditorState {
+  imageUrl: string
+  layout: MossLayout
+  mode: 'moss' | 'global'
+  modelName: string
+  baseFile: UploadedFile | null
+  prompt: string
+}
+
+const EXPAND_MODEL_ID = 'Qwen-Image-2.0-Pro'
+const MAX_BATCH = 5
+const LANDING_REFERENCE_STORAGE_KEY = 'artrealm_landing_reference_image'
+
+const route = useRoute()
+const settingsStore = useSettingsStore()
+const chatStore = useChatStore()
+const skillStore = useSkillStore()
+const { generate } = useGenerate()
+
+const inputText = ref('')
+const imageMode = ref<ImageMode>('text2image')
+const uploadedFile = ref<UploadedFile | null>(null)
+const fileInput = ref<HTMLInputElement | null>(null)
+const promptInputRef = ref<HTMLTextAreaElement | null>(null)
+const isPolishing = ref(false)
+const mossLayoutEnabled = ref(true)
+const layerEditorState = ref<LayerEditorState | null>(null)
+const historyOpen = ref(false)
+const paramsOpen = ref(false)
+const selectedBatchId = ref<string | null>(null)
+const lightboxOpen = ref(false)
+const lightboxIndex = ref(0)
+const appHeight = ref('100dvh')
+
+const quickStarts = [
+  {
+    title: '产品主视觉',
+    desc: '磨砂玻璃香水瓶 · 柔光侧逆光 · 极简石台',
+    prompt: '一只磨砂玻璃质感的香水瓶立在浅灰色石台上，柔和侧逆光，极简背景，高级产品主视觉，8K 细节。',
+  },
+  {
+    title: '电影感人像',
+    desc: '雨夜霓虹街头 · 浅景深 · 青橙色调',
+    prompt: '电影感中景：雨夜霓虹街头，人物侧脸回望，浅景深，青橙色调，胶片颗粒，35mm 镜头。',
+  },
+  {
+    title: '场景概念',
+    desc: '未来城市空中花园 · 黄昏暖光',
+    prompt: '未来城市空中花园概念场景，黄昏暖光穿过玻璃连廊，宏大远景，概念艺术风格，细腻光影。',
+  },
+  {
+    title: '编辑插画',
+    desc: '杂志内页 · 大标题 · 留白排版',
+    prompt: '编辑设计风格的杂志内页插画，大标题与正文形成清晰层级，大面积留白，克制的双色调，纸张质感。',
+  },
+  {
+    title: '品牌海报',
+    desc: '瑞士网格 · 黑白加红 · 几何裁切',
+    prompt: '瑞士国际主义风格品牌海报，严格网格排版，黑白为主加一处高饱和红，几何裁切，博物馆级印刷质感。',
+  },
+  {
+    title: '纹理素材',
+    desc: '柔光织物质感 · 无缝平铺',
+    prompt: '柔和侧光下的亚麻织物近景，细腻纤维纹理，低饱和米灰色，可无缝平铺的背景素材。',
+  },
+]
+
+const isExpandMode = computed(() => imageMode.value === 'expand')
+const isGenerating = computed(() => chatStore.isGenerating)
+const modelCapability = computed(() => getModelCapability(settingsStore.selectedModel))
+const isMossImageModel = computed(() => modelCapability.value?.imageRequestMode === 'moss')
+const supportsImageReferenceMode = computed(
+  () => !!modelCapability.value?.localUploadInputs?.includes('image'),
+)
+const modelLabel = computed(() => settingsStore.selectedModel || '未选择模型')
+const selectedStyleCount = computed(() => skillStore.selectedStyleSkillIds.length)
+const hasPolishModel = computed(() => !!settingsStore.promptPolishModel.trim())
+const imageAccept = computed(() => getLocalUploadAccept(settingsStore.selectedModel) || IMAGE_FILE_ACCEPT)
+
+const modeOptions = computed(() => [
+  { value: 'text2image' as ImageMode, label: '文生图', disabled: false },
+  { value: 'image2image' as ImageMode, label: '图生图', disabled: !supportsImageReferenceMode.value },
+  { value: 'expand' as ImageMode, label: '扩图', disabled: !supportsImageReferenceMode.value },
+])
+
+const modeLabel = computed(
+  () => modeOptions.value.find((option) => option.value === imageMode.value)?.label || '文生图',
+)
+
+const batchOptions = Array.from({ length: MAX_BATCH }, (_, index) => index + 1)
+
+const ratioOptions = computed<AspectRatioOption[]>(() => {
+  const supported = getSupportedAspectRatios(settingsStore.selectedModel, null)
+  if (!supported?.length) return ASPECT_RATIO_OPTIONS
+  return ASPECT_RATIO_OPTIONS.filter((option) => supported.includes(option.value))
+})
+
+const effectiveBatchSize = computed(() =>
+  isExpandMode.value ? 1 : Math.min(MAX_BATCH, Math.max(1, settingsStore.batchSize || 1)),
+)
+
+const promptPlaceholder = computed(() => {
+  if (isExpandMode.value) return '可以先留空：直接把这张图按目标比例向外扩展'
+  if (imageMode.value === 'image2image') return '描述要改成什么样：主体、风格、光线与构图'
+  return '描述你想生成的画面：主体、氛围、镜头、色彩、质感'
+})
+
+const canSend = computed(() => {
+  if (isGenerating.value) return false
+  if (isExpandMode.value) return !!uploadedFile.value
+  if (!inputText.value.trim()) return false
+  if (imageMode.value === 'image2image' && !uploadedFile.value) return false
+  return true
+})
+
+/** 从消息流里还原出「一轮生成」：user 提示词 + 下一条图片 assistant 结果。 */
+const batches = computed<ImageBatch[]>(() => {
+  const list = chatStore.messages
+  const result: ImageBatch[] = []
+  for (let index = 0; index < list.length; index += 1) {
+    const message = list[index]
+    if (message.type !== 'user') continue
+    const next = list[index + 1]
+    if (!next || next.type !== 'assistant' || next.generateType !== 'image') continue
+    result.push({
+      id: message.id,
+      assistantId: next.id,
+      prompt: message.content,
+      createdAt: message.timestamp,
+      status: next.generateStatus || 'idle',
+      progress: next.progress || 0,
+      results: next.generateResults?.length
+        ? next.generateResults
+        : next.generateResult
+          ? [next.generateResult]
+          : [],
+      error: next.error,
+      partialError: next.partialError,
+      aspectRatio: message.aspectRatio,
+      model: message.model,
+      imageMode: message.imageMode,
+      batchSize: message.batchSize,
+      uploadedFile: message.uploadedFile,
+      uploadedFiles: message.uploadedFiles,
+    })
+  }
+  return result.reverse()
+})
+
+const currentBatch = computed<ImageBatch | null>(() => {
+  if (!batches.value.length) return null
+  if (selectedBatchId.value) {
+    const hit = batches.value.find((batch) => batch.id === selectedBatchId.value)
+    if (hit) return hit
+  }
+  return batches.value[0]
+})
+
+const pendingCount = computed(() => {
+  const batch = currentBatch.value
+  if (!batch) return 0
+  if (batch.status !== 'pending' && batch.status !== 'processing') return 0
+  return Math.max(0, (batch.batchSize || 1) - batch.results.length)
+})
+
+const generatingProgress = computed(() => {
+  const batch = batches.value[0]
+  if (!isGenerating.value || !batch) return 0
+  return Math.min(99, Math.max(batch.progress || 0, 1))
+})
+
+const lightboxResult = computed(() => currentBatch.value?.results[lightboxIndex.value] || null)
+
+const gridColumns = computed(() => {
+  const count = (currentBatch.value?.results.length || 0) + pendingCount.value
+  if (count <= 1) return 1
+  if (count <= 4) return 2
+  return 3
+})
+
+/** 结果网格统一按本轮比例展示，横向比较时不裁切画面内容。 */
+const tileRatio = computed(() => {
+  const first = currentBatch.value?.results[0]
+  const ratio = first?.aspectRatio || currentBatch.value?.aspectRatio || settingsStore.aspectRatio
+  const [width, height] = (ratio || '1:1').split(':').map(Number)
+  if (!width || !height) return '1 / 1'
+  return `${width} / ${height}`
+})
+
+function formatTime(timestamp: number) {
+  return new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+function sizeLabel(result: GenerateResult) {
+  if (!result.size) return result.aspectRatio || ''
+  return `${result.size.width} × ${result.size.height}`
+}
+
+function syncAppHeight() {
+  const viewport = window.visualViewport
+  appHeight.value = `${viewport?.height || window.innerHeight}px`
+}
+
+function getGreatestCommonDivisor(a: number, b: number): number {
+  let x = Math.abs(a)
+  let y = Math.abs(b)
+  while (y) {
+    const next = x % y
+    x = y
+    y = next
+  }
+  return x || 1
+}
+
+function labelOfRatio(width: number, height: number) {
+  const divisor = getGreatestCommonDivisor(width, height)
+  return `${width / divisor}:${height / divisor}`
+}
+
+function parseRatio(value: string | undefined | null): number | null {
+  if (!value) return null
+  const [width, height] = value.split(':').map(Number)
+  if (!width || !height) return null
+  return width / height
+}
+
+function autoGrow() {
+  const el = promptInputRef.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${Math.min(180, Math.max(46, el.scrollHeight))}px`
+}
+
+function onPromptKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Enter') return
+  if (event.shiftKey) return
+  event.preventDefault()
+  if (canSend.value) handleSend()
+}
+
+function applyQuickPrompt(text: string) {
+  inputText.value = text
+  nextTick(() => {
+    autoGrow()
+    promptInputRef.value?.focus()
+  })
+}
+
+function reusePrompt(batch: ImageBatch) {
+  inputText.value = batch.prompt
+  nextTick(() => {
+    autoGrow()
+    promptInputRef.value?.focus()
+  })
+}
+
+function selectRatio(value: string) {
+  settingsStore.aspectRatio = value
+  settingsStore.saveToStorage()
+}
+
+function selectBatchSize(count: number) {
+  if (isExpandMode.value) return
+  settingsStore.batchSize = count
+  settingsStore.saveToStorage()
+}
+
+function ensureSupportedAspectRatio() {
+  const options = ratioOptions.value
+  if (!options.length) return
+  if (options.some((option) => option.value === settingsStore.aspectRatio)) return
+  settingsStore.aspectRatio = options[0].value
+  settingsStore.saveToStorage()
+}
+
+function setImageMode(mode: ImageMode) {
+  if (imageMode.value === mode) return
+  if (mode === 'image2image' && !supportsImageReferenceMode.value) return
+  if (mode === 'expand' && !uploadedFile.value) {
+    showErrorMessage('请先上传需要扩展的原图。')
+    return
+  }
+  if (mode === 'expand') {
+    settingsStore.selectedModel = EXPAND_MODEL_ID
+    settingsStore.saveToStorage()
+  }
+  imageMode.value = mode
+}
+
+function clearUploadedFile(options: { revoke?: boolean } = {}) {
+  releaseUploadedFile(uploadedFile.value)
+  if (options.revoke === false) {
+    uploadedFile.value = null
+    return
+  }
+  uploadedFile.value = null
+}
+
+function handleFileChange(event: Event) {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+
+  const kind = classifySupportedFile(file)
+  if (kind !== 'image') {
+    showErrorMessage(`仅支持图片格式：${IMAGE_FORMAT_HINT}`)
+    target.value = ''
+    return
+  }
+
+  clearUploadedFile()
+  const uploaded = createUploadedFile(file, 'image')
+  uploadedFile.value = uploaded
+  target.value = ''
+
+  // 图生图/扩图都需要参考图；文生图模式下上传后自动切到图生图更符合直觉。
+  void resolveUploadedImageDimensions(uploaded).then(() => {
+    if (imageMode.value === 'text2image') imageMode.value = 'image2image'
+  })
+}
+
+function restoreLandingReference() {
+  if (route.query.reference !== 'landing') return
+  const raw = sessionStorage.getItem(LANDING_REFERENCE_STORAGE_KEY)
+  if (!raw) return
+  try {
+    const parsed = JSON.parse(raw) as { name?: string; type?: string; dataUrl?: string }
+    if (!parsed.dataUrl) return
+    const file = dataUrlToFile(parsed.dataUrl, parsed.name || 'landing-reference.png', parsed.type || 'image/png')
+    uploadedFile.value = createUploadedFile(file, 'image')
+    imageMode.value = 'image2image'
+  } catch (error) {
+    showErrorMessage(getReadableErrorMessage(error, '首页参考图读取失败，请重新上传。'))
+  } finally {
+    sessionStorage.removeItem(LANDING_REFERENCE_STORAGE_KEY)
+  }
+}
+
+function openHistory() {
+  historyOpen.value = true
+}
+
+function selectBatch(id: string) {
+  selectedBatchId.value = id
+  historyOpen.value = false
+}
+
+function openLightbox(index: number) {
+  lightboxIndex.value = index
+  lightboxOpen.value = true
+}
+
+function downloadResult(result: GenerateResult) {
+  const link = document.createElement('a')
+  link.href = result.url
+  link.download = `aiping-image-${Date.now()}.png`
+  link.target = '_blank'
+  link.rel = 'noopener noreferrer'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+}
+
+/** 以这张结果作为原图进入扩图模式，并自动挑一个不同于原图的比例。 */
+async function expandFromResult(result: GenerateResult) {
+  const source: UploadedFile = {
+    name: `扩图原图-${Date.now()}.png`,
+    type: 'image',
+    url: result.url,
+    size: 0,
+    dimensions: result.size,
+  }
+  clearUploadedFile()
+  uploadedFile.value = source
+  imageMode.value = 'expand'
+  settingsStore.selectedModel = EXPAND_MODEL_ID
+  settingsStore.saveToStorage()
+  lightboxOpen.value = false
+
+  const currentRatio = parseRatio(
+    result.size ? labelOfRatio(result.size.width, result.size.height) : result.aspectRatio,
+  )
+  const next = ratioOptions.value.find((option) => {
+    const target = parseRatio(option.value)
+    if (!target) return false
+    return !currentRatio || Math.abs(target - currentRatio) > 0.02
+  })
+  if (next) selectRatio(next.value)
+  await nextTick()
+  paramsOpen.value = true
+}
+
+function editLayers(result: GenerateResult) {
+  if (!result.layout) return
+  const hasBackground = result.layout.items.some((item) => item.role === 'background')
+  const mode: LayerEditorState['mode'] = hasBackground
+    ? 'global'
+    : isMossLayoutModel(result.model)
+      ? 'moss'
+      : 'global'
+  const modelName = getModelCapability(result.model) ? result.model : settingsStore.selectedModel || result.model
+  lightboxOpen.value = false
+  layerEditorState.value = {
+    imageUrl: result.url,
+    layout: result.layout,
+    mode,
+    modelName,
+    baseFile:
+      mode === 'global'
+        ? {
+            name: `图层底图-${Date.now()}.png`,
+            type: 'image',
+            url: result.url,
+            size: 0,
+            dimensions: result.size,
+          }
+        : null,
+    prompt: '',
+  }
+}
+
+async function handleLayerRegenerate(layout: MossLayout) {
+  if (isGenerating.value) {
+    showErrorMessage('当前还有生成任务进行中，请等它完成后再按新布局生成。')
+    return
+  }
+  const editorState = layerEditorState.value
+  layerEditorState.value = null
+  if (!editorState) return
+
+  if (editorState.mode === 'global') {
+    const baseFile = editorState.baseFile
+    if (!baseFile) {
+      showErrorMessage('缺少底图，无法生成新图，请重新上传参考图后再试。')
+      return
+    }
+    const model = getModelCapability(editorState.modelName) ? editorState.modelName : settingsStore.selectedModel
+    settingsStore.selectedModel = model
+    settingsStore.aspectRatio = layout.aspectRatio || settingsStore.aspectRatio
+    settingsStore.saveToStorage()
+    imageMode.value = 'image2image'
+
+    await generate(
+      editorState.prompt.trim() || '保持参考图的主体、构图与风格不变，按图层布局调整画面',
+      'image2image',
+      model,
+      baseFile,
+      settingsStore.aspectRatio,
+      settingsStore.videoDuration,
+      false,
+      skillStore.effectiveSkillContents,
+      settingsStore.videoResolution,
+      1,
+      { mossLayout: layout },
+    )
+    return
+  }
+
+  settingsStore.selectedModel = 'Moss-Image-SFT'
+  settingsStore.aspectRatio = layout.aspectRatio || settingsStore.aspectRatio
+  settingsStore.saveToStorage()
+  imageMode.value = 'text2image'
+
+  await generate(
+    `图层调整后重新生成 · ${layout.items.length} 个图层`,
+    'text2image',
+    'Moss-Image-SFT',
+    null,
+    settingsStore.aspectRatio,
+    settingsStore.videoDuration,
+    false,
+    skillStore.effectiveSkillContents,
+    settingsStore.videoResolution,
+    1,
+    { mossLayout: layout },
+  )
+}
+
+async function handlePolish() {
+  const prompt = inputText.value.trim()
+  if (!prompt) {
+    showErrorMessage('先写一点内容，再让 AI 润色。')
+    return
+  }
+  try {
+    validatePromptOrThrow(prompt)
+  } catch (error) {
+    showErrorMessage(getReadableErrorMessage(error, '请检查提示词后重试。'))
+    return
+  }
+  const model = settingsStore.promptPolishModel.trim()
+  if (!model) {
+    showErrorMessage('请先在设置中填写用于 AI 润色的模型 ID。')
+    return
+  }
+  isPolishing.value = true
+  try {
+    inputText.value = await polishPrompt({
+      model,
+      messages: [
+        {
+          role: 'system',
+          content: settingsStore.promptPolishSystemPrompt.trim() || DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT,
+        },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.7,
+    })
+    await nextTick()
+    autoGrow()
+    promptInputRef.value?.focus()
+  } catch (error) {
+    showErrorMessage(getReadableErrorMessage(error, '润色失败，请稍后重试。'))
+  } finally {
+    isPolishing.value = false
+  }
+}
+
+/** 扩图链路：先预扩画布，再把扩展后的图交给 Qwen；比例与原图一致时拦截。 */
+async function runExpand(source: UploadedFile, ratio: string, prompt = '') {
+  let dimensions = source.dimensions || null
+  if (!dimensions) {
+    try {
+      dimensions = await resolveUploadedImageDimensions(source)
+    } catch {
+      dimensions = null
+    }
+  }
+  const sourceRatio = dimensions ? parseRatio(labelOfRatio(dimensions.width, dimensions.height)) : null
+  const targetRatio = parseRatio(ratio)
+  if (sourceRatio && targetRatio && Math.abs(sourceRatio - targetRatio) < 0.01) {
+    showErrorMessage('扩图比例与原图一致，请换一个比例再生成。')
+    return
+  }
+
+  const prepared = await createExpandedUploadedFile(source, ratio)
+  const target = getExpandTargetSize(ratio)
+  const expandPrompt = prompt.trim()
+
+  await generate(
+    expandPrompt,
+    'image2image',
+    EXPAND_MODEL_ID,
+    source,
+    ratio,
+    settingsStore.videoDuration,
+    false,
+    null,
+    settingsStore.videoResolution,
+    1,
+    {
+      imageMode: 'expand',
+      generationFile: prepared || source,
+      imageSize: target.size,
+    },
+  )
+}
+
+async function handleSend() {
+  if (!canSend.value) return
+
+  const prompt = inputText.value.trim()
+  if (!isExpandMode.value || prompt) {
+    try {
+      validatePromptOrThrow(prompt)
+    } catch (error) {
+      showErrorMessage(getReadableErrorMessage(error, '提示词校验失败，请修改后重试。'))
+      return
+    }
+  }
+
+  if (isExpandMode.value) {
+    const source = uploadedFile.value
+    if (!source) return
+    const ratio = settingsStore.aspectRatio
+    inputText.value = ''
+    clearUploadedFile()
+    paramsOpen.value = false
+    selectedBatchId.value = null
+    await runExpand(source, ratio, prompt)
+    settingsStore.saveToStorage()
+    return
+  }
+
+  const file = imageMode.value === 'image2image' ? uploadedFile.value : null
+  const ioType = file ? 'image2image' : 'text2image'
+  const batchSize = effectiveBatchSize.value
+
+  inputText.value = ''
+  clearUploadedFile()
+  paramsOpen.value = false
+  selectedBatchId.value = null
+
+  await generate(
+    prompt,
+    ioType,
+    settingsStore.selectedModel,
+    file,
+    settingsStore.aspectRatio,
+    settingsStore.videoDuration,
+    false,
+    skillStore.effectiveSkillContents,
+    settingsStore.videoResolution,
+    batchSize,
+    { mossLayoutMode: isMossImageModel.value && mossLayoutEnabled.value },
+  )
+
+  settingsStore.saveToStorage()
+}
+
+/** 按历史记录原样重跑一轮（沿用当时的模型、比例、数量与生成方式）。 */
+async function regenerate(batch: ImageBatch) {
+  if (isGenerating.value) return
+  lightboxOpen.value = false
+
+  const source = batch.uploadedFiles?.[0] || batch.uploadedFile
+  const ratio = batch.aspectRatio || settingsStore.aspectRatio
+  if (batch.imageMode === 'expand' && source) {
+    selectedBatchId.value = null
+    await runExpand(source, ratio, batch.prompt)
+    return
+  }
+
+  const model = batch.model || settingsStore.selectedModel
+  if (model) settingsStore.selectedModel = model
+  settingsStore.aspectRatio = ratio
+  settingsStore.saveToStorage()
+
+  const savedLayout = batch.results.find((item) => item.layout)?.layout || null
+  imageMode.value = batch.imageMode === 'image2image' ? 'image2image' : 'text2image'
+  selectedBatchId.value = null
+
+  await generate(
+    batch.prompt,
+    source ? 'image2image' : 'text2image',
+    model,
+    source || null,
+    ratio,
+    settingsStore.videoDuration,
+    false,
+    skillStore.effectiveSkillContents,
+    settingsStore.videoResolution,
+    batch.batchSize || effectiveBatchSize.value,
+    { mossLayout: savedLayout },
+  )
+
+  settingsStore.saveToStorage()
+}
+
+watch(
+  () => settingsStore.selectedModel,
+  () => {
+    ensureSupportedAspectRatio()
+  },
+)
+
+onMounted(async () => {
+  settingsStore.loadFromStorage()
+  skillStore.loadFromStorage()
+  settingsStore.setMediaType('image')
+  syncAppHeight()
+  window.visualViewport?.addEventListener('resize', syncAppHeight)
+
+  if (route.query.type === 'image') {
+    imageMode.value = 'text2image'
+  }
+  ensureSupportedAspectRatio()
+  restoreLandingReference()
+
+  const initialPrompt = typeof route.query.prompt === 'string' ? route.query.prompt.trim() : ''
+  if (initialPrompt) {
+    inputText.value = initialPrompt
+    await nextTick()
+    autoGrow()
+    if (route.query.autosend === '1') {
+      await handleSend()
+    } else {
+      promptInputRef.value?.focus()
+    }
+  }
+})
+
+onBeforeUnmount(() => {
+  window.visualViewport?.removeEventListener('resize', syncAppHeight)
+  releaseUploadedFile(uploadedFile.value)
+})
+</script>
+
+<style scoped>
+.image-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100dvh;
+  padding: 0 10px 10px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 8% -6%, rgba(217, 205, 184, 0.10), transparent 34%),
+    radial-gradient(circle at 92% 8%, rgba(96, 123, 255, 0.08), transparent 30%),
+    #07080b;
+  color: #fff;
+}
+
+.image-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.026) 1px, transparent 1px);
+  background-size: 76px 76px;
+  mask-image: radial-gradient(circle at 50% 22%, #000 0 28%, transparent 76%);
+}
+
+.image-shell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: min(100%, 1560px);
+  min-height: 0;
+  margin: 0 auto;
+}
+
+/* 视口不够宽时，为左侧固定悬浮岛（约 72px）让出空间，避免压住结果图。 */
+@media (min-width: 981px) and (max-width: 1760px) {
+  .image-shell {
+    padding-left: 64px;
+  }
+}
+
+/* ---------- 头部 ---------- */
+
+.header-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 15px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.header-action:hover {
+  border-color: rgba(217, 205, 184, 0.32);
+  background: rgba(217, 205, 184, 0.10);
+  color: #fff;
+}
+
+.header-action-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(217, 205, 184, 0.22);
+  color: #f4efe6;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 主体 ---------- */
+
+.image-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 352px;
+  gap: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 18px 4px;
+}
+
+.workbench {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ---------- 提示词条 ---------- */
+
+.prompt-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 12px 14px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(22, 23, 28, 0.92), rgba(13, 14, 18, 0.92));
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: border-color 0.24s ease;
+}
+
+.prompt-card:focus-within {
+  border-color: rgba(217, 205, 184, 0.28);
+}
+
+.prompt-card.is-expand {
+  border-color: rgba(246, 196, 83, 0.24);
+}
+
+.prompt-field {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.prompt-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 46px;
+  max-height: 180px;
+  padding: 11px 2px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.94);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.55;
+  resize: none;
+  outline: none;
+}
+
+.prompt-input::placeholder {
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.prompt-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding-bottom: 4px;
+}
+
+.ghost-pill {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.ghost-pill:hover:not(:disabled) {
+  border-color: rgba(217, 205, 184, 0.34);
+  background: rgba(217, 205, 184, 0.12);
+  color: #fff;
+}
+
+.ghost-pill:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.generate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #f6f1e7, #d8cbb4);
+  color: #17140f;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow: 0 12px 26px rgba(180, 158, 120, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+.generate-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 32px rgba(180, 158, 120, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.68);
+}
+
+.generate-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.generate-kbd {
+  color: rgba(23, 20, 15, 0.42);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.generate-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(23, 20, 15, 0.24);
+  border-top-color: #17140f;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.prompt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pchip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 220px;
+  min-height: 24px;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pchip-model {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.pchip-accent {
+  border-color: rgba(217, 205, 184, 0.28);
+  background: rgba(217, 205, 184, 0.12);
+  color: #f2ece1;
+}
+
+.pchip-action {
+  display: none;
+  margin-left: auto;
+  border-color: rgba(217, 205, 184, 0.3);
+  color: #f2ece1;
+  cursor: pointer;
+}
+
+/* ---------- 结果区 ---------- */
+
+.gallery-area {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 2px 8px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+
+.gallery-area::-webkit-scrollbar {
+  width: 6px;
+}
+
+.gallery-area::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.gallery-empty {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px 12px 40px;
+  text-align: center;
+}
+
+.empty-mark {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(217, 205, 184, 0.78);
+}
+
+.empty-mark svg {
+  width: 24px;
+  height: 24px;
+}
+
+.gallery-empty h2 {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.94);
+  font-size: clamp(20px, 2vw, 26px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.gallery-empty p {
+  max-width: 520px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.44);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.starters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  width: min(100%, 760px);
+  margin-top: 8px;
+}
+
+.starter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.starter:hover {
+  border-color: rgba(217, 205, 184, 0.3);
+  background: rgba(217, 205, 184, 0.08);
+  transform: translateY(-1px);
+}
+
+.starter-title {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.starter-desc {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.batch-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 2px 4px 0;
+}
+
+.batch-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.batch-prompt {
+  margin: 0;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.batch-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.36);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.batch-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.batch-warning,
+.batch-error {
+  flex: 0 0 auto;
+  padding: 9px 12px;
+  border-radius: 12px;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.batch-warning {
+  border: 1px solid rgba(246, 196, 83, 0.24);
+  background: rgba(246, 196, 83, 0.08);
+  color: #f3dfae;
+}
+
+.batch-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.26);
+  background: rgba(248, 113, 113, 0.08);
+  color: #ffc9c9;
+}
+
+.batch-error p {
+  margin: 0;
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr));
+  gap: 10px;
+  align-content: start;
+}
+
+.gallery-grid.is-single .tile {
+  width: min(100%, 680px);
+  justify-self: center;
+}
+
+.tile {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  aspect-ratio: var(--tile-ratio, 1 / 1);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: zoom-in;
+  transition: border-color 0.22s ease, transform 0.22s ease;
+}
+
+.tile:hover {
+  border-color: rgba(217, 205, 184, 0.34);
+  transform: translateY(-2px);
+}
+
+.tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tile-index {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(8, 8, 10, 0.6);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(8px);
+}
+
+.tile-overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 26px 10px 10px;
+  background: linear-gradient(180deg, transparent, rgba(6, 7, 10, 0.86));
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.tile:hover .tile-overlay,
+.tile:focus-within .tile-overlay {
+  opacity: 1;
+}
+
+.tile-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tile-btn {
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(16, 18, 24, 0.72);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.tile-btn:hover {
+  border-color: rgba(217, 205, 184, 0.4);
+  background: rgba(217, 205, 184, 0.2);
+  color: #fff;
+}
+
+.tile-btn-layer {
+  border-color: rgba(246, 196, 83, 0.4);
+  color: #f6e3b0;
+}
+
+.tile-size {
+  margin-left: auto;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tile-pending {
+  display: grid;
+  place-items: center;
+  cursor: default;
+}
+
+.tile-pending:hover {
+  border-color: rgba(255, 255, 255, 0.08);
+  transform: none;
+}
+
+.tile-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0.02) 20%,
+    rgba(255, 255, 255, 0.07) 42%,
+    rgba(255, 255, 255, 0.02) 64%
+  );
+  background-size: 220% 100%;
+  animation: shimmer 1.5s linear infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 140% 0;
+  }
+  to {
+    background-position: -60% 0;
+  }
+}
+
+.tile-pending-text {
+  position: relative;
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 参数栏 ---------- */
+
+.param-rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(20, 21, 26, 0.92), rgba(12, 13, 17, 0.94));
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.rail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.rail-title {
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.rail-close {
+  display: none;
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.rail-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 12px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+
+.rail-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.rail-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.rail-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.028);
+}
+
+.rail-label {
+  color: rgba(255, 255, 255, 0.46);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.rail-hint {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.36);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  min-height: 30px;
+  padding: 0 13px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.chip:hover:not(:disabled) {
+  border-color: rgba(217, 205, 184, 0.3);
+  color: #fff;
+}
+
+.chip.active {
+  border-color: transparent;
+  background: linear-gradient(135deg, #f6f1e7, #d8cbb4);
+  color: #17140f;
+}
+
+.chip:disabled {
+  opacity: 0.36;
+  cursor: not-allowed;
+}
+
+.chip-count {
+  min-width: 38px;
+  padding: 0 0;
+}
+
+.ratio-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ratio-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 4px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.ratio-chip:hover {
+  border-color: rgba(217, 205, 184, 0.3);
+  color: #fff;
+}
+
+.ratio-chip.active {
+  border-color: rgba(217, 205, 184, 0.6);
+  background: rgba(217, 205, 184, 0.14);
+  color: #f4efe6;
+}
+
+.ratio-box {
+  display: block;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  opacity: 0.8;
+}
+
+.ratio-text {
+  font-variant-numeric: tabular-nums;
+}
+
+.hidden-input {
+  display: none;
+}
+
+.upload-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 96px;
+  padding: 10px;
+  overflow: hidden;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.upload-drop:hover {
+  border-color: rgba(217, 205, 184, 0.42);
+  background: rgba(217, 205, 184, 0.06);
+}
+
+.upload-drop img {
+  width: 100%;
+  max-height: 120px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.upload-name {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-plus {
+  font-size: 18px;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.upload-copy {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.upload-hint {
+  color: rgba(255, 255, 255, 0.28);
+  font-size: 9.5px;
+}
+
+.rail-text-btn {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(217, 205, 184, 0.8);
+  font-size: 10.5px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.rail-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mini-switch {
+  position: relative;
+  width: 40px;
+  height: 23px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+  transition: background 0.22s ease;
+}
+
+.mini-switch.on {
+  border-color: transparent;
+  background: linear-gradient(90deg, #ec5a00, #ff8a4c);
+}
+
+.mini-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mini-switch.on .mini-knob {
+  transform: translateX(17px);
+  background: #fff;
+}
+
+/* ---------- 历史抽屉 ---------- */
+
+.history-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(4, 5, 8, 0.62);
+  backdrop-filter: blur(6px);
+}
+
+.history-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 400px);
+  padding: 18px 16px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0b0c10;
+  animation: slide-in 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(18px);
+    opacity: 0.4;
+  }
+}
+
+.history-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.history-kicker {
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.history-head h3 {
+  margin: 3px 0 0;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.history-close {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.history-empty {
+  margin: 22px 2px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 12px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.history-item-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.history-item-btn:hover {
+  border-color: rgba(217, 205, 184, 0.3);
+  background: rgba(217, 205, 184, 0.07);
+}
+
+.history-item.active .history-item-btn {
+  border-color: rgba(217, 205, 184, 0.44);
+  background: rgba(217, 205, 184, 0.1);
+}
+
+.history-thumb {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.history-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.history-thumb-empty {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 13px;
+}
+
+.history-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.history-prompt {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.history-meta {
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rail-backdrop {
+  display: none;
+}
+
+/* ---------- 桌面窄屏 ---------- */
+
+@media (max-width: 1200px) {
+  .image-body {
+    grid-template-columns: minmax(0, 1fr) 320px;
+    padding: 0 12px 4px;
+  }
+
+  .starters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ---------- 移动端 ---------- */
+
+@media (max-width: 980px) {
+  .image-page {
+    padding: 0 8px 8px;
+  }
+
+  .image-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    /* 让出左侧悬浮岛（fixed, 约 52px）的位置，避免内容被图标压住 */
+    padding: 0 6px 4px 62px;
+  }
+
+  .pchip-action {
+    display: inline-flex;
+  }
+
+  .starters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .param-rail {
+    position: fixed;
+    right: 8px;
+    bottom: 8px;
+    left: 8px;
+    z-index: 112;
+    max-height: min(76vh, 620px);
+    border-radius: 20px;
+    transform: translateY(calc(100% + 20px));
+    pointer-events: none;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .param-rail.is-open {
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .rail-close {
+    display: block;
+  }
+
+  .rail-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 111;
+    display: block;
+    background: rgba(4, 5, 8, 0.55);
+    backdrop-filter: blur(4px);
+  }
+
+  .batch-bar {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .batch-actions {
+    margin-left: 0;
+  }
+
+  .gallery-grid {
+    grid-template-columns: repeat(min(var(--cols, 2), 2), minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .prompt-field {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .prompt-buttons {
+    justify-content: flex-end;
+    padding-bottom: 0;
+  }
+
+  .generate-btn {
+    flex: 0 0 auto;
+  }
+
+  .generate-kbd {
+    display: none;
+  }
+
+  .starters {
+    grid-template-columns: 1fr;
+  }
+
+  .gallery-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .history-panel {
+    width: 100%;
+    border-left: 0;
+  }
+}
+</style>

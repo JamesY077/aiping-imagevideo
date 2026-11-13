@@ -85,11 +85,13 @@ const LANDING_PENDING_PROMPT_KEY = 'artrealm_landing_pending_prompt'
  */
 function resolveRedirectTarget(): string {
   const raw = typeof route.query.redirect === 'string' ? route.query.redirect.trim() : ''
-  if (!raw) return '/studio'
+  if (!raw) return '/image'
   if (raw.startsWith('/')) return raw
   if (raw === 'skill') return '/skill'
   if (raw === 'voice') return '/voice'
-  return '/studio'
+  // 兼容拆分前的旧分区简写。
+  if (raw === 'studio') return '/image'
+  return '/image'
 }
 
 function consumeLandingPendingPrompt(): { prompt: string; hasReference: boolean } | null {
@@ -121,7 +123,7 @@ async function handleSubmit() {
     const pending = consumeLandingPendingPrompt()
     if (pending) {
       router.push({
-        path: '/studio',
+        path: '/image',
         query: {
           mode: 'simple',
           type: 'image',

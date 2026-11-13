@@ -106,7 +106,9 @@ node scripts/analyze-matrix.mjs test-results/matrix-*.jsonl          # 汇总为
 | --- | --- |
 | `/` | 落地页：产品介绍、Skill 模板库与提示词模板库 |
 | `/setup` | 首次配置 API Base URL 与 API Key |
-| `/studio` | 对话式创作工作台（图片 / 视频） |
+| `/image` | 图片生成工作台：提示词条 + 结果画廊 + 参数 / Skill 侧栏 |
+| `/video` | 视频生成工作台：对话流 + 视频参数面板 |
+| `/studio` | 旧入口兼容：按 `type` 自动跳转到 `/image` 或 `/video` |
 | `/skill` | Skill 创作页 |
 | `/voice` | 配音创作页 |
 | `/settings` | 工作台设置：API 配置、提示词润色、数据清除 |

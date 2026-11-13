@@ -33,10 +33,14 @@
           <path d="M12 3.2 13.9 9l5.8 1.9-5.8 1.9L12 18.6l-1.9-5.8L4.3 10.9 10.1 9z" />
           <path d="M18.6 16.4v3M17.1 17.9h3" />
         </svg>
-        <svg v-else-if="item.key === 'media'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round">
+        <svg v-else-if="item.key === 'image'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round">
+          <rect x="3.2" y="4.8" width="17.6" height="14.4" rx="3.4" />
+          <circle cx="8.4" cy="9.6" r="1.5" />
+          <path d="M3.6 17.1l4.9-4.6 3.6 3.2 2.9-2.5 5.4 4.2" />
+        </svg>
+        <svg v-else-if="item.key === 'video'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round">
           <rect x="3.2" y="4.8" width="17.6" height="14.4" rx="3.4" />
           <path d="M10.4 9.6 15 12l-4.6 2.4z" fill="currentColor" stroke="none" />
-          <circle cx="7.3" cy="8.6" r="0.9" fill="currentColor" stroke="none" />
         </svg>
         <svg v-else-if="item.key === 'model3d'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round">
           <path d="M12 2.9 20.1 7v10L12 21.1 3.9 17V7z" />
@@ -76,11 +80,18 @@ const items = [
     accentSoft: 'rgba(167, 139, 250, 0.22)',
   },
   {
-    path: '/studio',
-    key: 'media',
-    label: '图片视频生成',
+    path: '/image',
+    key: 'image',
+    label: '图片生成',
     accent: '#d9cdb8',
     accentSoft: 'rgba(217, 205, 184, 0.20)',
+  },
+  {
+    path: '/video',
+    key: 'video',
+    label: '视频生成',
+    accent: '#8fb6ff',
+    accentSoft: 'rgba(143, 182, 255, 0.20)',
   },
   {
     path: '/voice',

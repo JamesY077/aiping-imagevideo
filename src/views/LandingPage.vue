@@ -156,7 +156,7 @@ interface CreativeZone {
   desc: string
   tags: string[]
   cta: string
-  target: 'skill' | 'studio' | 'voice'
+  target: 'skill' | 'image' | 'voice'
   soon?: boolean
 }
 
@@ -175,11 +175,11 @@ const zones: CreativeZone[] = [
     key: 'media',
     index: '02',
     icon: '◈',
-    title: '图片视频生成',
-    desc: '文生图、图生视频、首尾帧与多模态参考，同一个工作台完成全部画面创作。',
-    tags: ['Seedream', 'Seedance', 'MiniMax H3', 'Kling'],
-    cta: '进入创作工坊',
-    target: 'studio',
+    title: '图片生成',
+    desc: '文生图、图生图、扩图与风格 Skill 多选，批量出图后横向比较。视频生成在同一工作台的独立入口。',
+    tags: ['Seedream', 'Qwen-Image', '风格 Skill', '批量出图'],
+    cta: '进入图片工作台',
+    target: 'image',
   },
   {
     key: 'voice',
@@ -333,7 +333,7 @@ function enterZone(zone: CreativeZone) {
     return
   }
 
-  router.push(zone.target === 'skill' ? '/skill' : '/studio')
+  router.push(zone.target === 'skill' ? '/skill' : `/${zone.target}`)
 }
 
 function handleTemplateClick(item: { prompt: string }) {
@@ -344,7 +344,7 @@ function handleTemplateClick(item: { prompt: string }) {
 
   if (hasActiveApiSession()) {
     router.push({
-      path: '/studio',
+      path: '/image',
       query: {
         mode: 'simple',
         type: 'image',
@@ -354,7 +354,7 @@ function handleTemplateClick(item: { prompt: string }) {
     return
   }
 
-  router.push({ path: '/setup', query: { redirect: 'studio' } })
+  router.push({ path: '/setup', query: { redirect: 'image' } })
 }
 
 function handleSkillTemplateClick() {

@@ -5,7 +5,7 @@ import { clearApiSessionReady, getMillisecondsUntilNextChinaWeekStart, hasActive
 let weekRefreshTimer: number | null = null
 
 function redirectToLandingIfNeeded() {
-  const publicPaths = new Set(['/', '/home', '/studio', '/setup'])
+  const publicPaths = new Set(['/', '/home', '/setup', '/studio', '/image', '/video'])
   if (!publicPaths.has(router.currentRoute.value.path)) {
     router.replace('/')
   }
