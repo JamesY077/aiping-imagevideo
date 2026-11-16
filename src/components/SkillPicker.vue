@@ -1,17 +1,14 @@
 <template>
   <div class="skill-picker" :class="`skill-picker-${layout}`">
     <div class="skill-picker-head">
-      <span class="skill-picker-title">{{ uploadOnly ? 'Skill' : '风格 Skill' }}</span>
+      <span class="skill-picker-title">风格 Skill</span>
       <span class="skill-picker-meta">
-        <template v-if="uploadOnly">视频生成仅使用上传的 Skill</template>
-        <template v-else>
-          {{ skillStore.selectedStyleSkillIds.length
-            ? `已选 ${skillStore.selectedStyleSkillIds.length} 个`
-            : layout === 'grid' ? '可多选' : '可多选 · 横向滑动' }}
-        </template>
+        {{ skillStore.selectedStyleSkillIds.length
+          ? `已选 ${skillStore.selectedStyleSkillIds.length} 个`
+          : layout === 'grid' ? '可多选' : '可多选 · 横向滑动' }}
       </span>
       <button
-        v-if="!uploadOnly && skillStore.selectedStyleSkillIds.length"
+        v-if="skillStore.selectedStyleSkillIds.length"
         class="skill-picker-clear"
         type="button"
         @click="skillStore.clearStyleSkills()"
@@ -23,7 +20,7 @@
     <div
       class="skill-picker-rail"
       role="group"
-      :aria-label="uploadOnly ? '上传 Skill，最多 3 个' : '风格 Skill 与上传 Skill'"
+      aria-label="风格 Skill 与上传 Skill"
       @wheel="handleSkillRailWheel"
     >
       <!-- 上传入口放在最前：打开参数栏即可看到，不和风格卡抢滚动位置。 -->
@@ -76,34 +73,32 @@
         <span class="skill-chip-name">{{ skill.name }}</span>
       </div>
 
-      <template v-if="!uploadOnly">
-        <button
-          v-for="skill in styleSkillOptions"
-          :key="skill.id"
-          class="skill-chip"
-          :class="{ active: skillStore.selectedStyleSkillIds.includes(skill.id) }"
-          type="button"
-          :title="skill.description"
-          :aria-pressed="skillStore.selectedStyleSkillIds.includes(skill.id)"
-          @click="skillStore.toggleStyleSkill(skill.id)"
-        >
-          <img
-            v-if="skill.thumbnail"
-            class="skill-chip-thumb"
-            :src="getPreviewSrc(skill)"
-            alt=""
-            loading="lazy"
-            decoding="async"
-            @error="handlePreviewError(skill, $event)"
-          />
-          <span class="skill-chip-name">{{ skill.name }}</span>
-          <span class="skill-chip-check" aria-hidden="true">✓</span>
-        </button>
-      </template>
+      <button
+        v-for="skill in styleSkillOptions"
+        :key="skill.id"
+        class="skill-chip"
+        :class="{ active: skillStore.selectedStyleSkillIds.includes(skill.id) }"
+        type="button"
+        :title="skill.description"
+        :aria-pressed="skillStore.selectedStyleSkillIds.includes(skill.id)"
+        @click="skillStore.toggleStyleSkill(skill.id)"
+      >
+        <img
+          v-if="skill.thumbnail"
+          class="skill-chip-thumb"
+          :src="getPreviewSrc(skill)"
+          alt=""
+          loading="lazy"
+          decoding="async"
+          @error="handlePreviewError(skill, $event)"
+        />
+        <span class="skill-chip-name">{{ skill.name }}</span>
+        <span class="skill-chip-check" aria-hidden="true">✓</span>
+      </button>
     </div>
 
     <div class="skill-picker-foot">
-      <div v-if="!uploadOnly" class="skill-defaults">
+      <div v-if="!hideDefaults" class="skill-defaults">
         <span class="skill-defaults-label">默认规范</span>
         <span
           v-for="skill in skillStore.enabledDefaultQualitySkills"
@@ -119,10 +114,7 @@
           设置
         </button>
       </div>
-      <span v-else class="skill-upload-count">
-        已上传 {{ skillStore.activeSkills.length }}/{{ MAX_ACTIVE_SKILLS }}
-      </span>
-      <span v-if="!uploadOnly" class="skill-upload-count">
+      <span class="skill-upload-count">
         上传 {{ skillStore.activeSkills.length }}/{{ MAX_ACTIVE_SKILLS }}
       </span>
     </div>
@@ -141,17 +133,16 @@ import { assetUrl } from '@/utils/assets'
 
 /**
  * 内置风格 Skill 多选器 + 上传 Skill 卡片。
- * layout=rail：横向滑动缩略图（视频页 / 简易参数面板）；
- * layout=grid：多列网格（图片页右侧参数栏）。
+ * layout=rail：横向滑动缩略图；layout=grid：多列网格（图片页 / 视频页参数栏）。
  * 上传 Skill 最多 3 个，与内置风格卡同尺寸展示。
  */
 const props = withDefaults(defineProps<{
   layout?: 'rail' | 'grid'
-  /** 仅上传入口：视频页不展示内置质量/风格 Skill。 */
-  uploadOnly?: boolean
+  /** 隐藏「默认规范」脚注：视频生成不携带图片的默认质量规范。 */
+  hideDefaults?: boolean
   /** 当前选择的图片模型；示例图会按模型读取对应目录。 */
   modelId?: string | null
-}>(), { layout: 'rail', uploadOnly: false, modelId: null })
+}>(), { layout: 'rail', hideDefaults: false, modelId: null })
 
 const router = useRouter()
 const skillStore = useSkillStore()

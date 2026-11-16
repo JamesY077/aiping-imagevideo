@@ -742,7 +742,12 @@
 
             </section>
 
-            <SkillPicker v-if="!isExpandMode" upload-only />
+            <SkillPicker
+              v-if="!isExpandMode"
+              layout="grid"
+              :model-id="skillPreviewModelId"
+              :hide-defaults="settingsStore.mediaType === 'video'"
+            />
           </div>
         </aside>
 
@@ -1300,7 +1305,11 @@ const hasPromptPolishModelConfigured = computed(
 const polishDisabledReason = '提示词增强已在设置中关闭，可在设置里重新开启'
 const polishButtonTitle = computed(() => {
   if (!hasPromptPolishModelConfigured.value) return polishDisabledReason
-  const usesSkills = !isExpandMode.value && skillStore.effectiveSkillContents.length > 0
+  const skillCount =
+    settingsStore.mediaType === 'video'
+      ? skillStore.videoSkillContents.length
+      : skillStore.effectiveSkillContents.length
+  const usesSkills = !isExpandMode.value && skillCount > 0
   return usesSkills ? '按已选 Skill 规范改写提示词并补齐必要画面元素' : '用 AI 把简短描述扩写成更专业的镜头提示词'
 })
 
@@ -1318,6 +1327,10 @@ const isImageMultiReferenceMode = computed(
     modelCapability.value?.imageReferenceMode === 'multi',
 )
 const imageReferenceLimit = computed(() => modelCapability.value?.imageReferenceLimit ?? MULTIMODAL_LIMITS.image)
+// 视频页的 Skill 示例图统一用 Moss 版本，不按视频模型分别生成。
+const skillPreviewModelId = computed(() =>
+  settingsStore.mediaType === 'video' ? 'Moss-Image-SFT' : settingsStore.selectedModel,
+)
 // 分层布局默认关闭，Moss 默认按普通图片生成，避免多一次布局规划与等待。
 const mossLayoutEnabled = ref(false)
 interface LayerEditorState {
@@ -2301,11 +2314,15 @@ async function handlePolishPrompt() {
 
   isPolishing.value = true
   try {
-    // 有已选 Skill 时按 Skill 规范改写并补齐元素；扩图模式忽略 Skill，保持原图不变。
+    // 有已选 Skill 时按 Skill 规范改写并补齐元素；视频只用风格 + 上传 Skill，扩图忽略 Skill。
     inputText.value = await polishPromptWithSkills({
       model,
       prompt,
-      skillContent: isExpandMode.value ? [] : skillStore.effectiveSkillContents,
+      skillContent: isExpandMode.value
+        ? []
+        : settingsStore.mediaType === 'video'
+          ? skillStore.videoSkillContents
+          : skillStore.effectiveSkillContents,
       systemPrompt: isExpandMode.value
         ? DEFAULT_EXPAND_SYSTEM_PROMPT
         : settingsStore.promptPolishSystemPrompt,
@@ -2656,11 +2673,11 @@ async function handleSend() {
   const ioType = resolveGenerateIoType(settingsStore.mediaType, primaryFile)
 
   await nextTick()
-  // 内置质量/风格 Skill 只作用于图片；视频只使用用户上传的 Skill（最多 3 份）。
+  // 图片沿用默认质量规范 + 风格 + 上传 Skill；视频只用风格 + 上传 Skill，不套图片默认规范。
   const imageSkillContents =
     ioType === 'text2image' || ioType === 'image2image'
       ? skillStore.effectiveSkillContents
-      : skillStore.activeSkillContents
+      : skillStore.videoSkillContents
 
   await generate(prompt, ioType, settingsStore.selectedModel, file, settingsStore.aspectRatio, settingsStore.videoDuration, false, imageSkillContents, settingsStore.videoResolution, settingsStore.batchSize, {
     videoGenerationMode: videoMode.value,
@@ -2704,7 +2721,7 @@ async function handleRegenerate(message: Message) {
       false,
       message.generateType === 'image'
         ? skillStore.effectiveSkillContents
-        : skillStore.activeSkillContents,
+        : skillStore.videoSkillContents,
       settingsStore.videoResolution,
       batchSize,
       {
