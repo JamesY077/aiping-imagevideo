@@ -89,6 +89,7 @@ function resolveRedirectTarget(): string {
   if (raw.startsWith('/')) return raw
   if (raw === 'skill') return '/skill'
   if (raw === 'voice') return '/voice'
+  if (raw === 'model3d') return '/model3d'
   // 兼容拆分前的旧分区简写。
   if (raw === 'studio') return '/image'
   return '/image'

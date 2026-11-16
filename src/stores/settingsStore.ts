@@ -9,6 +9,8 @@ import {
 
 /** 配音页「翻译」默认使用的文本模型。 */
 export const DEFAULT_TRANSLATION_MODEL = 'DeepSeek-V4.1-Flash-1017'
+/** 提示词增强 / AI 润色默认使用的文本模型，开箱即用，无需用户再填写 ID。 */
+export const DEFAULT_PROMPT_POLISH_MODEL = 'DeepSeek-V4.1-Flash-1017'
 
 export const DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT = `你是一名专业的 AI 图像与视频提示词优化助手。
 请在保留用户原意的前提下，补全主体、场景、构图、镜头、光线、风格、材质、色彩、细节和质量描述。
@@ -55,7 +57,9 @@ export const useSettingsStore = defineStore('settings', () => {
   const batchSize = ref(1)
   // 视频分辨率档位（当前仅 MiniMax-H3 暴露 768P / 2K 选择）。
   const videoResolution = ref<'768P' | '2K'>('768P')
-  const promptPolishModel = ref('')
+  // 提示词增强 / AI 润色默认开启，模型默认 DeepSeek-V4.1-Flash-1017。
+  const promptPolishEnabled = ref(true)
+  const promptPolishModel = ref(DEFAULT_PROMPT_POLISH_MODEL)
   const promptPolishSystemPrompt = ref('')
   const textSystemPrompt = ref('')
   const translationModel = ref(DEFAULT_TRANSLATION_MODEL)
@@ -73,7 +77,8 @@ export const useSettingsStore = defineStore('settings', () => {
         ? Math.round(parsedBatchSize)
         : 1
       videoResolution.value = settings.videoResolution === '2K' ? '2K' : '768P'
-      promptPolishModel.value = settings.promptPolishModel || ''
+      promptPolishEnabled.value = settings.promptPolishEnabled !== false
+      promptPolishModel.value = settings.promptPolishModel || DEFAULT_PROMPT_POLISH_MODEL
       promptPolishSystemPrompt.value = settings.promptPolishSystemPrompt || ''
       textSystemPrompt.value = settings.textSystemPrompt || ''
       translationModel.value = settings.translationModel || DEFAULT_TRANSLATION_MODEL
@@ -90,6 +95,7 @@ export const useSettingsStore = defineStore('settings', () => {
         videoDuration: videoDuration.value,
         batchSize: batchSize.value,
         videoResolution: videoResolution.value,
+        promptPolishEnabled: promptPolishEnabled.value,
         promptPolishModel: promptPolishModel.value,
         promptPolishSystemPrompt: promptPolishSystemPrompt.value,
         textSystemPrompt: textSystemPrompt.value,
@@ -125,6 +131,7 @@ export const useSettingsStore = defineStore('settings', () => {
     videoDuration,
     batchSize,
     videoResolution,
+    promptPolishEnabled,
     promptPolishModel,
     promptPolishSystemPrompt,
     textSystemPrompt,

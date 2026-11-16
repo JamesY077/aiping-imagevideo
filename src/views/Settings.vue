@@ -14,9 +14,9 @@
       <section class="hero-card">
         <div>
           <span class="kicker">控制中心</span>
-          <h2>统一管理你的生成环境，保持清晰、稳定、随时可用。</h2>
+          <h2>把生成环境调顺，一次配置，长期可用。</h2>
         </div>
-        <p>在一个简洁的设置界面中管理 API 访问、提示词优化与项目级配置。</p>
+        <p>API 访问、提示词增强、翻译模型与默认 Skill 都集中在这里。改动会自动保存在当前浏览器。</p>
       </section>
 
       <section class="card">
@@ -65,35 +65,72 @@
         <div v-if="testStatus" :class="['status-msg', testStatusType]">{{ testStatus }}</div>
       </section>
 
-      <section class="card">
+      <section class="card polish-card">
         <div class="section-head">
           <span class="kicker">提示词优化</span>
           <h3>提示词增强</h3>
         </div>
-        <div class="input-group">
-          <label for="polish-model">优化模型 ID</label>
-          <input
-            id="polish-model"
-            v-model.trim="settingsStore.promptPolishModel"
-            class="text-input"
-            placeholder="请输入用于提示词优化的模型 ID"
-            @blur="settingsStore.saveToStorage()"
-          />
-          <a href="https://www.aiping.cn/modelList" target="_blank" rel="noopener" class="helper-link">
-            查看官方模型列表
-          </a>
+
+        <div class="setting-toggle-row">
+          <div class="setting-toggle-text">
+            <strong>默认开启 AI 润色</strong>
+            <p class="field-hint">开启后，图片页与视频页的「AI 润色」按钮可直接使用，无需再填写模型 ID。已选 Skill 时，润色会按 Skill 规范改写提示词并补齐必要画面元素。</p>
+          </div>
+          <button
+            class="toggle-switch"
+            :class="{ on: settingsStore.promptPolishEnabled }"
+            type="button"
+            role="switch"
+            :aria-checked="settingsStore.promptPolishEnabled"
+            aria-label="提示词增强开关"
+            @click="togglePromptPolish"
+          >
+            <span class="toggle-knob" aria-hidden="true" />
+          </button>
         </div>
-        <div class="input-group">
-          <label for="polish-system-prompt">系统提示词</label>
-          <textarea
-            id="polish-system-prompt"
-            v-model.trim="settingsStore.promptPolishSystemPrompt"
-            class="text-area"
-            :placeholder="defaultPolishSystemPrompt"
-            @blur="settingsStore.saveToStorage()"
-          />
-          <p class="field-hint">留空时将使用默认优化提示词。</p>
+
+        <div class="info-list">
+          <div class="row">
+            <span class="label">优化模型</span>
+            <span class="value">{{ settingsStore.promptPolishModel || defaultPolishModel }}</span>
+          </div>
+          <div class="row">
+            <span class="label">调用状态</span>
+            <span :class="['status', settingsStore.promptPolishEnabled ? 'connected' : 'unknown']">
+              {{ settingsStore.promptPolishEnabled ? '已开启' : '已关闭' }}
+            </span>
+          </div>
         </div>
+        <p class="field-hint">默认使用 {{ defaultPolishModel }}，可直接在前端点击优化，无需任何额外配置。</p>
+
+        <details class="advanced-block">
+          <summary>高级：自定义优化模型与系统提示词</summary>
+          <div class="input-group">
+            <label for="polish-model">优化模型 ID</label>
+            <input
+              id="polish-model"
+              v-model.trim="settingsStore.promptPolishModel"
+              class="text-input"
+              :placeholder="defaultPolishModel"
+              @blur="settingsStore.saveToStorage()"
+            />
+            <a href="https://www.aiping.cn/modelList" target="_blank" rel="noopener" class="helper-link">
+              查看官方模型列表
+            </a>
+          </div>
+          <div class="input-group">
+            <label for="polish-system-prompt">系统提示词</label>
+            <textarea
+              id="polish-system-prompt"
+              v-model.trim="settingsStore.promptPolishSystemPrompt"
+              class="text-area"
+              :placeholder="defaultPolishSystemPrompt"
+              @blur="settingsStore.saveToStorage()"
+            />
+            <p class="field-hint">留空时将使用默认优化提示词。</p>
+          </div>
+        </details>
+
         <div class="btn-row">
           <button class="ghost-btn" @click="resetPolishPrompt">恢复默认</button>
           <button class="primary-btn" @click="savePolishSettings">保存提示词设置</button>
@@ -241,6 +278,7 @@ import ApiKeyInput from '@/components/ApiKeyInput.vue'
 import { useApiStore } from '@/stores/apiStore'
 import { useChatStore } from '@/stores/chatStore'
 import {
+  DEFAULT_PROMPT_POLISH_MODEL,
   DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT,
   DEFAULT_TRANSLATION_MODEL,
   useSettingsStore,
@@ -271,6 +309,7 @@ const testStatus = ref('')
 const testStatusType = ref<'success' | 'error'>('success')
 const polishStatus = ref('')
 const defaultPolishSystemPrompt = DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT
+const defaultPolishModel = DEFAULT_PROMPT_POLISH_MODEL
 const translationStatus = ref('')
 const defaultTranslationModel = DEFAULT_TRANSLATION_MODEL
 
@@ -348,7 +387,16 @@ function savePolishSettings() {
 
 function resetPolishPrompt() {
   settingsStore.promptPolishSystemPrompt = ''
+  settingsStore.promptPolishModel = DEFAULT_PROMPT_POLISH_MODEL
   savePolishSettings()
+}
+
+function togglePromptPolish() {
+  settingsStore.promptPolishEnabled = !settingsStore.promptPolishEnabled
+  if (settingsStore.promptPolishEnabled && !settingsStore.promptPolishModel.trim()) {
+    settingsStore.promptPolishModel = DEFAULT_PROMPT_POLISH_MODEL
+  }
+  settingsStore.saveToStorage()
 }
 
 function handleTranslationModelBlur() {
@@ -406,7 +454,7 @@ function resetTranslationModel() {
 .topbar-inner,
 .content,
 .modal {
-  width: min(100%, var(--content-width));
+  width: min(100%, var(--page-max-width, 1480px));
   margin: 0 auto;
 }
 
@@ -917,6 +965,111 @@ label {
     width: 100%;
     max-height: min(88dvh, 720px);
     overflow-y: auto;
+  }
+}
+
+/* ---------- 紧凑布局与提示词增强开关 ---------- */
+
+.hero-card {
+  padding: 24px 26px;
+  align-items: center;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+}
+
+.hero-card h2 {
+  max-width: 30ch;
+  margin-top: 8px;
+  font-size: clamp(22px, 2.4vw, 30px);
+  line-height: 1.24;
+  letter-spacing: -0.02em;
+}
+
+.hero-card p {
+  font-size: 13.5px;
+}
+
+.card {
+  padding: 24px;
+}
+
+.section-head {
+  margin-bottom: 14px;
+}
+
+.section-head h3 {
+  margin-top: 6px;
+  font-size: 20px;
+}
+
+.setting-toggle-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.setting-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.setting-toggle-text strong {
+  color: var(--color-text);
+  font-size: 13.5px;
+}
+
+.setting-toggle-text .field-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.polish-card .info-list {
+  margin-bottom: 10px;
+}
+
+.advanced-block {
+  margin-top: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.advanced-block > summary {
+  padding: 12px 16px;
+  color: var(--color-text-secondary);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.advanced-block > summary::-webkit-details-marker {
+  display: none;
+}
+
+.advanced-block[open] > summary {
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.12);
+}
+
+.advanced-block .input-group {
+  padding: 14px 16px 0;
+}
+
+.advanced-block .input-group:last-child {
+  padding-bottom: 14px;
+}
+
+@media (max-width: 900px) {
+  .hero-card {
+    grid-template-columns: 1fr;
+    padding: 20px;
   }
 }
 </style>

@@ -91,10 +91,22 @@ export const useSkillStore = defineStore('skill', () => {
       .filter((skill): skill is NonNullable<typeof skill> => Boolean(skill)),
   )
 
-  /** 仅上传 Skill 的正文，视频生成使用。 */
+  /** 仅上传 Skill 的正文。 */
   const activeSkillContents = computed<string[]>(() =>
     activeSkills.value.map((skill) => skill.content.trim()).filter(Boolean),
   )
+
+  /**
+   * 视频生成实际携带的 Skill 正文：风格 + 上传 Skill。
+   * 视频不套用图片的默认质量规范（impeccable / hallmark / editable-design）。
+   */
+  const videoSkillContents = computed<string[]>(() => {
+    const contents = [
+      ...selectedStyleSkills.value.map((skill) => skill.content),
+      ...activeSkills.value.map((skill) => skill.content),
+    ]
+    return contents.map((content) => content.trim()).filter(Boolean)
+  })
 
   /**
    * 生成时实际携带的 Skill 正文，顺序即优先级：
@@ -250,6 +262,7 @@ export const useSkillStore = defineStore('skill', () => {
     selectedStyleSkills,
     activeSkillContents,
     effectiveSkillContents,
+    videoSkillContents,
     loadFromStorage,
     saveToStorage,
     setModelPreference,

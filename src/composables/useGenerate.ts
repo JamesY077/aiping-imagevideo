@@ -10,7 +10,7 @@ import { validatePromptOrThrow } from '@/utils/errorHandling'
 import { normalizeErrorMessage, showErrorMessage } from '@/utils/errors'
 import { buildImageParams, buildVideoParams } from '@/features/generate/buildParams'
 import { aspectRatioToDimensions } from '@/features/generate/aspectRatio'
-import { pollVideoStatus } from '@/features/generate/video'
+import { GLOBAL_VIDEO_TIMEOUT_MS, pollVideoStatus } from '@/features/generate/video'
 import { resolveRealCost } from '@/utils/format'
 import { buildEffectivePrompt } from '@/features/skill/apply'
 import type { MossLayout } from '@/types/layout'
@@ -62,14 +62,15 @@ function buildImageResult(
   aspectRatio: string,
   capability: ModelCapability | null,
   outputSize?: { width: number; height: number } | null,
-  layout?: MossLayout | null
+  layout?: MossLayout | null,
+  layoutSkipped = false
 ): GenerateResult {
   const url = response.data[0]?.url || ''
   if (!url) {
     throw new Error('图片生成完成但未返回有效图片地址，请稍后重试或切换模型。')
   }
 
-  return buildImageResultFromUrl(url, response, model, aspectRatio, capability, outputSize, layout)
+  return buildImageResultFromUrl(url, response, model, aspectRatio, capability, outputSize, layout, layoutSkipped)
 }
 
 function buildImageResultFromUrl(
@@ -79,7 +80,8 @@ function buildImageResultFromUrl(
   aspectRatio: string,
   capability: ModelCapability | null,
   outputSize?: { width: number; height: number } | null,
-  layout?: MossLayout | null
+  layout?: MossLayout | null,
+  layoutSkipped = false
 ): GenerateResult {
   return {
     type: 'image',
@@ -91,6 +93,7 @@ function buildImageResultFromUrl(
     createdAt: Date.now(),
     size: outputSize || aspectRatioToDimensions(aspectRatio, capability?.imageRequestMode),
     ...(layout ? { layout } : {}),
+    ...(layoutSkipped ? { layoutSkipped: true } : {}),
   }
 }
 
@@ -191,14 +194,21 @@ export function useGenerate() {
       if (generateType === 'image') {
         // Moss 分层：可直接沿用编辑后的布局，或先让文本模型把自然语言拆成布局。
         let mossLayout: MossLayout | null = options.mossLayout ? cloneLayout(options.mossLayout) : null
+        // 分层规划失败时不能让整次生成失败：退回普通出图，并在结果上标注没有可编辑图层。
+        let layoutSkipped = false
         if (!mossLayout && options.mossLayoutMode && capability?.imageRequestMode === 'moss') {
           const layoutSize = outputSize || aspectRatioToDimensions(aspectRatio, capability?.imageRequestMode)
-          mossLayout = await planMossLayout({
-            idea: effectivePrompt,
-            width: layoutSize.width,
-            height: layoutSize.height,
-            aspectRatio,
-          })
+          try {
+            mossLayout = await planMossLayout({
+              idea: effectivePrompt,
+              width: layoutSize.width,
+              height: layoutSize.height,
+              aspectRatio,
+            })
+          } catch (error) {
+            layoutSkipped = true
+            console.warn('分层布局规划失败，已改为普通图片输出。', error)
+          }
         }
         if (mossLayout) {
           chatStore.updateMessage(assistantId, { layout: mossLayout })
@@ -258,7 +268,7 @@ export function useGenerate() {
 
         if (requestedBatchSize === 1) {
           const result = await generateImage(imageParams)
-          const imageResult = buildImageResult(result, model, aspectRatio, capability, outputSize, mossLayout)
+          const imageResult = buildImageResult(result, model, aspectRatio, capability, outputSize, mossLayout, layoutSkipped)
           chatStore.updateMessage(assistantId, {
             generateStatus: 'completed',
             generateResult: imageResult,
@@ -279,7 +289,7 @@ export function useGenerate() {
             const batchResults = batchResult.data
               .filter((item) => !!item.url)
               .slice(0, requestedBatchSize)
-              .map((item) => buildImageResultFromUrl(item.url as string, batchResult, model, aspectRatio, capability, outputSize, mossLayout))
+              .map((item) => buildImageResultFromUrl(item.url as string, batchResult, model, aspectRatio, capability, outputSize, mossLayout, layoutSkipped))
             imageResults.push(...batchResults)
             if (imageResults.length) {
               chatStore.updateMessage(assistantId, {
@@ -306,7 +316,7 @@ export function useGenerate() {
         if (remainingCount > 0) {
           const imageTasks = Array.from({ length: remainingCount }, async () => {
             const result = await generateImage({ ...imageParams })
-            const imageResult = buildImageResult(result, model, aspectRatio, capability, outputSize, mossLayout)
+            const imageResult = buildImageResult(result, model, aspectRatio, capability, outputSize, mossLayout, layoutSkipped)
             imageResults.push(imageResult)
             // 出一张显示一张，不必等整批完成。
             chatStore.updateMessage(assistantId, {
@@ -337,6 +347,9 @@ export function useGenerate() {
         })
         return
       }
+
+      // 全局视频预算：任务创建 + 轮询合计不超过 1 小时，批量任务共享同一截止时间。
+      const videoDeadline = Date.now() + GLOBAL_VIDEO_TIMEOUT_MS
 
       const videoParams = await buildVideoParams(
         effectivePrompt,
@@ -375,6 +388,7 @@ export function useGenerate() {
             duration,
             resolution: videoResolution,
             hasReferenceMedia,
+            deadline: videoDeadline,
           },
         )
 
@@ -461,6 +475,7 @@ export function useGenerate() {
               duration,
               resolution: videoResolution,
               hasReferenceMedia,
+              deadline: videoDeadline,
             },
           )
           const videoResult = buildVideoResult(finalStatus, model, aspectRatio)
@@ -494,7 +509,7 @@ export function useGenerate() {
     } catch (e: unknown) {
       const isTimeout = e instanceof Error && (e.message.includes('timeout') || e.message.includes('超时'))
       const errorMessage = isTimeout
-        ? (e instanceof Error && e.message.startsWith('视频生成超时')
+        ? (e instanceof Error && (e.message.startsWith('视频生成超时') || e.message.startsWith('视频生成已经超时'))
             ? e.message
             : '生成超时，请更换模型或重试')
         : normalizeErrorMessage(e, '生成失败，请重试')

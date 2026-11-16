@@ -2,6 +2,7 @@
 @import 'tailwindcss';
 
 :root {
+  --page-max-width: 1480px;
   --content-width: 1240px;
   --content-width-wide: 1360px;
   --reading-width: 65ch;
