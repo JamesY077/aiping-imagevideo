@@ -340,9 +340,13 @@ UPLOAD_TOKEN=换成一串随机字符串（与前端 VITE_UPLOAD_SERVICE_TOKEN �
 MAX_AUDIO_MB=30
 # 参考视频体积上限（MB）
 MAX_VIDEO_MB=50
+# 每个 IP 每分钟最多上传次数；多图参考 + 批量生成建议 60 起
+UPLOAD_RATE_LIMIT_PER_MIN=60
 # 部署在 Nginx 后必须置 1，否则所有用户的限流都会算成 127.0.0.1 一个 IP
 TRUST_PROXY=1
 ```
+
+改完执行 `pm2 restart aiping-upload`，`pm2 logs aiping-upload --lines 20` 会打印当前限流值与 `TRUST_PROXY`。
 
 ### 3）验证
 

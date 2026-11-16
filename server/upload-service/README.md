@@ -100,7 +100,7 @@ VITE_UPLOAD_SERVICE_TOKEN=与服务端 UPLOAD_TOKEN 相同的值
 
 ## 安全加固（已内置）
 
-- **限流**：每个 IP 每分钟最多 `UPLOAD_RATE_LIMIT_PER_MIN`（默认 20）次上传。
+- **限流**：每个 IP 每分钟最多 `UPLOAD_RATE_LIMIT_PER_MIN`（默认 60）次上传；多图参考 + 批量生成时请至少保留 60。
 - **配额**：每个 IP 每天最多上传 `UPLOAD_DAILY_QUOTA_MB`（默认 1024MB），超出返回 429。
 - **CORS 收紧**：`ALLOW_ORIGINS` 留空时仅允许本机与局域网来源；`*` 为显式全开（不推荐）；生产环境请填写站点域名。
 - **随机 key**：对象 key 含 128 位随机数，公开读时不可枚举。

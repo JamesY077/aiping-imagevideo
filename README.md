@@ -129,6 +129,7 @@ API Base URL 与 API Key 保存在浏览器本地，配置完成后即可进入�
 
 - 不部署上传服务时：图片、音频、文生视频、图生视频、H3 全链路都正常；只有「Seedance + 本地视频」会给出明确提示，建议改用公网视频地址；Seedream 多图参考会自动降级为 dataURI。
 - 需要支持「Seedance + 本地视频」时：部署 `server/upload-service`，并在 Nginx 加 `/upload` 反代（约 10 行）。
+- 同一张参考图只在首次使用时上传，之后复用缓存 URL；即使上传服务限流（默认每 IP 每分钟 60 次），图片也会自动降级为 dataURI 直传，不会中断生成。
 
 部署与配置方法见 `server/upload-service/README.md` 与 `DEPLOYMENT.md` 第四 / 七节；前端通过 `VITE_UPLOAD_SERVICE_URL` 与 `VITE_UPLOAD_SERVICE_TOKEN` 配置。
 

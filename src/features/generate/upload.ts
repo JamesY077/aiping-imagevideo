@@ -179,6 +179,13 @@ function resolveUploadServiceError(
     })
   }
 
+  // 限流是可恢复的：图片可以直接降级为 dataURI 直传，不应当作硬失败。
+  if (status === 429) {
+    return new AppError(`${label}上传过于频繁，请稍后再试（上传服务有每分钟次数限制）。`, {
+      code: 'UPLOAD_SERVICE_RATE_LIMITED',
+    })
+  }
+
   if (status === 413) {
     return new AppError(`${label}文件太大，请压缩后重试。`, { code: 'UPLOAD_SERVICE_TOO_LARGE' })
   }
@@ -256,17 +263,110 @@ function postImageToUploadService(dataUri: string): Promise<string> {
   return postAssetToUploadService('image', dataUri)
 }
 
+/**
+ * 参考图处理结果缓存：同一张图在多轮生成 / 批量生成中只上传一次。
+ *
+ * 背景：Seedance 2.0 批量生成（一次 5 条）会把同一组参考图各上传一遍，
+ * 多图参考时一分钟内很容易触发上传服务的每分钟次数限制。
+ * 这里以图片内容做 key 复用已得到的公网 URL，并让并发调用共享同一个请求；
+ * 仅缓存公网 URL（dataURI 降级结果不缓存，避免把大字符串留在内存里）。
+ * 同时写入 sessionStorage，页面刷新后同一会话内仍可复用。
+ */
+const IMAGE_URL_CACHE_STORAGE_KEY = 'aiping_upload_url_cache'
+const IMAGE_URL_CACHE_LIMIT = 40
+
+const imageResultCache = new Map<string, string>()
+const imageResultInflight = new Map<string, Promise<string>>()
+
+function hashAssetContent(value: string): string {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return `${value.length.toString(36)}-${(hash >>> 0).toString(36)}`
+}
+
+function isPublicUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value)
+}
+
+function restoreImageResultCache() {
+  if (typeof sessionStorage === 'undefined') return
+  try {
+    const raw = sessionStorage.getItem(IMAGE_URL_CACHE_STORAGE_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw) as Record<string, string>
+    for (const [key, url] of Object.entries(parsed)) {
+      if (typeof url === 'string' && isPublicUrl(url)) imageResultCache.set(key, url)
+    }
+  } catch {
+    // 缓存损坏时忽略，不影响正常上传。
+  }
+}
+
+function persistImageResultCache() {
+  if (typeof sessionStorage === 'undefined') return
+  try {
+    sessionStorage.setItem(
+      IMAGE_URL_CACHE_STORAGE_KEY,
+      JSON.stringify(Object.fromEntries(imageResultCache)),
+    )
+  } catch {
+    // sessionStorage 写满时忽略。
+  }
+}
+
+function trimImageResultCache() {
+  while (imageResultCache.size > IMAGE_URL_CACHE_LIMIT) {
+    const oldest = imageResultCache.keys().next()
+    if (oldest.done) break
+    imageResultCache.delete(oldest.value)
+  }
+}
+
+/** 命中缓存直接复用；并发处理同一张图时共享同一个 Promise。 */
+async function withImageResultCache(source: string, task: () => Promise<string>): Promise<string> {
+  const key = hashAssetContent(source)
+  const cached = imageResultCache.get(key)
+  if (cached) return cached
+
+  const inflight = imageResultInflight.get(key)
+  if (inflight) return inflight
+
+  const running = task()
+    .then((result) => {
+      if (isPublicUrl(result)) {
+        imageResultCache.set(key, result)
+        trimImageResultCache()
+        persistImageResultCache()
+      }
+      return result
+    })
+    .finally(() => {
+      imageResultInflight.delete(key)
+    })
+
+  imageResultInflight.set(key, running)
+  return running
+}
+
+restoreImageResultCache()
+
 /** 严格上传：任何失败都抛出，用于必须拿到公网 URL 的场景（Seedance 2.0）。 */
 async function uploadImageToPublicUrl(dataUri: string): Promise<string> {
   return postImageToUploadService(dataUri)
 }
 
-/** 尽力上传：服务未配置 / 未反代 / 宕机时返回 null，调用方可降级为 dataURI 直传。 */
+/** 尽力上传：服务未配置 / 未反代 / 宕机 / 限流时返回 null，调用方可降级为 dataURI 直传。 */
 async function tryUploadImageToPublicUrl(dataUri: string): Promise<string | null> {
   try {
     return await postImageToUploadService(dataUri)
   } catch (error: any) {
-    if (error instanceof AppError && error.code === 'UPLOAD_SERVICE_UNAVAILABLE') {
+    if (
+      error instanceof AppError &&
+      (error.code === 'UPLOAD_SERVICE_UNAVAILABLE' || error.code === 'UPLOAD_SERVICE_RATE_LIMITED')
+    ) {
       return null
     }
     throw error
@@ -322,16 +422,18 @@ export async function prepareReferenceAudioForModel(value: string): Promise<stri
 export async function ensureSeedanceImageForModel(value: string): Promise<string> {
   if (!isDataUri(value)) return value
 
-  const preparedDataUri = await prepareSeedanceImageDataUri(value)
-  await assertSeedanceImageValid(preparedDataUri)
+  return withImageResultCache(value, async () => {
+    const preparedDataUri = await prepareSeedanceImageDataUri(value)
+    await assertSeedanceImageValid(preparedDataUri)
 
-  if (!UPLOAD_SERVICE_URL) return preparedDataUri
+    if (!UPLOAD_SERVICE_URL) return preparedDataUri
 
-  const publicUrl = await tryUploadImageToPublicUrl(preparedDataUri)
-  if (publicUrl) return publicUrl
+    const publicUrl = await tryUploadImageToPublicUrl(preparedDataUri)
+    if (publicUrl) return publicUrl
 
-  console.warn('[upload] 图片上传服务不可用，Seedance 本次降级为 dataURI 直传。')
-  return preparedDataUri
+    console.warn('[upload] 图片上传服务不可用或已限流，Seedance 本次降级为 dataURI 直传。')
+    return preparedDataUri
+  })
 }
 
 /**
@@ -344,16 +446,18 @@ export async function ensureSeedanceImageForModel(value: string): Promise<string
 export async function ensureSeedreamImageForModel(value: string): Promise<string> {
   if (!isDataUri(value)) return value
 
-  const preparedDataUri = await prepareSeedreamImageDataUri(value)
-  await assertSeedreamImageValid(preparedDataUri)
+  return withImageResultCache(value, async () => {
+    const preparedDataUri = await prepareSeedreamImageDataUri(value)
+    await assertSeedreamImageValid(preparedDataUri)
 
-  if (!UPLOAD_SERVICE_URL) return preparedDataUri
+    if (!UPLOAD_SERVICE_URL) return preparedDataUri
 
-  const publicUrl = await tryUploadImageToPublicUrl(preparedDataUri)
-  if (publicUrl) return publicUrl
+    const publicUrl = await tryUploadImageToPublicUrl(preparedDataUri)
+    if (publicUrl) return publicUrl
 
-  console.warn('[upload] 图片上传服务不可用，Seedream 本次降级为 dataURI 直传。')
-  return preparedDataUri
+    console.warn('[upload] 图片上传服务不可用或已限流，Seedream 本次降级为 dataURI 直传。')
+    return preparedDataUri
+  })
 }
 
 /**
@@ -420,15 +524,17 @@ export async function ensurePublicVideoUrlForModel(value: string): Promise<strin
 export async function ensurePublicImageUrlForModel(value: string): Promise<string> {
   if (!isDataUri(value)) return value
 
-  const preparedDataUri = await prepareLocalImageDataUri(value)
-  if (!UPLOAD_SERVICE_URL) return preparedDataUri
+  return withImageResultCache(value, async () => {
+    const preparedDataUri = await prepareLocalImageDataUri(value)
+    if (!UPLOAD_SERVICE_URL) return preparedDataUri
 
-  const publicUrl = await tryUploadImageToPublicUrl(preparedDataUri)
-  if (publicUrl) return publicUrl
+    const publicUrl = await tryUploadImageToPublicUrl(preparedDataUri)
+    if (publicUrl) return publicUrl
 
-  // 上传服务未正确部署时降级为压缩后的 dataURI 直传，避免一个服务配置问题卡死生成。
-  console.warn('[upload] 图片上传服务不可用，本次降级为 dataURI 直传。')
-  return preparedDataUri
+    // 上传服务未正确部署时降级为压缩后的 dataURI 直传，避免一个服务配置问题卡死生成。
+    console.warn('[upload] 图片上传服务不可用或已限流，本次降级为 dataURI 直传。')
+    return preparedDataUri
+  })
 }
 
 /**
@@ -438,14 +544,16 @@ export async function ensurePublicImageUrlForModel(value: string): Promise<strin
 export async function ensureMinimaxH3ImageForModel(value: string): Promise<string> {
   if (!isDataUri(value)) return value
 
-  const preparedDataUri = await prepareMinimaxH3ImageDataUri(value)
-  if (!UPLOAD_SERVICE_URL) return preparedDataUri
+  return withImageResultCache(value, async () => {
+    const preparedDataUri = await prepareMinimaxH3ImageDataUri(value)
+    if (!UPLOAD_SERVICE_URL) return preparedDataUri
 
-  const publicUrl = await tryUploadImageToPublicUrl(preparedDataUri)
-  if (publicUrl) return publicUrl
+    const publicUrl = await tryUploadImageToPublicUrl(preparedDataUri)
+    if (publicUrl) return publicUrl
 
-  console.warn('[upload] 图片上传服务不可用，MiniMax-H3 本次降级为 dataURI 直传。')
-  return preparedDataUri
+    console.warn('[upload] 图片上传服务不可用或已限流，MiniMax-H3 本次降级为 dataURI 直传。')
+    return preparedDataUri
+  })
 }
 
 /**

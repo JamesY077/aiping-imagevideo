@@ -41,8 +41,10 @@ const {
   MAX_FILE_MB = '15',
   MAX_AUDIO_MB = '30',
   MAX_VIDEO_MB = '50',
-  // 每个 IP 每分钟最多上传次数（防刷）
-  UPLOAD_RATE_LIMIT_PER_MIN = '20',
+  // 每个 IP 每分钟最多上传次数（防刷）。
+  // Seedance 2.0 多图参考 + 批量生成会在一分钟内上传多张图，默认值需要留足余量；
+  // 前端已对同一张图做上传结果缓存，正常情况下很少会连续触发。
+  UPLOAD_RATE_LIMIT_PER_MIN = '60',
   // 每个 IP 每天最多上传字节数（MB，防 COS 额度盗刷）
   UPLOAD_DAILY_QUOTA_MB = '1024',
   // 是否信任反向代理传入的 X-Forwarded-For（部署在 Nginx 后置为 1）
@@ -107,7 +109,7 @@ app.use(
 // —— 上传限流（每个 IP 每分钟次数）——
 const rateLimitMap = new Map() // ip -> { windowStartMs, count }
 const quotaMap = new Map() // ip -> { dayKey, bytes }
-const rateLimitPerMin = Math.max(1, Number(UPLOAD_RATE_LIMIT_PER_MIN) || 20)
+const rateLimitPerMin = Math.max(1, Number(UPLOAD_RATE_LIMIT_PER_MIN) || 60)
 const dailyQuotaBytes = Math.max(1, Number(UPLOAD_DAILY_QUOTA_MB) || 1024) * 1024 * 1024
 
 function clientIp(req) {
@@ -348,5 +350,9 @@ app.listen(Number(PORT), HOST, () => {
   console.log(`[upload-service] listening on ${HOST}:${PORT}`)
   console.log(`[upload-service] public base url: ${PUBLIC_BASE_URL}`)
   console.log(`[upload-service] COS bucket: ${COS_BUCKET} region: ${COS_REGION} prefix: ${COS_PREFIX}`)
+  console.log(
+    `[upload-service] rate limit: 每 IP 每分钟 ${rateLimitPerMin} 次（TRUST_PROXY=${TRUST_PROXY}，` +
+      '若经 Nginx 反代请设为 1 以按真实客户端 IP 计数）',
+  )
   console.log(`[upload-service] auto cleanup enabled: 超过 ${uploadRetentionDays} 天的对象自动删除`)
 })
