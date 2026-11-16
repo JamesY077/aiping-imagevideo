@@ -210,7 +210,9 @@
               </div>
               <p v-if="isExpandMode" class="rail-hint">以上传的原图为中心向外延展，比例需与原图不同。</p>
               <p v-else-if="imageMode === 'image2image'" class="rail-hint" :class="{ 'is-guide': expandHint }">
-                {{ expandHint ? '请先在下方上传原图，再点「扩图」。' : '上传一张参考图，按提示词改写画面。' }}
+                <template v-if="expandHint">请先在下方上传原图，再点「扩图」。</template>
+                <template v-else-if="allowsMultiReference">可上传最多 {{ referenceLimit }} 张参考图做融合，用 @图片N 精确指定素材。</template>
+                <template v-else>上传一张参考图，按提示词改写画面。</template>
               </p>
             </section>
 
@@ -254,27 +256,71 @@
               class="rail-card upload-card"
               :class="{ 'is-highlighted': uploadHighlight }"
             >
-              <span class="rail-label">{{ isExpandMode ? '原图' : '参考图' }}</span>
+              <div class="upload-card-head">
+                <span class="rail-label">{{ isExpandMode ? '原图' : '参考图' }}</span>
+                <span v-if="allowsMultiReference" class="upload-count">
+                  {{ uploadedFiles.length }}/{{ referenceLimit }}
+                </span>
+              </div>
               <input
                 ref="fileInput"
                 type="file"
                 :accept="imageAccept"
+                :multiple="allowsMultiReference"
                 class="hidden-input"
                 @change="handleFileChange"
               />
-              <button class="upload-drop" type="button" @click="fileInput?.click()">
-                <template v-if="uploadedFile">
-                  <img :src="uploadedFile.url" alt="已上传参考图" />
-                  <span class="upload-name">{{ uploadedFile.name }}</span>
-                </template>
-                <template v-else>
-                  <span class="upload-plus">+</span>
-                  <span class="upload-copy">{{ isExpandMode ? '上传原图' : '上传图片' }}</span>
-                  <span class="upload-hint">{{ IMAGE_FORMAT_HINT }}</span>
-                </template>
+              <div
+                v-if="referenceFiles.length"
+                class="upload-thumbs"
+                :class="{ 'is-multi': allowsMultiReference }"
+              >
+                <div
+                  v-for="(item, index) in referenceFiles"
+                  :key="`${item.url}-${index}`"
+                  class="upload-thumb-item"
+                >
+                  <button
+                    class="upload-thumb-btn"
+                    type="button"
+                    :title="allowsMultiReference ? `插入 @${item.refLabel || item.name}` : '点击替换图片'"
+                    @click="allowsMultiReference ? insertReferenceMention(item) : fileInput?.click()"
+                  >
+                    <img :src="item.url" :alt="item.name" />
+                    <span v-if="allowsMultiReference" class="upload-thumb-tag">
+                      {{ item.refLabel }}
+                    </span>
+                  </button>
+                  <button
+                    class="upload-thumb-remove"
+                    type="button"
+                    :aria-label="`移除 ${item.name}`"
+                    :title="`移除 ${item.name}`"
+                    @click.stop="removeReferenceFile(index)"
+                  >
+                    ×
+                  </button>
+                </div>
+                <button
+                  v-if="allowsMultiReference && uploadedFiles.length < referenceLimit"
+                  class="upload-thumb-add"
+                  type="button"
+                  title="继续添加参考图"
+                  @click="fileInput?.click()"
+                >
+                  +
+                </button>
+              </div>
+              <button v-else class="upload-drop" type="button" @click="fileInput?.click()">
+                <span class="upload-plus">+</span>
+                <span class="upload-copy">{{ isExpandMode ? '上传原图' : '上传图片' }}</span>
+                <span class="upload-hint">{{ IMAGE_FORMAT_HINT }}</span>
               </button>
-              <button v-if="uploadedFile" class="rail-text-btn" type="button" @click="clearUploadedReference()">
-                移除{{ isExpandMode ? '原图' : '参考图' }}
+              <p v-if="allowsMultiReference" class="rail-hint">
+                最多 {{ referenceLimit }} 张，可点缩略图把 @图片N 插入提示词。
+              </p>
+              <button v-if="referenceFiles.length" class="rail-text-btn" type="button" @click="clearUploadedReference()">
+                移除全部{{ isExpandMode ? '原图' : '参考图' }}
               </button>
             </section>
 
@@ -449,7 +495,10 @@ const { generate } = useGenerate()
 
 const inputText = ref('')
 const imageMode = ref<ImageMode>('text2image')
-const uploadedFile = ref<UploadedFile | null>(null)
+// 参考图列表：普通模型最多 1 张，Seedream 5 等多图模型最多 10 张。
+const uploadedFiles = ref<UploadedFile[]>([])
+// uploadedFile 继续指向首图，兼容扩图、落地页参考图与历史记录等单图逻辑。
+const uploadedFile = computed(() => uploadedFiles.value[0] ?? null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const uploadCardRef = ref<HTMLElement | null>(null)
 const uploadHighlight = ref(false)
@@ -504,6 +553,20 @@ const isExpandMode = computed(() => imageMode.value === 'expand')
 const isGenerating = computed(() => chatStore.isGenerating)
 const modelCapability = computed(() => getModelCapability(settingsStore.selectedModel))
 const isMossImageModel = computed(() => modelCapability.value?.imageRequestMode === 'moss')
+const isMultiReferenceModel = computed(
+  () => modelCapability.value?.imageReferenceMode === 'multi',
+)
+/** 多图参考上限：模型默认 10 张，普通模型固定 1 张。 */
+const referenceLimit = computed(() =>
+  isMultiReferenceModel.value
+    ? Math.max(1, modelCapability.value?.imageReferenceLimit ?? 10)
+    : 1,
+)
+/** 只有多图模型 + 图生图才展示多图上传；扩图始终只处理一张原图。 */
+const allowsMultiReference = computed(
+  () => isMultiReferenceModel.value && imageMode.value === 'image2image',
+)
+const referenceFiles = computed(() => uploadedFiles.value)
 const supportsImageReferenceMode = computed(
   () => !!modelCapability.value?.localUploadInputs?.includes('image'),
 )
@@ -549,7 +612,7 @@ const canSend = computed(() => {
   if (isGenerating.value) return false
   if (isExpandMode.value) return !!uploadedFile.value
   if (!inputText.value.trim()) return false
-  if (imageMode.value === 'image2image' && !uploadedFile.value) return false
+  if (imageMode.value === 'image2image' && !uploadedFiles.value.length) return false
   return true
 })
 
@@ -729,6 +792,10 @@ function setImageMode(mode: ImageMode) {
   }
   expandHint.value = false
   imageMode.value = mode
+  // 扩图只接受一张原图，多余的参考图需要释放掉。
+  if (mode === 'expand' && uploadedFiles.value.length > 1) {
+    setReferenceFiles(uploadedFiles.value.slice(0, 1))
+  }
 }
 
 /** 短暂高亮原图上传卡并滚动到可见区域，替代「请先上传」的报错弹窗。 */
@@ -754,37 +821,107 @@ function clearUploadedReference() {
   }
 }
 
-function clearUploadedFile(options: { revoke?: boolean } = {}) {
-  releaseUploadedFile(uploadedFile.value)
-  if (options.revoke === false) {
-    uploadedFile.value = null
+/** 给参考图重新编号 图片1..N，保证缩略图顺序与 @图片N 一致。 */
+function relabelReferenceFiles() {
+  uploadedFiles.value.forEach((file, index) => {
+    file.purpose = 'reference-image'
+    file.refLabel = `图片${index + 1}`
+  })
+}
+
+/** 整体替换参考图：只释放被移除的 blob URL，保留仍在列表中的文件。 */
+function setReferenceFiles(files: UploadedFile[]) {
+  const kept = files.slice(0, referenceLimit.value)
+  const keptSet = new Set(kept)
+  uploadedFiles.value.forEach((file) => {
+    if (!keptSet.has(file)) releaseUploadedFile(file)
+  })
+  uploadedFiles.value = kept
+  relabelReferenceFiles()
+}
+
+/** 模型或生成方式切换后，把超出上限的参考图裁掉（普通模型只留 1 张）。 */
+function enforceReferenceLimit() {
+  if (uploadedFiles.value.length > referenceLimit.value) {
+    setReferenceFiles(uploadedFiles.value.slice(0, referenceLimit.value))
+  } else if (uploadedFiles.value.length) {
+    relabelReferenceFiles()
+  }
+}
+
+function removeReferenceFile(index: number) {
+  const target = uploadedFiles.value[index]
+  if (!target) return
+  releaseUploadedFile(target)
+  uploadedFiles.value = uploadedFiles.value.filter((_, current) => current !== index)
+  relabelReferenceFiles()
+}
+
+/** 在提示词光标处插入 @图片N，多图融合时用来精确指定素材。 */
+function insertReferenceMention(item: UploadedFile) {
+  const label = item.refLabel || item.name
+  const textarea = promptInputRef.value
+  if (!textarea) {
+    inputText.value += `@${label} `
     return
   }
-  uploadedFile.value = null
+  const start = textarea.selectionStart ?? inputText.value.length
+  const end = textarea.selectionEnd ?? start
+  const before = inputText.value.slice(0, start)
+  const after = inputText.value.slice(end)
+  inputText.value = `${before}@${label} ${after}`
+  void nextTick(() => {
+    textarea.focus()
+    const caret = before.length + label.length + 2
+    textarea.setSelectionRange(caret, caret)
+    autoGrow()
+  })
+}
+
+function clearUploadedFile(options: { revoke?: boolean } = {}) {
+  const previous = uploadedFiles.value
+  uploadedFiles.value = []
+  if (options.revoke !== false) {
+    previous.forEach((file) => releaseUploadedFile(file))
+  }
 }
 
 function handleFileChange(event: Event) {
   const target = event.target as HTMLInputElement
-  const file = target.files?.[0]
-  if (!file) return
-
-  const kind = classifySupportedFile(file)
-  if (kind !== 'image') {
-    showErrorMessage(`仅支持图片格式：${IMAGE_FORMAT_HINT}`)
-    target.value = ''
-    return
-  }
-
-  clearUploadedFile()
-  const uploaded = createUploadedFile(file, 'image')
-  uploadedFile.value = uploaded
+  const files = Array.from(target.files || [])
   target.value = ''
+  if (!files.length) return
+
+  const limit = referenceLimit.value
+  const accepted: UploadedFile[] = []
+  let invalidCount = 0
+  for (const file of files) {
+    if (classifySupportedFile(file) !== 'image') {
+      invalidCount += 1
+      continue
+    }
+    accepted.push(createUploadedFile(file, 'image'))
+  }
+  if (invalidCount) {
+    showErrorMessage(`仅支持图片格式：${IMAGE_FORMAT_HINT}`)
+  }
+  if (!accepted.length) return
+
+  // 多图模型追加；普通模型与扩图始终整体替换成新上传的这张。
+  const merged = allowsMultiReference.value
+    ? [...uploadedFiles.value, ...accepted]
+    : accepted
+  if (merged.length > limit) {
+    showErrorMessage(`最多上传 ${limit} 张参考图，已保留前 ${limit} 张。`)
+    // 超出上限的新文件不会进入列表，这里手动释放掉它们的 blob URL。
+    merged.slice(limit).forEach((file) => releaseUploadedFile(file))
+  }
+  setReferenceFiles(merged)
+  accepted.forEach((file) => void resolveUploadedImageDimensions(file))
   expandHint.value = false
 
   // 图生图/扩图都需要参考图；文生图模式下上传后自动切到图生图更符合直觉。
-  void resolveUploadedImageDimensions(uploaded).then(() => {
-    if (imageMode.value === 'text2image') imageMode.value = 'image2image'
-  })
+  if (imageMode.value === 'text2image') imageMode.value = 'image2image'
 }
 
 function restoreLandingReference() {
@@ -795,8 +932,8 @@ function restoreLandingReference() {
     const parsed = JSON.parse(raw) as { name?: string; type?: string; dataUrl?: string }
     if (!parsed.dataUrl) return
     const file = dataUrlToFile(parsed.dataUrl, parsed.name || 'landing-reference.png', parsed.type || 'image/png')
-    uploadedFile.value = createUploadedFile(file, 'image')
     imageMode.value = 'image2image'
+    setReferenceFiles([createUploadedFile(file, 'image')])
   } catch (error) {
     showErrorMessage(getReadableErrorMessage(error, '首页参考图读取失败，请重新上传。'))
   } finally {
@@ -839,11 +976,11 @@ async function expandFromResult(result: GenerateResult) {
     dimensions: result.size,
   }
   clearUploadedFile()
-  uploadedFile.value = source
   imageMode.value = 'expand'
   settingsStore.selectedModel = EXPAND_MODEL_ID
   settingsStore.saveToStorage()
   lightboxOpen.value = false
+  setReferenceFiles([source])
 
   const currentRatio = parseRatio(
     result.size ? labelOfRatio(result.size.width, result.size.height) : result.aspectRatio,
@@ -1052,8 +1189,10 @@ async function handleSend() {
     return
   }
 
-  const file = imageMode.value === 'image2image' ? uploadedFile.value : null
-  const ioType = file ? 'image2image' : 'text2image'
+  const files = imageMode.value === 'image2image' ? [...uploadedFiles.value] : []
+  const ioType = files.length ? 'image2image' : 'text2image'
+  const referenceInput =
+    files.length && allowsMultiReference.value && files.length > 1 ? files : files[0] || null
   const batchSize = effectiveBatchSize.value
 
   inputText.value = ''
@@ -1065,7 +1204,7 @@ async function handleSend() {
     prompt,
     ioType,
     settingsStore.selectedModel,
-    file,
+    referenceInput,
     settingsStore.aspectRatio,
     settingsStore.videoDuration,
     false,
@@ -1083,7 +1222,12 @@ async function regenerate(batch: ImageBatch) {
   if (isGenerating.value) return
   lightboxOpen.value = false
 
-  const source = batch.uploadedFiles?.[0] || batch.uploadedFile
+  const sourceFiles = batch.uploadedFiles?.length
+    ? batch.uploadedFiles
+    : batch.uploadedFile
+      ? [batch.uploadedFile]
+      : []
+  const source = sourceFiles[0]
   const ratio = batch.aspectRatio || settingsStore.aspectRatio
   if (batch.imageMode === 'expand' && source) {
     selectedBatchId.value = null
@@ -1104,7 +1248,7 @@ async function regenerate(batch: ImageBatch) {
     batch.prompt,
     source ? 'image2image' : 'text2image',
     model,
-    source || null,
+    sourceFiles.length > 1 ? sourceFiles : source || null,
     ratio,
     settingsStore.videoDuration,
     false,
@@ -1121,6 +1265,7 @@ watch(
   () => settingsStore.selectedModel,
   () => {
     ensureSupportedAspectRatio()
+    enforceReferenceLimit()
   },
 )
 
@@ -1153,7 +1298,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.visualViewport?.removeEventListener('resize', syncAppHeight)
   if (uploadHighlightTimer !== null) window.clearTimeout(uploadHighlightTimer)
-  releaseUploadedFile(uploadedFile.value)
+  uploadedFiles.value.forEach((file) => releaseUploadedFile(file))
 })
 </script>
 
@@ -2059,6 +2204,124 @@ onBeforeUnmount(() => {
   font-size: 9.5px;
 }
 
+/* 多图参考：缩略图网格 + 编号，点缩略图把 @图片N 插进提示词。 */
+.upload-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.upload-count {
+  color: rgba(217, 205, 184, 0.72);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.upload-thumbs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+/* 单图模型沿用大图预览，只有多图模型才排成缩略图网格。 */
+.upload-thumbs:not(.is-multi) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.upload-thumbs:not(.is-multi) .upload-thumb-btn {
+  aspect-ratio: 4 / 3;
+}
+
+.upload-thumb-item {
+  position: relative;
+  min-width: 0;
+}
+
+.upload-thumb-btn {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.upload-thumb-btn:hover {
+  border-color: rgba(217, 205, 184, 0.5);
+}
+
+.upload-thumb-btn img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.upload-thumb-tag {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(8, 9, 13, 0.72);
+  color: rgba(244, 239, 230, 0.92);
+  font-size: 9px;
+  line-height: 1.5;
+  backdrop-filter: blur(4px);
+}
+
+.upload-thumb-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(8, 9, 13, 0.74);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.upload-thumb-remove:hover {
+  background: rgba(255, 154, 92, 0.9);
+  color: #17140f;
+}
+
+.upload-thumb-add {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 18px;
+  font-weight: 300;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.upload-thumb-add:hover {
+  border-color: rgba(217, 205, 184, 0.5);
+  background: rgba(217, 205, 184, 0.06);
+  color: #fff;
+}
+
 .rail-text-btn {
   align-self: flex-start;
   padding: 0;
@@ -2353,6 +2616,10 @@ onBeforeUnmount(() => {
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
+  }
+
+  .upload-thumbs.is-multi {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .prompt-buttons {
