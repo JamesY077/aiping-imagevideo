@@ -123,6 +123,7 @@ export const useSkillStore = defineStore('skill', () => {
   })
 
   function loadFromStorage() {
+    if (typeof localStorage === 'undefined') return
     const saved = localStorage.getItem(SKILL_STORAGE_KEY)
     if (!saved) {
       defaultQualitySkillStates.value = normalizeDefaultStates()
@@ -251,6 +252,11 @@ export const useSkillStore = defineStore('skill', () => {
     selectedStyleSkillIds.value = []
     saveToStorage()
   }
+
+  // 任意页面首次使用 Skill 状态时立即恢复持久化内容。
+  // /skill、/settings 等页面没有显式调用 loadFromStorage，若此时直接 saveToStorage，
+  // 会把已选风格与已上传 Skill 覆盖成空，表现为「上传后无法和已有 Skill 一起选」。
+  loadFromStorage()
 
   return {
     modelPreference,

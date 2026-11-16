@@ -3,8 +3,8 @@
     <div class="skill-picker-head">
       <span class="skill-picker-title">风格 Skill</span>
       <span class="skill-picker-meta">
-        {{ skillStore.selectedStyleSkillIds.length
-          ? `已选 ${skillStore.selectedStyleSkillIds.length} 个`
+        {{ totalSelected
+          ? `已选 ${totalSelected} 个${skillStore.activeSkills.length ? ` · 含上传 ${skillStore.activeSkills.length}` : ''}`
           : layout === 'grid' ? '可多选' : '可多选 · 横向滑动' }}
       </span>
       <button
@@ -13,7 +13,7 @@
         type="button"
         @click="skillStore.clearStyleSkills()"
       >
-        清空
+        清空风格
       </button>
     </div>
 
@@ -61,6 +61,7 @@
         <span class="skill-chip-thumb skill-chip-placeholder" aria-hidden="true">
           {{ skillInitial(skill.name) }}
         </span>
+        <span class="skill-chip-check skill-chip-check--active" aria-hidden="true">✓</span>
         <button
           class="skill-chip-remove"
           type="button"
@@ -150,6 +151,10 @@ const styleSkillOptions = STYLE_SKILL_OPTIONS
 const skillFileInput = ref<HTMLInputElement | null>(null)
 
 const isUploadFull = computed(() => skillStore.activeSkills.length >= MAX_ACTIVE_SKILLS)
+/** 头部计数同时包含内置风格与上传 Skill，避免上传后看起来「没被选中」。 */
+const totalSelected = computed(
+  () => skillStore.selectedStyleSkillIds.length + skillStore.activeSkills.length,
+)
 /** 单份 Skill 只用于生成规范，超过 512KB 基本是误传，也容易撑爆 localStorage。 */
 const MAX_SKILL_FILE_BYTES = 512 * 1024
 /** 记录加载失败的「模型 + Skill」组合，失败后回落到公共示例图。 */
@@ -391,6 +396,14 @@ async function handleSkillFileChange(e: Event) {
 }
 
 .skill-chip.active .skill-chip-check {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* 上传的 Skill 始终参与生成：用同款对勾标明「已加入」，右上角保留移除按钮。 */
+.skill-chip-check--active {
+  left: 5px;
+  right: auto;
   opacity: 1;
   transform: scale(1);
 }

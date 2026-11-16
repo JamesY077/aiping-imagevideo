@@ -101,6 +101,7 @@ const STYLE_META: StyleMeta[] = [
   { id: 'acid-graphics', name: 'Acid Graphics', description: '荧光酸绿与橙、扭曲字体、液态铬与 HUD。' },
   { id: 'japandi', name: 'Japandi', description: '原木燕麦、侘寂肌理、极简线条与自然光。' },
   { id: 'dopamine', name: '多巴胺配色', description: '高饱和快乐色块、圆润形状、明快对比。' },
+  { id: 'realistic-photo-prompt', name: '真实感摄影', description: '日常抓拍与电影感实拍，自然光、手机质感、拒绝过度锐化。' },
   // 首页精选：来自 public/skills 的可下载 Skill，同步注册后生图页也能直接选中。
   {
     id: 'wkw-neon-loneliness-style',

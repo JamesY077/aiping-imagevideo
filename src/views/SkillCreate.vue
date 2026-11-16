@@ -4,7 +4,8 @@ import { computed, nextTick, ref } from 'vue'
 import { generateSkill, type SkillTurn } from '@/features/skill/generate'
 import { parseSkillContent } from '@/features/skill/parse'
 import { ARTSKILLS_DISPLAY_NAME } from '@/features/skill/models'
-import { useSkillStore } from '@/stores/skillStore'
+import { MAX_ACTIVE_SKILLS, useSkillStore } from '@/stores/skillStore'
+import { showErrorMessage } from '@/utils/errors'
 import { useGenerate } from '@/composables/useGenerate'
 import { useChatStore } from '@/stores/chatStore'
 import { imageModelModules, videoModelModules } from '@/models'
@@ -115,7 +116,17 @@ function downloadSkill() {
 
 function applyAsActiveSkill() {
   if (!markdown.value.trim()) return
-  skillStore.setActiveSkillFromContent(markdown.value, `${skillName.value}.md`)
+  // 追加而不是覆盖：已上传的 Skill 与新生成的 Skill 可以同时参与生成（上限 3 个）。
+  const added = skillStore.addActiveSkillFromContent(markdown.value, `${skillName.value}.md`)
+  if (!added) {
+    const full = skillStore.activeSkills.length >= MAX_ACTIVE_SKILLS
+    showErrorMessage(
+      full
+        ? `最多同时使用 ${MAX_ACTIVE_SKILLS} 个 Skill，请先在生成页移除一个。`
+        : '相同名称的 Skill 已经在使用中，请改个名字再应用。',
+    )
+    return
+  }
   applied.value = true
   setTimeout(() => (applied.value = false), 2000)
 }
@@ -289,7 +300,7 @@ async function runTest() {
             </span>
             <div class="doc-actions">
               <button class="studio-btn" type="button" :disabled="!markdown.trim()" @click="applyAsActiveSkill">
-                {{ applied ? '已应用 ✓' : '应用为当前 Skill' }}
+                {{ applied ? '已加入 ✓' : '加入生成 Skill' }}
               </button>
               <button class="studio-btn" type="button" :disabled="!markdown.trim()" @click="downloadSkill">
                 下载 .md
