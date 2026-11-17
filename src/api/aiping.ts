@@ -343,7 +343,7 @@ async function prepareVideoGenerationParams(
  * 500 不重试：可能已在服务商侧完成生成，重试会造成重复计费。
  */
 async function postImageWithRetry(endpoint: string, body: Record<string, unknown>): Promise<any> {
-  // 实测 Qwen-Image-2.0-Pro 的「暂无可用服务商」会连续出现数秒到十几秒，
+  // 实测图片模型（如 Seedream）的「暂无可用服务商」会连续出现数秒到十几秒，
   // 4 次退避（约 2/4/8/15s，合计约 30s）能覆盖绝大多数瞬时不可用窗口。
   const maxRetries = 4
   const retryableStatuses = new Set([429, 502, 503, 504])

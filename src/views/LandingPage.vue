@@ -201,7 +201,7 @@ const zones: CreativeZone[] = [
     icon: '◈',
     title: '图片生成',
     desc: '文生图、图生图、扩图与风格 Skill 多选，批量出图后横向比较。视频生成在同一工作台的独立入口。',
-    tags: ['Seedream', 'Qwen-Image', '风格 Skill', '批量出图'],
+    tags: ['Seedream', '风格 Skill', '批量出图', '多图参考'],
     cta: '进入图片工作台',
     target: 'image',
   },

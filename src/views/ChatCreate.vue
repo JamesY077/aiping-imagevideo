@@ -1206,7 +1206,7 @@ type ImageMode = ImageGenerationMode
 type VideoMode = VideoGenerationMode
 
 /** 扩图固定使用的模型。 */
-const EXPAND_MODEL_ID = 'Qwen-Image-2.0-Pro'
+const EXPAND_MODEL_ID = 'Doubao-Seedream-5.0-lite'
 /** 快捷扩图弹窗当前选中的生成结果。 */
 const quickExpandResult = ref<GenerateResult | null>(null)
 
@@ -2448,7 +2448,7 @@ watch(
 )
 
 /**
- * 统一的扩图生成入口：先预扩画布，再把扩展后的图片交给 Qwen。
+ * 统一的扩图生成入口：先预扩画布，再把扩展后的图片交给 Seedream。
  * 若远程结果图因 CORS 无法读入 Canvas，则自动降级为原图直传 + 扩图指令。
  */
 async function runExpandGeneration(source: UploadedFile, ratio: string, prompt = '') {
@@ -2700,7 +2700,7 @@ async function handleRegenerate(message: Message) {
     const aspectRatio = userMsg.aspectRatio || settingsStore.aspectRatio
     const source = userMsg.uploadedFiles?.[0] || userMsg.uploadedFile
 
-    // 扩图消息重生成：仍以原图为源图，重新走预扩画布 + Qwen 扩图链路。
+    // 扩图消息重生成：仍以原图为源图，重新走预扩画布 + Seedream 扩图链路。
     if (userMsg.imageMode === 'expand' && source) {
       await runExpandGeneration(source, aspectRatio, userMsg.content)
       return

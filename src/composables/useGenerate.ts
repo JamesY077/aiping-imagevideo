@@ -1,5 +1,4 @@
 import { generateImage, generateVideo } from '@/api/aiping'
-import { getImageProvider } from '@/api/providers/image'
 import { useChatStore } from '@/stores/chatStore'
 import type { GenerateResult, GenerateType, ImageGenerationMode, UploadedFile } from '@/types/chat'
 import { EXPAND_IMAGE_INSTRUCTION } from '@/stores/settingsStore'
@@ -86,7 +85,7 @@ function buildImageResultFromUrl(
   return {
     type: 'image',
     url,
-    model: response.model || model || 'Qwen-Image-2.0-Pro',
+    model: response.model || model || 'Doubao-Seedream-5.0-lite',
     provider: response.provider,
     cost: resolveRealCost(response) / Math.max(response.data.length, 1),
     aspectRatio,
@@ -281,56 +280,23 @@ export function useGenerate() {
         const imageResults: GenerateResult[] = []
         const imageErrors: string[] = []
 
-        // Qwen 图片接口支持 OpenAI 风格的 n 参数，单次请求即可返回多张，且比
-        // 高并发请求更稳定；Doubao 等其他图片模型会忽略 n，走并发补齐。
-        if (getImageProvider(imageParams).provider === 'qwen') {
-          try {
-            const batchResult = await generateImage({ ...imageParams, n: requestedBatchSize })
-            const batchResults = batchResult.data
-              .filter((item) => !!item.url)
-              .slice(0, requestedBatchSize)
-              .map((item) => buildImageResultFromUrl(item.url as string, batchResult, model, aspectRatio, capability, outputSize, mossLayout, layoutSkipped))
-            imageResults.push(...batchResults)
-            if (imageResults.length) {
-              chatStore.updateMessage(assistantId, {
-                generateResult: imageResults[0],
-                generateResults: [...imageResults],
-                progress: Math.min(99, Math.round((imageResults.length / requestedBatchSize) * 100)),
-              })
-            }
-            if (imageResults.length >= requestedBatchSize) {
-              chatStore.updateMessage(assistantId, {
-                generateStatus: 'completed',
-                generateResult: imageResults[0],
-                generateResults: imageResults,
-                progress: 100,
-              })
-              return
-            }
-          } catch {
-            // 批量接口异常时回退到并发请求补齐，错误最终由并发结果汇总。
-          }
-        }
-
-        const remainingCount = requestedBatchSize - imageResults.length
-        if (remainingCount > 0) {
-          const imageTasks = Array.from({ length: remainingCount }, async () => {
-            const result = await generateImage({ ...imageParams })
-            const imageResult = buildImageResult(result, model, aspectRatio, capability, outputSize, mossLayout, layoutSkipped)
-            imageResults.push(imageResult)
-            // 出一张显示一张，不必等整批完成。
-            chatStore.updateMessage(assistantId, {
-              generateResult: imageResults[0],
-              generateResults: [...imageResults],
-              progress: Math.min(99, Math.round((imageResults.length / requestedBatchSize) * 100)),
-            })
-            return imageResult
+        // 所有图片模型统一走并发单张请求：出图更快，也能单张滚动展示进度。
+        const imageTasks = Array.from({ length: requestedBatchSize }, async () => {
+          const result = await generateImage({ ...imageParams })
+          const imageResult = buildImageResult(result, model, aspectRatio, capability, outputSize, mossLayout, layoutSkipped)
+          imageResults.push(imageResult)
+          // 出一张显示一张，不必等整批完成。
+          chatStore.updateMessage(assistantId, {
+            generateResult: imageResults[0],
+            generateResults: [...imageResults],
+            progress: Math.min(99, Math.round((imageResults.length / requestedBatchSize) * 100)),
           })
-          const imageSettled = await Promise.allSettled(imageTasks)
-          for (const item of imageSettled) {
-            if (item.status === 'rejected') {
-              imageErrors.push(normalizeErrorMessage(item.reason, '部分图片生成失败'))
-            }
+          return imageResult
+        })
+        const imageSettled = await Promise.allSettled(imageTasks)
+        for (const item of imageSettled) {
+          if (item.status === 'rejected') {
+            imageErrors.push(normalizeErrorMessage(item.reason, '部分图片生成失败'))
           }
         }
 

@@ -7,7 +7,6 @@ import type { BuiltinSkill } from './builtin'
 /** 只给需要在生图页展示示例图的模型建立目录；未配置的模型回落到公共示例图。 */
 const MODEL_PREVIEW_DIRS: Record<string, string> = {
   'Moss-Image-SFT': 'moss-image-sft',
-  'Qwen-Image-2.0-Pro': 'qwen-image-2.0-pro',
   'Doubao-Seedream-5.0-lite': 'doubao-seedream-5.0-lite',
 }
 

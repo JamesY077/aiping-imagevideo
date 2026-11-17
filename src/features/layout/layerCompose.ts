@@ -28,7 +28,7 @@ export function assetLayerToUploadedFile(item: MossLayoutItem, index: number): U
 /**
  * 把底图与所有素材图层按 bbox 合成成一张图片。
  *
- * 用于单图输入模型（如 Qwen-Image-2.0-Pro）：模型拿到的参考图里，
+ * 用于单图输入模型（如图层编辑时的 Seedream）：模型拿到的参考图里，
  * 素材已经出现在用户拖拽的位置，因此布局还原度更高；
  * 提示词里会要求保留素材外观并自然融合。
  */

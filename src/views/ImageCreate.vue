@@ -190,7 +190,7 @@
                 :disabled="isExpandMode"
                 @update:model-value="settingsStore.saveToStorage()"
               />
-              <p v-if="isExpandMode" class="rail-hint">扩图固定使用 Qwen-Image-2.0-Pro。</p>
+              <p v-if="isExpandMode" class="rail-hint">扩图固定使用 Doubao-Seedream-5.0-lite。</p>
             </section>
 
             <section class="rail-card">
@@ -483,7 +483,7 @@ interface LayerEditorState {
   prompt: string
 }
 
-const EXPAND_MODEL_ID = 'Qwen-Image-2.0-Pro'
+const EXPAND_MODEL_ID = 'Doubao-Seedream-5.0-lite'
 const MAX_BATCH = 5
 const LANDING_REFERENCE_STORAGE_KEY = 'artrealm_landing_reference_image'
 
@@ -1117,7 +1117,7 @@ async function handlePolish() {
   }
 }
 
-/** 扩图链路：先预扩画布，再把扩展后的图交给 Qwen；比例与原图一致时拦截。 */
+/** 扩图链路：先预扩画布，再把扩展后的图交给 Seedream；比例与原图一致时拦截。 */
 async function runExpand(source: UploadedFile, ratio: string, prompt = '') {
   let dimensions = source.dimensions || null
   if (!dimensions) {

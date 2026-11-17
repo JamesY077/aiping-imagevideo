@@ -372,7 +372,7 @@ export function isKlingVideoModel(modelId: string | null | undefined): boolean {
  * 确保默认永远不落到白名单专属的 Seedance 2 系列上。
  */
 export const PREFERRED_DEFAULT_MODEL_IDS: Record<MediaType, string[]> = {
-  image: ['Qwen-Image-2.0-Pro', 'Doubao-Seedream-5.0-lite'],
+  image: ['Doubao-Seedream-5.0-lite'],
   video: ['Kling-V2.6', 'Kling-V3', 'ViduQ3-Pro', 'ViduQ3-Pro-Fast', 'MiniMax-Hailuo-2.3'],
 }
 

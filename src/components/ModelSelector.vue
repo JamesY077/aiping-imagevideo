@@ -3,7 +3,7 @@
     <select
       v-model="selectedModel"
       :disabled="disabled"
-      :title="disabled ? '扩图模式固定使用 Qwen-Image-2.0-Pro' : undefined"
+      :title="disabled ? '扩图模式固定使用 Doubao-Seedream-5.0-lite' : undefined"
       @change="onChange"
     >
       <!-- 普通模型 -->

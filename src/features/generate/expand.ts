@@ -1,39 +1,30 @@
 import type { UploadedFile } from '@/types/chat'
 import { canvasToBlob, loadUploadedImage } from '@/features/generate/imageSource'
+import { aspectRatioToDimensions } from '@/features/generate/aspectRatio'
 
 /**
- * 扩图输出尺寸：Qwen-Image-2.0-Pro 支持 512*512 ~ 2048*2048，
- * 这里统一使用 2K 档位，尽量保留原图细节。
+ * 扩图输出尺寸：跟随 Seedream 5.0 Lite 的官方尺寸档位（2K~3K），
+ * 请求图片接口时使用 `宽x高` 格式，尽量保留原图细节。
  */
-const EXPAND_TARGET_SIZE_MAP: Record<string, { width: number; height: number }> = {
-  '21:9': { width: 2048, height: 878 },
-  '16:9': { width: 2048, height: 1152 },
-  '3:2': { width: 2048, height: 1365 },
-  '4:3': { width: 2048, height: 1536 },
-  '1:1': { width: 2048, height: 2048 },
-  '3:4': { width: 1536, height: 2048 },
-  '2:3': { width: 1365, height: 2048 },
-  '9:16': { width: 1152, height: 2048 },
-}
-
 export interface ExpandTargetSize {
   width: number
   height: number
-  /** 请求图片接口时使用的 size 字符串，如 2048*1152。 */
+  /** 请求图片接口时使用的 size 字符串，如 2848x1600。 */
   size: string
 }
 
 export function getExpandTargetSize(aspectRatio: string): ExpandTargetSize {
-  const dimensions = EXPAND_TARGET_SIZE_MAP[aspectRatio] || EXPAND_TARGET_SIZE_MAP['1:1']
+  const { width, height } = aspectRatioToDimensions(aspectRatio, 'seedream-5-lite')
   return {
-    ...dimensions,
-    size: `${dimensions.width}*${dimensions.height}`,
+    width,
+    height,
+    size: `${width}x${height}`,
   }
 }
 
 /**
  * 把原图放到目标比例的画布中央，四周用原图的模糊放大版本填充，
- * 作为 Qwen 图生图的输入。这样模型能看到完整的画面边界，而不是被裁切。
+ * 作为 Seedream 图生图的输入。这样模型能看到完整的画面边界，而不是被裁切。
  */
 export async function createExpandedUploadedFile(
   source: UploadedFile,

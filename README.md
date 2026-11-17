@@ -20,7 +20,6 @@
 ### 图片模型
 
 - Doubao Seedream 5.0 Lite
-- Qwen Image 2.0 Pro
 
 ### 视频模型
 
