@@ -660,33 +660,42 @@
             </header>
 
             <div class="design-form-body">
-              <label class="adv-field">
-                <span>音色名称（只存在本机）</span>
+              <label class="design-field">
+                <span class="design-field-head">
+                  <span class="design-field-label">音色名称</span>
+                  <span class="design-field-hint">仅保存在本机</span>
+                </span>
                 <input
                   v-model="designName"
-                  class="studio-field"
+                  class="studio-field design-input"
                   type="text"
                   maxlength="20"
                   placeholder="例如：深夜电台"
                 />
               </label>
 
-              <label class="adv-field">
-                <span>音色描述</span>
+              <label class="design-field">
+                <span class="design-field-head">
+                  <span class="design-field-label">音色描述</span>
+                  <span class="design-field-count">{{ designPrompt.length }} / 300</span>
+                </span>
                 <textarea
                   v-model="designPrompt"
-                  class="studio-field design-textarea"
+                  class="studio-field design-input design-textarea"
                   rows="5"
                   maxlength="300"
                   placeholder="例如：温柔松弛的青年女性声音，带一点气声，语速很慢，像深夜电台主播在耳边说话。"
                 />
               </label>
 
-              <label class="adv-field">
-                <span>试听文本</span>
+              <label class="design-field">
+                <span class="design-field-head">
+                  <span class="design-field-label">试听文本</span>
+                  <span class="design-field-count">{{ designPreviewText.length }} / 200</span>
+                </span>
                 <textarea
                   v-model="designPreviewText"
-                  class="studio-field design-textarea"
+                  class="studio-field design-input design-textarea design-textarea--short"
                   rows="3"
                   maxlength="200"
                 />
@@ -5356,14 +5365,62 @@ onBeforeUnmount(() => {
 .design-form-body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   padding: 16px 18px 18px;
 }
 
+/* 音色设计表单：统一标签、计数与输入框对齐，避免文字贴边 */
+.design-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.design-field-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.design-field-label {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.design-field-hint,
+.design-field-count {
+  flex: none;
+  color: var(--studio-text-hint);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.design-input {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  line-height: 1.75;
+}
+
+input.design-input {
+  height: 38px;
+  padding: 0 12px;
+  line-height: 38px;
+}
+
 .design-textarea {
-  min-height: 70px;
-  line-height: 1.7;
+  min-height: 104px;
   resize: vertical;
+}
+
+.design-textarea--short {
+  min-height: 76px;
 }
 
 .design-submit {
@@ -5457,6 +5514,13 @@ onBeforeUnmount(() => {
   .voice-tabs {
     width: 100%;
     overflow-x: auto;
+    border-radius: 18px;
+  }
+
+  .voice-tab {
+    flex: none;
+    padding: 0 14px;
+    white-space: nowrap;
   }
 
   /* 手机端音色选择库：单列卡片 + 收紧内边距，避免标签和描述挤在一起 */
