@@ -14,12 +14,15 @@ import {
   SPEECH_REQUEST_TIMEOUT,
   VOICES_CLONE_ENDPOINT,
   VOICES_DELETE_ENDPOINT,
+  VOICES_DESIGN_ENDPOINT,
   VOICES_LIST_ENDPOINT,
   VOICES_UPLOAD_ENDPOINT,
   VOICE_CLONE_REQUEST_TIMEOUT,
+  VOICE_DESIGN_REQUEST_TIMEOUT,
   VOICE_UPLOAD_REQUEST_TIMEOUT,
   createVoiceId,
   extractCloneResult,
+  extractDesignResult,
   extractFileId,
   extractSpeechAudio,
   normalizeVoiceCatalog,
@@ -29,6 +32,7 @@ import type {
   SpeechRequest,
   SpeechResult,
   VoiceCatalog,
+  VoiceDesignResult,
 } from '@/features/voice/types'
 
 function toAppError(error: unknown, fallback: string): AppError {
@@ -113,6 +117,43 @@ export async function uploadCloneAudio(blob: Blob, fileName: string): Promise<nu
   }
 }
 
+export interface DesignVoiceParams {
+  /** 音色描述：性别、年龄、质感、语速、场景 */
+  prompt: string
+  /** 试听文案（同时按字符计费） */
+  previewText: string
+}
+
+/**
+ * 音色设计（文生音色）：用一段描述生成全新音色，返回 voice_id 与试听音频。
+ * 生成的音色 7 天内未用于合成会被上游删除。
+ */
+export async function designVoice(params: DesignVoiceParams): Promise<VoiceDesignResult> {
+  let result
+  try {
+    const response = await client.post(
+      VOICES_DESIGN_ENDPOINT,
+      { prompt: params.prompt, preview_text: params.previewText },
+      { timeout: VOICE_DESIGN_REQUEST_TIMEOUT },
+    )
+    result = extractDesignResult(response.data)
+  } catch (error) {
+    throw toAppError(error, '音色设计失败，请稍后重试。')
+  }
+
+  const blob = result.hex ? bytesToBlob(hexToBytes(result.hex), 'mp3') : new Blob([], { type: 'audio/mpeg' })
+  const durationMs = blob.size ? await getAudioDurationMs(blob) : 0
+
+  return {
+    voiceId: result.voiceId,
+    blob,
+    url: blob.size ? URL.createObjectURL(blob) : '',
+    durationMs,
+    usageCharacters: result.usageCharacters,
+    format: 'mp3',
+  }
+}
+
 export interface CloneVoiceParams {
   fileId: number
   /** 自定义 voice_id（不传则自动生成） */
@@ -156,12 +197,15 @@ export async function cloneVoice(params: CloneVoiceParams): Promise<CloneResult>
   }
 }
 
-/** 删除复刻音色（仅 voice_cloning 类型可删）。 */
-export async function deleteClonedVoice(voiceId: string): Promise<void> {
+/** 删除音色（复刻音色或设计音色）。 */
+export async function deleteClonedVoice(
+  voiceId: string,
+  voiceType: 'voice_cloning' | 'voice_generation' = 'voice_cloning',
+): Promise<void> {
   try {
     const response = await client.post(
       VOICES_DELETE_ENDPOINT,
-      { voice_type: 'voice_cloning', voice_id: voiceId },
+      { voice_type: voiceType, voice_id: voiceId },
       { timeout: VOICE_UPLOAD_REQUEST_TIMEOUT },
     )
     // 删除接口同样用 base_resp 报错，复用复刻结果的校验逻辑。

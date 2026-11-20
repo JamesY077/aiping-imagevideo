@@ -83,10 +83,42 @@ export interface RemoteClonedVoice {
   createdAt: string
 }
 
-/** 音色目录：系统音色 + 账号复刻音色。 */
+/** 账号下通过「音色设计」生成、且已经用于合成的音色。 */
+export interface RemoteDesignedVoice {
+  voiceId: string
+  name: string
+  createdAt: string
+}
+
+/** 音色目录：系统音色 + 账号复刻音色 + 账号里的设计音色。 */
 export interface VoiceCatalog {
   system: SystemVoice[]
   cloned: RemoteClonedVoice[]
+  designed: RemoteDesignedVoice[]
+}
+
+/** 本地留存的设计音色（临时音色 7 天未使用会被上游删除）。 */
+export interface StoredDesignedVoice {
+  voiceId: string
+  name: string
+  /** 生成时使用的音色描述，便于再次微调 */
+  prompt: string
+  createdAt: number
+  demoDataUrl?: string
+  demoUrl?: string
+  durationMs?: number
+  /** 是否已经用于合成（用过的设计音色才会长期保留） */
+  used?: boolean
+}
+
+/** 音色设计结果：上游返回一次试听音频 + 新音色 id。 */
+export interface VoiceDesignResult {
+  voiceId: string
+  blob: Blob
+  url: string
+  durationMs: number
+  usageCharacters: number
+  format: SpeechAudioFormat
 }
 
 /** 本地留存的复刻音色（没有后端，因此只存在浏览器里）。 */

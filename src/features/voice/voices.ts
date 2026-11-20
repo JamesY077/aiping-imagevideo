@@ -6,6 +6,7 @@
  */
 
 import type { SystemVoice } from './types'
+import { getVoiceMeta, getVoiceSearchKeywords } from './catalogMeta'
 
 export const VOICE_LANGUAGES = [
   { key: 'zh', label: '普通话' },
@@ -26,10 +27,42 @@ const PREFIX_LANGUAGE: Record<string, VoiceLanguageKey> = {
   Korean: 'ko',
 }
 
-/** 由 voice_id 推断语言分组（无前缀的老音色 id 归入普通话）。 */
+/**
+ * 老一代 MiniMax 音色没有语言前缀（`male-qn-qingse`、`female-yujie` …），
+ * 只能靠 id 白名单判断。不能简单用「带下划线就是中文」：`greek_male_1a_v1`
+ * 这类小语种会被误判成普通话。
+ */
+const LEGACY_ZH_PREFIXES = ['male-qn-', 'female-']
+const LEGACY_ZH_IDS = new Set([
+  'clever_boy',
+  'cute_boy',
+  'lovely_girl',
+  'cartoon_pig',
+  'bingjiao_didi',
+  'junlang_nanyou',
+  'chunzhen_xuedi',
+  'lengdan_xiongzhang',
+  'badao_shaoye',
+  'tianxin_xiaoling',
+  'qiaopi_mengmei',
+  'wumei_yujie',
+  'diadia_xuemei',
+  'danya_xuejie',
+  'Arrogant_Miss',
+  'Robot_Armor',
+])
+
+function isLegacyMandarin(voiceId: string): boolean {
+  return (
+    LEGACY_ZH_IDS.has(voiceId) ||
+    LEGACY_ZH_PREFIXES.some((prefix) => voiceId.startsWith(prefix))
+  )
+}
+
+/** 由 voice_id 推断语言分组。 */
 export function parseVoiceLanguage(voiceId: string): { key: VoiceLanguageKey; label: string } {
   const prefix = voiceId.split('_')[0]
-  const key = PREFIX_LANGUAGE[prefix] || (/^[a-z]+-/.test(voiceId) || /^[a-z]+_/.test(voiceId) ? 'zh' : 'other')
+  const key = PREFIX_LANGUAGE[prefix] || (isLegacyMandarin(voiceId) ? 'zh' : 'other')
   const label = VOICE_LANGUAGES.find((item) => item.key === key)?.label || '其他语言'
   return { key, label }
 }
@@ -47,6 +80,7 @@ const VOICE_LANGUAGE_TAGS: Record<string, string> = {
   ko: '韩语',
   other: '其他',
   clone: '复刻',
+  design: '设计',
 }
 
 /** 上游把大量非中英日韩音色统一归到 other，卡片标签再按 voice_id 前缀细分。 */
@@ -70,6 +104,7 @@ const VOICE_PREFIX_LANGUAGE_TAGS: Record<string, string> = {
   swedish: '瑞典语',
   romanian: '罗马尼亚语',
   czech: '捷克语',
+  finnish: '芬兰语',
   greek: '希腊语',
   filipino: '菲律宾语',
 }
@@ -163,19 +198,82 @@ export const FALLBACK_SYSTEM_VOICES: SystemVoice[] = [
   {
     voiceId: 'male-qn-qingse',
     name: '青涩青年音色',
-    description: '经典青涩青年男声。',
+    description: '经典青涩青年男声，带一点学生气，适合校园与日常对白。',
     createdAt: '',
     language: 'zh',
   },
   {
     voiceId: 'female-shaonv',
     name: '少女音色',
-    description: '经典少女音色。',
+    description: '经典清亮少女音色，适合角色对白与轻快内容。',
     createdAt: '',
     language: 'zh',
   },
   {
-    voiceId: 'Cantonese_ProfessionalHostFemale',
+    voiceId: 'female-chengshu',
+    name: '成熟女性音色',
+    description: '知性成熟的女性声音，适合旁白与有声书。',
+    createdAt: '',
+    language: 'zh',
+  },
+  {
+    voiceId: 'male-qn-jingying',
+    name: '精英青年音色',
+    description: '干净利落的精英青年男声，适合商务与讲解。',
+    createdAt: '',
+    language: 'zh',
+  },
+  {
+    voiceId: 'female-tianmei',
+    name: '甜美女性音色',
+    description: '甜美亲和的女性声音，适合广告与陪伴类内容。',
+    createdAt: '',
+    language: 'zh',
+  },
+  {
+    voiceId: 'female-yujie',
+    name: '御姐音色',
+    description: '气场十足的御姐声音，适合都市剧与角色对白。',
+    createdAt: '',
+    language: 'zh',
+  },
+  {
+    voiceId: 'Chinese (Mandarin)_Sweet_Lady',
+    name: '甜美女声',
+    description: '一位温柔甜美的青年女性声音，标准普通话。',
+    createdAt: '',
+    language: 'zh',
+  },
+  {
+    voiceId: 'Chinese (Mandarin)_Wise_Women',
+    name: '阅历姐姐',
+    description: '一位富有阅历、声音抒情的中年姐姐声音，标准普通话。',
+    createdAt: '',
+    language: 'zh',
+  },
+  {
+    voiceId: 'Chinese (Mandarin)_Warm_Girl',
+    name: '温暖少女',
+    description: '一位温柔温暖的少年女声，标准普通话。',
+    createdAt: '',
+    language: 'zh',
+  },
+  {
+    voiceId: 'Chinese (Mandarin)_Kind-hearted_Elder',
+    name: '花甲奶奶',
+    description: '一位慈祥和蔼的老年女性奶奶声音，标准普通话。',
+    createdAt: '',
+    language: 'zh',
+  },
+  {
+    voiceId: 'Chinese (Mandarin)_Humorous_Elder',
+    name: '搞笑大爷',
+    description: '一位爽朗幽默的老年男性大爷声音，带有北方口音的中文。',
+    createdAt: '',
+    language: 'zh',
+  },
+  {
+    voiceId: 'Cantonese_ProfessionalHost（F)',
     name: '粤语女主持',
     description: '专业粤语女性主持声音。',
     createdAt: '',
@@ -231,6 +329,41 @@ export const TEXT_PRESETS: VoiceTextPreset[] = [
     voiceId: 'Chinese (Mandarin)_Mature_Woman',
     voiceName: '傲娇御姐',
   },
+  {
+    title: '新闻播报',
+    desc: '标准播音腔，字正腔圆',
+    text: '各位晚上好，欢迎收看今天的新闻。首先来关注一组最新的数据和现场报道。',
+    voiceId: 'Chinese (Mandarin)_News_Anchor',
+    voiceName: '新闻女声',
+  },
+  {
+    title: '有声书',
+    desc: '娓娓道来，适合长段落',
+    text: '那年冬天特别冷。她站在车站的尽头，手里攥着一张已经揉皱的车票，迟迟没有上车。',
+    voiceId: 'female-chengshu',
+    voiceName: '成熟女性音色',
+  },
+  {
+    title: '短视频带货',
+    desc: '口语化，短句有钩子',
+    text: '别再犹豫了！今天下单，明天就能用上。这个价格，真的是最后一次了。',
+    voiceId: 'Chinese (Mandarin)_Warm_Bestie',
+    voiceName: '温暖闺蜜',
+  },
+  {
+    title: '睡前电台',
+    desc: '气声低语，慢速治愈',
+    text: '今天辛苦了。把灯关掉，把手机放远一点，剩下的故事，我慢慢讲给你听。',
+    voiceId: 'Chinese (Mandarin)_Sweet_Lady',
+    voiceName: '甜美女声',
+  },
+  {
+    title: '儿童故事',
+    desc: '活泼可爱，适合绘本动画',
+    text: '小兔子蹦蹦跳跳地出门啦。它说：今天，我一定要找到最大的那根胡萝卜！',
+    voiceId: 'Chinese (Mandarin)_Warm_Girl',
+    voiceName: '温暖少女',
+  },
 ]
 
 /** 按语言分组，并保持普通话优先、组内按名称排序。 */
@@ -254,17 +387,23 @@ export function groupVoicesByLanguage(
     .map((key) => ({
       key,
       label: getVoiceLanguageLabel(key),
-      voices: (buckets.get(key) || []).sort((left, right) => left.name.localeCompare(right.name, 'zh-Hans-CN')),
+      // 常用音色权重更高，排在分组最前面；同权重按名称排序。
+      voices: (buckets.get(key) || []).sort((left, right) => {
+        const weightDiff = (getVoiceMeta(right)?.weight || 0) - (getVoiceMeta(left)?.weight || 0)
+        if (weightDiff !== 0) return weightDiff
+        return left.name.localeCompare(right.name, 'zh-Hans-CN')
+      }),
     }))
 }
 
-/** 关键词搜索：匹配名称、voice_id 与描述。 */
+/** 关键词搜索：匹配名称、voice_id、描述，以及性别 / 年龄 / 场景标签。 */
 export function matchesVoiceQuery(voice: SystemVoice, query: string): boolean {
   const keyword = query.trim().toLowerCase()
   if (!keyword) return true
   return (
     voice.name.toLowerCase().includes(keyword) ||
     voice.voiceId.toLowerCase().includes(keyword) ||
-    voice.description.toLowerCase().includes(keyword)
+    voice.description.toLowerCase().includes(keyword) ||
+    getVoiceSearchKeywords(voice).toLowerCase().includes(keyword)
   )
 }

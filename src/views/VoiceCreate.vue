@@ -5,7 +5,7 @@
     <StudioHeader
       kicker="Voice Studio"
       title="配音创作"
-      subtitle="文本转语音与声音复刻：音色、语速、语调、音量都能直接调"
+      subtitle="文本转语音、音色设计与声音复刻：50+ 普通话音色，也能用一段描述造一个新声音"
       accent="#fb923c"
     >
       <template #actions>
@@ -28,6 +28,20 @@
             <path d="M4 6h16M4 12h10M4 18h13" />
           </svg>
           文本转语音
+        </button>
+        <button
+          class="voice-tab"
+          :class="{ active: activeTab === 'design' }"
+          type="button"
+          role="tab"
+          :aria-selected="activeTab === 'design'"
+          @click="switchTab('design')"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3.4l1.9 4.4 4.7.5-3.5 3.2.9 4.7-4-2.4-4 2.4.9-4.7L5.4 8.3l4.7-.5L12 3.4Z" />
+            <path d="M18.4 16.6l.8 1.9 2 .2-1.5 1.4.4 2-1.7-1-1.7 1 .4-2-1.5-1.4 2-.2.8-1.9Z" />
+          </svg>
+          音色设计
         </button>
         <button
           class="voice-tab"
@@ -578,6 +592,197 @@
       </div>
 
       <!-- ================= 声音克隆 ================= -->
+            <!-- ================= 音色设计 ================= -->
+      <div v-show="activeTab === 'design'" class="design-layout">
+        <section class="studio-panel design-preset-panel">
+          <header class="studio-panel-head">
+            <div class="studio-panel-headings">
+              <span class="studio-kicker">Voice Design</span>
+              <h2 class="studio-panel-title">音色配方 · 从一段描述生成新声音</h2>
+            </div>
+            <span class="studio-panel-meta">{{ designPresets.length }} 个配方</span>
+          </header>
+
+          <div class="design-preset-body">
+            <p class="design-lead">
+              借鉴 VoiceStudio 的 voice gallery：把「性别 + 年龄 + 音色质感 + 语速 + 场景」写成描述，
+              挑一个配方填入右侧直接生成试听；不满意就改两个字再试。
+            </p>
+
+            <div class="voice-modal-scenes design-scene-row">
+              <button
+                v-for="scene in designSceneOptions"
+                :key="scene.key"
+                class="voice-filter-chip"
+                :class="{ active: designSceneFilter === scene.key }"
+                type="button"
+                @click="designSceneFilter = scene.key"
+              >
+                {{ scene.label }}
+              </button>
+            </div>
+
+            <div class="design-preset-grid">
+              <button
+                v-for="preset in designPresets"
+                :key="preset.id"
+                class="design-preset-card"
+                :class="{ active: designPrompt === preset.prompt }"
+                type="button"
+                @click="applyDesignPreset(preset)"
+              >
+                <span class="design-preset-top">
+                  <strong>{{ preset.name }}</strong>
+                  <em>{{ VOICE_SCENE_LABELS[preset.scenes[0]] }}</em>
+                </span>
+                <span class="design-preset-blurb">{{ preset.blurb }}</span>
+                <span class="design-preset-tags">
+                  <em v-for="tag in preset.tags" :key="tag">{{ tag }}</em>
+                </span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <div class="design-side">
+          <section class="studio-panel design-form-panel">
+            <header class="studio-panel-head">
+              <div class="studio-panel-headings">
+                <span class="studio-kicker">Design</span>
+                <h2 class="studio-panel-title">描述你想要的声音</h2>
+              </div>
+              <span class="studio-panel-meta">按试听字数计费</span>
+            </header>
+
+            <div class="design-form-body">
+              <label class="adv-field">
+                <span>音色名称（只存在本机）</span>
+                <input
+                  v-model="designName"
+                  class="studio-field"
+                  type="text"
+                  maxlength="20"
+                  placeholder="例如：深夜电台"
+                />
+              </label>
+
+              <label class="adv-field">
+                <span>音色描述</span>
+                <textarea
+                  v-model="designPrompt"
+                  class="studio-field design-textarea"
+                  rows="5"
+                  maxlength="300"
+                  placeholder="例如：温柔松弛的青年女性声音，带一点气声，语速很慢，像深夜电台主播在耳边说话。"
+                />
+              </label>
+
+              <label class="adv-field">
+                <span>试听文本</span>
+                <textarea
+                  v-model="designPreviewText"
+                  class="studio-field design-textarea"
+                  rows="3"
+                  maxlength="200"
+                />
+              </label>
+
+              <button
+                class="studio-btn studio-btn--primary design-submit"
+                type="button"
+                :disabled="!canDesign"
+                @click="handleDesignVoice"
+              >
+                {{ designing ? '正在设计音色…' : '生成音色与试听' }}
+              </button>
+
+              <p v-if="designError" class="inline-error">{{ designError }}</p>
+              <p class="field-hint">
+                设计出的音色 7 天内未用于合成会被上游删除；用它合成过一次就会长期保留。
+              </p>
+
+              <div v-if="designResult" class="design-result">
+                <div class="clone-result-head">
+                  <strong>{{ designResult.name }}</strong>
+                  <span class="clone-id">{{ designResult.voiceId }}</span>
+                </div>
+                <VoicePlayer
+                  v-if="designResult.url"
+                  :key="designResult.url"
+                  :src="designResult.url"
+                  :duration-ms="designResult.durationMs"
+                  :bars="48"
+                  compact
+                  autoplay
+                />
+                <p v-if="designResult.usageCharacters" class="design-result-meta">
+                  本次计费 {{ designResult.usageCharacters }} 个字符 · 已保存到「我的音色」
+                </p>
+                <div class="clone-result-actions">
+                  <button class="mini-btn" type="button" @click="useVoiceForSpeech(designResult.voiceId)">
+                    用它配音
+                  </button>
+                  <button class="mini-btn" type="button" @click="designResult = null">继续设计</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="studio-panel my-voices-panel">
+            <header class="studio-panel-head">
+              <div class="studio-panel-headings">
+                <span class="studio-kicker">Designed</span>
+                <h2 class="studio-panel-title">我设计的音色</h2>
+              </div>
+              <span class="studio-panel-meta">{{ designedVoices.length }} 个</span>
+            </header>
+
+            <div class="my-voices-body">
+              <p v-if="!designedVoices.length" class="voice-empty">
+                还没有设计音色。从左侧挑一个配方，或直接写一段描述。
+              </p>
+
+              <ul v-else class="my-voices-list">
+                <li v-for="voice in designedVoices" :key="voice.voiceId" class="my-voice-card">
+                  <div class="my-voice-head">
+                    <strong>{{ voice.name }}</strong>
+                    <span class="my-voice-date">{{ formatDate(voice.createdAt) }}</span>
+                  </div>
+                  <code class="my-voice-id">{{ voice.voiceId }}</code>
+                  <p v-if="voice.prompt" class="my-voice-prompt">{{ voice.prompt }}</p>
+
+                  <VoicePlayer
+                    v-if="voice.demoDataUrl || voice.demoUrl"
+                    :key="voice.demoDataUrl || voice.demoUrl"
+                    :src="voice.demoDataUrl || voice.demoUrl"
+                    :duration-ms="voice.durationMs || 0"
+                    :bars="40"
+                    compact
+                  />
+                  <p v-else class="field-hint">
+                    {{ voice.used ? '已经用于合成，可长期使用。' : '没有本地试听音频，可以直接用于配音。' }}
+                  </p>
+
+                  <div class="my-voice-actions">
+                    <button class="mini-btn" type="button" @click="useVoiceForSpeech(voice.voiceId)">
+                      用于配音
+                    </button>
+                    <button
+                      class="mini-btn danger"
+                      type="button"
+                      :disabled="deletingDesignedId === voice.voiceId"
+                      @click="handleDeleteDesignedVoice(voice)"
+                    >
+                      {{ deletingDesignedId === voice.voiceId ? '删除中…' : '删除' }}
+                    </button>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </section>
+        </div>
+      </div>
+
       <div v-show="activeTab === 'clone'" class="clone-layout">
         <!-- 样本 -->
         <section class="studio-panel sample-panel">
@@ -967,6 +1172,41 @@
             <span class="voice-modal-result">{{ visibleVoiceCount }} 个匹配</span>
           </div>
 
+          <div v-if="showMetaFilters" class="voice-modal-meta">
+            <div class="voice-modal-scenes">
+              <button
+                class="voice-filter-chip"
+                :class="{ active: sceneFilter === 'all' }"
+                type="button"
+                @click="sceneFilter = 'all'"
+              >
+                全部场景
+              </button>
+              <button
+                v-for="scene in VOICE_SCENES"
+                :key="scene.key"
+                class="voice-filter-chip"
+                :class="{ active: sceneFilter === scene.key }"
+                type="button"
+                @click="sceneFilter = sceneFilter === scene.key ? 'all' : scene.key"
+              >
+                {{ scene.label }}
+              </button>
+            </div>
+            <div class="voice-modal-genders">
+              <button
+                v-for="gender in genderOptions"
+                :key="gender.key"
+                class="voice-filter-chip is-gender"
+                :class="{ active: genderFilter === gender.key }"
+                type="button"
+                @click="genderFilter = gender.key"
+              >
+                {{ gender.label }}
+              </button>
+            </div>
+          </div>
+
           <div class="voice-modal-list studio-scroll">
             <template v-if="filteredClonedVoices.length">
               <p class="voice-group-label">
@@ -1011,6 +1251,44 @@
               </div>
             </template>
 
+            <template v-if="filteredDesignedVoices.length">
+              <p class="voice-group-label">
+                我的音色 · 设计
+                <em>{{ filteredDesignedVoices.length }}</em>
+              </p>
+              <div class="voice-grid">
+                <button
+                  v-for="voice in filteredDesignedVoices"
+                  :key="voice.voiceId"
+                  class="voice-option"
+                  :class="{ active: voice.voiceId === selectedVoiceId }"
+                  type="button"
+                  @click="selectVoice(voice.voiceId)"
+                >
+                  <span class="voice-option-top">
+                    <strong>{{ voice.name }}</strong>
+                    <span class="voice-option-meta">
+                      <svg
+                        v-if="voice.voiceId === selectedVoiceId"
+                        class="voice-option-check"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="m5 12 4 4L19 6" />
+                      </svg>
+                      <em class="voice-lang-tag is-clone" title="设计音色">设计</em>
+                    </span>
+                  </span>
+                  <span class="voice-option-desc">{{ voice.prompt || '账号里已有的设计音色' }}</span>
+                </button>
+              </div>
+            </template>
+
             <template v-for="group in groupedVoices" :key="group.key">
               <p class="voice-group-label">
                 {{ group.label }}
@@ -1049,14 +1327,17 @@
                       </em>
                     </span>
                   </span>
+                  <span class="voice-option-chips">
+                    <em v-for="chip in getVoiceMetaChips(voice)" :key="chip">{{ chip }}</em>
+                  </span>
                   <span class="voice-option-desc">{{ voice.description || voice.voiceId }}</span>
                 </button>
               </div>
             </template>
 
-            <div v-if="!filteredClonedVoices.length && !groupedVoices.length" class="voice-empty">
+            <div v-if="!filteredClonedVoices.length && !filteredDesignedVoices.length && !groupedVoices.length" class="voice-empty">
               没有匹配的音色，换个关键词或切换语言分组试试。
-              <button v-if="voiceQuery" class="link-btn" type="button" @click="voiceQuery = ''">清除搜索</button>
+              <button v-if="voiceQuery || sceneFilter !== 'all' || genderFilter !== 'all'" class="link-btn" type="button" @click="resetVoiceFilters">清除筛选</button>
             </div>
           </div>
 
@@ -1080,6 +1361,7 @@
               <p v-if="previewHint" class="voice-modal-hint">{{ previewHint }}</p>
             </div>
             <div class="voice-modal-actions">
+              <button class="mini-btn" type="button" @click="openDesignFromPicker">音色设计</button>
               <button class="mini-btn" type="button" :disabled="previewing" @click="handlePreviewVoice">
                 {{ previewing ? '合成中…' : '试听' }}
               </button>
@@ -1098,7 +1380,7 @@ import StudioHeader from '@/components/StudioHeader.vue'
 import StudioIsland from '@/components/StudioIsland.vue'
 import VoicePlayer from '@/components/VoicePlayer.vue'
 import { chatCompletion } from '@/api/aiping'
-import { cloneVoice, deleteClonedVoice, fetchVoiceCatalog, synthesizeSpeech, uploadCloneAudio } from '@/api/voice'
+import { cloneVoice, deleteClonedVoice, designVoice, fetchVoiceCatalog, synthesizeSpeech, uploadCloneAudio } from '@/api/voice'
 import {
   CLONE_SAMPLE_MAX_BYTES,
   CLONE_SAMPLE_MAX_SECONDS,
@@ -1124,11 +1406,16 @@ import {
 import { useVoiceRecorder } from '@/features/voice/recorder'
 import {
   loadClonedVoices,
+  loadDesignedVoices,
   loadVoiceSettings,
+  markDesignedVoiceUsed,
   removeStoredClonedVoice,
+  removeStoredDesignedVoice,
   saveVoiceSettings,
   syncClonedVoicesFromRemote,
+  syncDesignedVoicesFromRemote,
   upsertClonedVoice,
+  upsertDesignedVoice,
 } from '@/features/voice/storage'
 import {
   clearVoiceLibrary,
@@ -1156,6 +1443,20 @@ import {
   matchesVoiceQuery,
 } from '@/features/voice/voices'
 import type { VoiceLanguageKey } from '@/features/voice/voices'
+import {
+  VOICE_GENDER_LABELS,
+  VOICE_SCENE_LABELS,
+  VOICE_SCENES,
+  getVoiceMetaChips,
+  matchesVoiceMeta,
+} from '@/features/voice/catalogMeta'
+import type { VoiceGender, VoiceSceneKey } from '@/features/voice/catalogMeta'
+import {
+  DEFAULT_DESIGN_PREVIEW_TEXT,
+  VOICE_DESIGN_PRESETS,
+  getDesignSceneOptions,
+} from '@/features/voice/designPresets'
+import type { VoiceDesignPreset } from '@/features/voice/designPresets'
 import type {
   CloneResult,
   CloneSample,
@@ -1164,6 +1465,7 @@ import type {
   SpeechAudioFormat,
   SpeechResult,
   StoredClonedVoice,
+  StoredDesignedVoice,
   SystemVoice,
   VoiceEmotion,
   VoiceHistoryItem,
@@ -1183,7 +1485,7 @@ const saved = loadVoiceSettings()
 
 /* ---------------- 基础状态 ---------------- */
 
-const activeTab = ref<'speech' | 'clone'>('speech')
+const activeTab = ref<'speech' | 'design' | 'clone'>('speech')
 const text = ref('')
 const speed = ref(saved.speed)
 const pitch = ref(saved.pitch)
@@ -1203,6 +1505,26 @@ const languageFilter = ref<VoiceLanguageKey>(
 
 const selectedVoiceId = ref(saved.voiceId || DEFAULT_VOICE_ID)
 const voiceQuery = ref('')
+
+/** 选择库的场景 / 性别筛选（只对内置音色生效）。 */
+const sceneFilter = ref<VoiceSceneKey | 'all'>('all')
+const genderFilter = ref<VoiceGender | 'all'>('all')
+const genderOptions: { key: VoiceGender | 'all'; label: string }[] = [
+  { key: 'all', label: '不限性别' },
+  ...(Object.keys(VOICE_GENDER_LABELS) as VoiceGender[]).map((key) => ({
+    key,
+    label: VOICE_GENDER_LABELS[key],
+  })),
+]
+/** 场景 / 性别元数据只覆盖中文音色，切到外语分组时隐藏这两行筛选。 */
+const showMetaFilters = computed(() => languageFilter.value === 'zh' || languageFilter.value === 'yue')
+
+watch(languageFilter, (key) => {
+  if (key !== 'zh' && key !== 'yue') {
+    sceneFilter.value = 'all'
+    genderFilter.value = 'all'
+  }
+})
 
 const audioSummary = computed(
   () => `${audioFormat.value.toUpperCase()} · ${Number((sampleRate.value / 1000).toFixed(2))}kHz`,
@@ -1360,6 +1682,7 @@ async function handleTranslate(language: TranslationLanguage) {
 const systemVoices = ref<SystemVoice[]>([])
 const remoteCloned = ref<RemoteClonedVoice[]>([])
 const myVoices = ref<StoredClonedVoice[]>(loadClonedVoices())
+const designedVoices = ref<StoredDesignedVoice[]>(loadDesignedVoices())
 const catalogState = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
 
 /** 本地复刻音色 + 账号里有、但本地没记录的音色。 */
@@ -1386,7 +1709,17 @@ const mergedClonedVoices = computed<SystemVoice[]>(() => {
   return [...local, ...extra]
 })
 
-const allVoices = computed<SystemVoice[]>(() => [...mergedClonedVoices.value, ...systemVoices.value])
+const allVoices = computed<SystemVoice[]>(() => [
+  ...mergedClonedVoices.value,
+  ...designedVoices.value.map<SystemVoice>((voice) => ({
+    voiceId: voice.voiceId,
+    name: voice.name,
+    description: voice.prompt || '我之前用音色设计生成的音色',
+    createdAt: '',
+    language: 'design',
+  })),
+  ...systemVoices.value,
+])
 
 const selectedVoice = computed<SystemVoice>(() => {
   return (
@@ -1408,14 +1741,39 @@ const filteredClonedVoices = computed(() => {
   })
 })
 
+const filteredDesignedVoices = computed(() => {
+  return designedVoices.value.filter((voice) => {
+    const keyword = voiceQuery.value.trim().toLowerCase()
+    if (!keyword) return true
+    return (
+      voice.name.toLowerCase().includes(keyword) ||
+      voice.voiceId.toLowerCase().includes(keyword) ||
+      voice.prompt.toLowerCase().includes(keyword)
+    )
+  })
+})
+
 const groupedVoices = computed(() => {
-  const filtered = systemVoices.value.filter((voice) => matchesVoiceQuery(voice, voiceQuery.value))
+  const filtered = systemVoices.value.filter(
+    (voice) =>
+      matchesVoiceQuery(voice, voiceQuery.value) &&
+      matchesVoiceMeta(voice, sceneFilter.value, genderFilter.value),
+  )
   return groupVoicesByLanguage(filtered, languageFilter.value)
 })
 
 const visibleVoiceCount = computed(
-  () => filteredClonedVoices.value.length + groupedVoices.value.reduce((sum, group) => sum + group.voices.length, 0),
+  () =>
+    filteredClonedVoices.value.length +
+    filteredDesignedVoices.value.length +
+    groupedVoices.value.reduce((sum, group) => sum + group.voices.length, 0),
 )
+
+function resetVoiceFilters() {
+  voiceQuery.value = ''
+  sceneFilter.value = 'all'
+  genderFilter.value = 'all'
+}
 
 const languageOptions = computed(() => [{ key: 'all' as VoiceLanguageKey, label: '全部' }, ...VOICE_LANGUAGES])
 
@@ -1429,6 +1787,7 @@ async function loadCatalog(force = false) {
     systemVoices.value = catalog.system.length ? catalog.system : FALLBACK_SYSTEM_VOICES
     remoteCloned.value = catalog.cloned
     myVoices.value = syncClonedVoicesFromRemote(catalog.cloned)
+    designedVoices.value = syncDesignedVoicesFromRemote(catalog.designed || [])
     catalogState.value = 'ready'
 
     // 上次选中的音色可能已过期（复刻音色 7 天未使用会被上游删除），回落到默认音色。
@@ -1478,6 +1837,12 @@ function closeVoicePicker() {
   void nextTick(() => voiceChangeBtnRef.value?.focus())
 }
 
+/** 选择库里没有合适的？直接跳到音色设计自己造一个。 */
+function openDesignFromPicker() {
+  voiceModalOpen.value = false
+  switchTab('design')
+}
+
 /* ---------------- 试听 ---------------- */
 
 const previewing = ref(false)
@@ -1518,6 +1883,106 @@ async function handlePreviewVoice() {
     previewHint.value = error instanceof Error ? error.message : '试听失败，请稍后重试。'
   } finally {
     previewing.value = false
+  }
+}
+
+/* ---------------- 音色设计（Voice Design） ---------------- */
+
+const designPresetsAll = VOICE_DESIGN_PRESETS
+const designSceneOptions = getDesignSceneOptions()
+const designSceneFilter = ref<VoiceSceneKey | 'all'>('all')
+const designPresets = computed(() =>
+  designSceneFilter.value === 'all'
+    ? designPresetsAll
+    : designPresetsAll.filter((preset) => preset.scenes.includes(designSceneFilter.value as VoiceSceneKey)),
+)
+
+const designName = ref('')
+const designPrompt = ref('')
+const designPreviewText = ref(DEFAULT_DESIGN_PREVIEW_TEXT)
+const designing = ref(false)
+const designError = ref('')
+const deletingDesignedId = ref('')
+const designResult = ref<{
+  voiceId: string
+  name: string
+  url: string
+  durationMs: number
+  usageCharacters: number
+} | null>(null)
+
+const canDesign = computed(
+  () => !designing.value && designPrompt.value.trim().length >= 6 && !!designPreviewText.value.trim(),
+)
+
+function applyDesignPreset(preset: VoiceDesignPreset) {
+  designPrompt.value = preset.prompt
+  designName.value = preset.name
+  designPreviewText.value = preset.previewText
+  designError.value = ''
+}
+
+async function handleDesignVoice() {
+  if (!canDesign.value) return
+
+  designing.value = true
+  designError.value = ''
+  try {
+    const result = await designVoice({
+      prompt: designPrompt.value.trim(),
+      previewText: designPreviewText.value.trim(),
+    })
+
+    const name = designName.value.trim() || `设计音色 ${designedVoices.value.length + 1}`
+    revokeUrl(designResult.value?.url)
+    designResult.value = {
+      voiceId: result.voiceId,
+      name,
+      url: result.url,
+      durationMs: result.durationMs,
+      usageCharacters: result.usageCharacters,
+    }
+
+    // 试听音频转成 dataURL 存本地：临时音色 7 天后可能被清理，试听仍要能回放。
+    const demoDataUrl = result.blob.size ? await remoteAudioToDataUrl(result.url) : undefined
+    designedVoices.value = upsertDesignedVoice({
+      voiceId: result.voiceId,
+      name,
+      prompt: designPrompt.value.trim(),
+      createdAt: Date.now(),
+      demoDataUrl,
+      durationMs: result.durationMs,
+      used: false,
+    })
+  } catch (error) {
+    designError.value = error instanceof Error ? error.message : '音色设计失败，请稍后重试。'
+  } finally {
+    designing.value = false
+  }
+}
+
+async function handleDeleteDesignedVoice(voice: StoredDesignedVoice) {
+  if (!window.confirm(`删除音色「${voice.name}」？删除后该音色将无法再用于合成。`)) return
+
+  deletingDesignedId.value = voice.voiceId
+  let remoteMessage = ''
+  try {
+    // 没用于合成过的设计音色在上游只是临时音色，删不到也没关系，7 天后会自动过期。
+    if (voice.used) await deleteClonedVoice(voice.voiceId, 'voice_generation')
+  } catch (error) {
+    remoteMessage = error instanceof Error ? error.message : '服务端删除没有成功。'
+  } finally {
+    designedVoices.value = removeStoredDesignedVoice(voice.voiceId)
+    if (selectedVoiceId.value === voice.voiceId) selectedVoiceId.value = DEFAULT_VOICE_ID
+    if (designResult.value?.voiceId === voice.voiceId) {
+      revokeUrl(designResult.value.url)
+      designResult.value = null
+    }
+    deletingDesignedId.value = ''
+  }
+
+  if (remoteMessage) {
+    window.alert(`${remoteMessage}\n已从本机列表移除，未用于合成的远端音色会在 7 天后自动过期。`)
   }
 }
 
@@ -1639,6 +2104,11 @@ async function handleGenerate() {
     resultText.value = sourceText
 
     await pushHistory(generated, voice.name, sourceText)
+
+    // 设计音色只要真正用于合成一次，就会长期保留在账号里。
+    if (designedVoices.value.some((item) => item.voiceId === voice.voiceId)) {
+      designedVoices.value = markDesignedVoiceUsed(voice.voiceId)
+    }
 
     await nextTick()
     resultPanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -1952,7 +2422,7 @@ async function handleDeleteVoice(voice: StoredClonedVoice) {
 
 /* ---------------- 待确认：试听数据 ---------------- */
 
-function switchTab(tab: 'speech' | 'clone') {
+function switchTab(tab: 'speech' | 'design' | 'clone') {
   // 切到配音页时停掉正在进行的录音，避免麦克风在后台一直占用。
   if (tab === 'speech' && recorder.isRecording.value) recorder.cancel()
   activeTab.value = tab
@@ -1986,6 +2456,7 @@ onBeforeUnmount(() => {
   document.body.classList.remove('voice-modal-open')
   revokeUrl(result.value?.url)
   revokeUrl(preview.value?.url)
+  revokeUrl(designResult.value?.url)
   history.value.forEach((item) => revokeUrl(item.audioUrl))
   revokeUrl(sample.value?.previewUrl)
   recorder.cancel()
@@ -4319,19 +4790,254 @@ onBeforeUnmount(() => {
   margin-top: auto;
 }
 
+/* ========================= 音色筛选（场景 / 性别） ========================= */
+
+.voice-modal-meta {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+  padding: 0 22px 12px;
+}
+
+.voice-modal-scenes,
+.voice-modal-genders {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.voice-filter-chip {
+  padding: 5px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--studio-text-soft);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-base),
+    background var(--transition-base),
+    color var(--transition-base);
+}
+
+.voice-filter-chip:hover {
+  border-color: rgba(251, 146, 60, 0.36);
+  color: #fff;
+}
+
+.voice-filter-chip.active {
+  border-color: rgba(251, 146, 60, 0.5);
+  background: rgba(251, 146, 60, 0.14);
+  color: #ffd6ad;
+}
+
+.voice-option-chips {
+  display: flex;
+  gap: 4px;
+  min-height: 17px;
+  overflow: hidden;
+}
+
+.voice-option-chips em {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 9.5px;
+  font-style: normal;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* ========================= 音色设计 ========================= */
+
+.design-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: 16px;
+  align-items: start;
+}
+
+.design-side {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.design-preset-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px 18px;
+}
+
+.design-lead {
+  margin: 0;
+  color: var(--studio-text-hint);
+  font-size: 11.5px;
+  line-height: 1.7;
+}
+
+.design-scene-row {
+  padding: 0;
+}
+
+.design-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.design-preset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-base),
+    background var(--transition-base),
+    transform var(--transition-base);
+}
+
+.design-preset-card:hover {
+  border-color: rgba(251, 146, 60, 0.32);
+  background: rgba(251, 146, 60, 0.06);
+  transform: translateY(-1px);
+}
+
+.design-preset-card.active {
+  border-color: rgba(251, 146, 60, 0.5);
+  background: rgba(251, 146, 60, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(251, 146, 60, 0.12);
+}
+
+.design-preset-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.design-preset-top strong {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 12.5px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.design-preset-top em {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 9.5px;
+  font-style: normal;
+  letter-spacing: 0.04em;
+}
+
+.design-preset-blurb {
+  color: var(--studio-text-hint);
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+.design-preset-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.design-preset-tags em {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+  color: rgba(255, 255, 255, 0.46);
+  font-size: 9.5px;
+  font-style: normal;
+  line-height: 1.6;
+}
+
+.design-form-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px 18px;
+}
+
+.design-textarea {
+  min-height: 70px;
+  line-height: 1.7;
+  resize: vertical;
+}
+
+.design-submit {
+  width: 100%;
+}
+
+.design-result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(251, 146, 60, 0.3);
+  border-radius: 14px;
+  background: rgba(251, 146, 60, 0.07);
+}
+
+.design-result-meta {
+  margin: 0;
+  color: var(--studio-text-hint);
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+.my-voice-prompt {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: var(--studio-text-hint);
+  font-size: 10.5px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 /* ========================= 响应式 ========================= */
 
 @media (max-width: 1180px) {
   .speech-layout,
-  .clone-layout {
+  .clone-layout,
+  .design-layout {
     grid-template-columns: minmax(0, 1fr) 360px;
   }
 }
 
 @media (max-width: 980px) {
   .speech-layout,
-  .clone-layout {
+  .clone-layout,
+  .design-layout {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .design-preset-grid {
+    grid-template-columns: 1fr;
   }
 
   .control-panel {

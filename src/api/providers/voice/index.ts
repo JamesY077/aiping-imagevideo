@@ -14,17 +14,25 @@
 
 import { AppError } from '@/utils/errors'
 import { parseVoiceLanguage } from '@/features/voice/voices'
-import type { RemoteClonedVoice, SpeechAudioFormat, SystemVoice, VoiceCatalog } from '@/features/voice/types'
+import type {
+  RemoteClonedVoice,
+  RemoteDesignedVoice,
+  SpeechAudioFormat,
+  SystemVoice,
+  VoiceCatalog,
+} from '@/features/voice/types'
 
 export const SPEECH_ENDPOINT = '/audio/speech'
 export const VOICES_LIST_ENDPOINT = '/audio/minimax/voices/list'
 export const VOICES_UPLOAD_ENDPOINT = '/audio/minimax/voices/upload'
 export const VOICES_CLONE_ENDPOINT = '/audio/minimax/voices/clone'
 export const VOICES_DELETE_ENDPOINT = '/audio/minimax/voices/delete'
+export const VOICES_DESIGN_ENDPOINT = '/audio/minimax/voices/design'
 
 /** 语音合成属于长耗时接口，单独放宽超时。 */
 export const SPEECH_REQUEST_TIMEOUT = 300_000
 export const VOICE_CLONE_REQUEST_TIMEOUT = 300_000
+export const VOICE_DESIGN_REQUEST_TIMEOUT = 300_000
 export const VOICE_UPLOAD_REQUEST_TIMEOUT = 120_000
 
 interface BaseResp {
@@ -43,6 +51,18 @@ export interface RawVoiceListResponse {
   system_voice?: RawVoiceEntry[] | null
   voice_cloning?: RawVoiceEntry[] | null
   voice_generation?: RawVoiceEntry[] | null
+  base_resp?: BaseResp
+}
+
+export interface RawDesignResponse {
+  /** 试听音频（hex 编码 mp3） */
+  trial_audio?: string
+  voice_id?: string
+  extra_info?: {
+    usage_characters?: number
+    charge_method?: string
+    charge_model?: string
+  } | null
   base_resp?: BaseResp
 }
 
@@ -131,6 +151,19 @@ export function getVoiceApiErrorMessage(error: unknown, fallback = '操作没有
     return '音色复刻没有成功，请换一段更干净的样本音频后重试。'
   }
 
+  if (message.includes('voice design') || message.includes('voice_design')) {
+    if (message.includes('sensitive') || message.includes('risk') || message.includes('敏感')) {
+      return '音色描述没有通过内容风控，换个说法再试。'
+    }
+    if (message.includes('permission')) {
+      return '当前 API Key 没有音色设计权限，请先在 AIPing 完成账号认证。'
+    }
+    if (message.includes('invalid params')) {
+      return '音色描述不完整，请补充性别、年龄或音色质感后重试。'
+    }
+    return '音色设计没有成功，请调整描述后重试。'
+  }
+
   const status = axiosError?.response?.status
   if (status === 401 || status === 403) {
     return '鉴权失败，请重新登录或检查 API Key 权限。'
@@ -191,7 +224,21 @@ export function normalizeVoiceCatalog(payload: RawVoiceListResponse | null | und
     })
     .filter((voice): voice is RemoteClonedVoice => !!voice)
 
-  return { system, cloned }
+  // voice_generation 是「音色设计」生成的音色；只有真正用于合成过才会出现在这里。
+  // 上游不返回名称，这里不要用 voice_id 兜底，否则列表里会显示一串乱码似的 id。
+  const designed: RemoteDesignedVoice[] = (payload?.voice_generation || [])
+    .map((entry) => {
+      const voiceId = (entry.voice_id || '').trim()
+      if (!voiceId) return null
+      return {
+        voiceId,
+        name: (entry.voice_name || '').trim(),
+        createdAt: entry.created_time || '',
+      } satisfies RemoteDesignedVoice
+    })
+    .filter((voice): voice is RemoteDesignedVoice => !!voice)
+
+  return { system, cloned, designed }
 }
 
 /** 从合成响应里取出 hex 音频与统计信息。 */
@@ -257,6 +304,31 @@ export function extractCloneResult(payload: RawCloneResponse | null | undefined)
   return {
     demoUrl: payload?.demo_audio?.trim() || undefined,
     durationMs: Number(payload?.extra_info?.audio_length) || undefined,
+  }
+}
+
+/** 音色设计结果：新音色 id + 一次试听音频（hex mp3）。 */
+export function extractDesignResult(payload: RawDesignResponse | null | undefined): {
+  voiceId: string
+  hex: string
+  usageCharacters: number
+} {
+  assertBaseRespOk(payload, '音色设计失败，请稍后重试。')
+
+  const voiceId = (payload?.voice_id || '').trim()
+  if (!voiceId) {
+    throw new AppError('音色设计失败：没有拿到 voice_id，请重试。')
+  }
+
+  const hex = (payload?.trial_audio || '').trim()
+  if (hex && !/^[0-9a-fA-F]+$/.test(hex)) {
+    throw new AppError('音色设计返回的试听音频格式异常，请重试。')
+  }
+
+  return {
+    voiceId,
+    hex,
+    usageCharacters: Number(payload?.extra_info?.usage_characters) || 0,
   }
 }
 
