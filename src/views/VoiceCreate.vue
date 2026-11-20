@@ -289,7 +289,10 @@
               <li v-for="item in pagedHistory" :key="item.id" class="history-item">
                 <div class="history-top">
                   <span class="history-voice">{{ item.voiceName }}</span>
-                  <span class="history-time">{{ formatClock(item.createdAt) }}</span>
+                  <span class="history-tags">
+                    <span v-if="historyParamHint(item)" class="history-param">{{ historyParamHint(item) }}</span>
+                    <span class="history-time">{{ formatClock(item.createdAt) }}</span>
+                  </span>
                 </div>
                 <p class="history-text">{{ item.text }}</p>
                 <VoicePlayer
@@ -299,7 +302,9 @@
                   compact
                 >
                   <template #actions>
+                    <button class="mini-btn" type="button" @click="reuseHistory(item)">复用</button>
                     <button class="mini-btn" type="button" @click="downloadHistory(item)">下载</button>
+                    <button class="mini-btn" type="button" @click="removeHistory(item)">删除</button>
                   </template>
                 </VoicePlayer>
               </li>
@@ -696,12 +701,19 @@
                 {{ designing ? '正在设计音色…' : '生成音色与试听' }}
               </button>
 
+              <div class="design-estimate">
+                <span>预计计费约 {{ designEstimate }} 字符</span>
+                <span v-if="designPrompt.trim().length < 6" class="design-estimate-warn">
+                  描述再写详细一点效果更好
+                </span>
+              </div>
+
               <p v-if="designError" class="inline-error">{{ designError }}</p>
               <p class="field-hint">
                 设计出的音色 7 天内未用于合成会被上游删除；用它合成过一次就会长期保留。
               </p>
 
-              <div v-if="designResult" class="design-result">
+              <div v-if="designResult" ref="designResultRef" class="design-result">
                 <div class="clone-result-head">
                   <strong>{{ designResult.name }}</strong>
                   <span class="clone-id">{{ designResult.voiceId }}</span>
@@ -722,7 +734,15 @@
                   <button class="mini-btn" type="button" @click="useVoiceForSpeech(designResult.voiceId)">
                     用它配音
                   </button>
-                  <button class="mini-btn" type="button" @click="designResult = null">继续设计</button>
+                  <button
+                    class="mini-btn"
+                    type="button"
+                    :disabled="!canDesign"
+                    @click="handleDesignVoice"
+                  >
+                    再生成一个
+                  </button>
+                  <button class="mini-btn" type="button" @click="designResult = null">收起</button>
                 </div>
               </div>
             </div>
@@ -1105,6 +1125,7 @@
     <Teleport to="body">
       <div v-if="voiceModalOpen" class="voice-modal-layer" @click.self="closeVoicePicker">
         <section
+          ref="voiceModalRef"
           class="voice-modal"
           role="dialog"
           aria-modal="true"
@@ -1141,8 +1162,9 @@
                 type="search"
                 placeholder="搜索音色名称 / ID / 描述"
                 aria-label="搜索音色"
+                @keydown.enter.prevent="pickFirstVisibleVoice"
               />
-              <button v-if="voiceQuery" class="voice-search-clear" type="button" @click="voiceQuery = ''">
+              <button v-if="voiceQuery" class="voice-search-clear" type="button" @click="clearVoiceQuery">
                 清除
               </button>
             </label>
@@ -1214,13 +1236,17 @@
                 <em>{{ filteredClonedVoices.length }}</em>
               </p>
               <div class="voice-grid">
-                <button
+                <div
                   v-for="voice in filteredClonedVoices"
                   :key="voice.voiceId"
                   class="voice-option"
                   :class="{ active: voice.voiceId === selectedVoiceId }"
-                  type="button"
+                  role="button"
+                  tabindex="0"
+                  :aria-pressed="voice.voiceId === selectedVoiceId"
                   @click="selectVoice(voice.voiceId)"
+                  @keydown.enter.prevent="selectVoice(voice.voiceId)"
+                  @keydown.space.prevent="selectVoice(voice.voiceId)"
                 >
                   <span class="voice-option-top">
                     <strong>{{ voice.name }}</strong>
@@ -1247,7 +1273,24 @@
                     </span>
                   </span>
                   <span class="voice-option-desc">{{ voice.voiceId }}</span>
-                </button>
+                  <button
+                    class="voice-option-play"
+                    type="button"
+                    :disabled="previewing"
+                    :aria-label="`试听 ${voice.name}`"
+                    :title="`试听 ${voice.name}`"
+                    @click.stop="previewVoice(voice.voiceId)"
+                  >
+                    <span
+                      v-if="previewingVoiceId === voice.voiceId"
+                      class="voice-option-spinner"
+                      aria-hidden="true"
+                    />
+                    <svg v-else viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M8.4 5.2v13.6L19.5 12 8.4 5.2Z" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </template>
 
@@ -1257,13 +1300,17 @@
                 <em>{{ filteredDesignedVoices.length }}</em>
               </p>
               <div class="voice-grid">
-                <button
+                <div
                   v-for="voice in filteredDesignedVoices"
                   :key="voice.voiceId"
                   class="voice-option"
                   :class="{ active: voice.voiceId === selectedVoiceId }"
-                  type="button"
+                  role="button"
+                  tabindex="0"
+                  :aria-pressed="voice.voiceId === selectedVoiceId"
                   @click="selectVoice(voice.voiceId)"
+                  @keydown.enter.prevent="selectVoice(voice.voiceId)"
+                  @keydown.space.prevent="selectVoice(voice.voiceId)"
                 >
                   <span class="voice-option-top">
                     <strong>{{ voice.name }}</strong>
@@ -1285,7 +1332,24 @@
                     </span>
                   </span>
                   <span class="voice-option-desc">{{ voice.prompt || '账号里已有的设计音色' }}</span>
-                </button>
+                  <button
+                    class="voice-option-play"
+                    type="button"
+                    :disabled="previewing"
+                    :aria-label="`试听 ${voice.name}`"
+                    :title="`试听 ${voice.name}`"
+                    @click.stop="previewVoice(voice.voiceId)"
+                  >
+                    <span
+                      v-if="previewingVoiceId === voice.voiceId"
+                      class="voice-option-spinner"
+                      aria-hidden="true"
+                    />
+                    <svg v-else viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M8.4 5.2v13.6L19.5 12 8.4 5.2Z" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </template>
 
@@ -1295,13 +1359,17 @@
                 <em>{{ group.voices.length }}</em>
               </p>
               <div class="voice-grid">
-                <button
+                <div
                   v-for="voice in group.voices"
                   :key="voice.voiceId"
                   class="voice-option"
                   :class="{ active: voice.voiceId === selectedVoiceId }"
-                  type="button"
+                  role="button"
+                  tabindex="0"
+                  :aria-pressed="voice.voiceId === selectedVoiceId"
                   @click="selectVoice(voice.voiceId)"
+                  @keydown.enter.prevent="selectVoice(voice.voiceId)"
+                  @keydown.space.prevent="selectVoice(voice.voiceId)"
                 >
                   <span class="voice-option-top">
                     <strong>{{ voice.name }}</strong>
@@ -1331,13 +1399,42 @@
                     <em v-for="chip in getVoiceMetaChips(voice)" :key="chip">{{ chip }}</em>
                   </span>
                   <span class="voice-option-desc">{{ voice.description || voice.voiceId }}</span>
-                </button>
+                  <button
+                    class="voice-option-play"
+                    type="button"
+                    :disabled="previewing"
+                    :aria-label="`试听 ${voice.name}`"
+                    :title="`试听 ${voice.name}`"
+                    @click.stop="previewVoice(voice.voiceId)"
+                  >
+                    <span
+                      v-if="previewingVoiceId === voice.voiceId"
+                      class="voice-option-spinner"
+                      aria-hidden="true"
+                    />
+                    <svg v-else viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M8.4 5.2v13.6L19.5 12 8.4 5.2Z" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </template>
 
             <div v-if="!filteredClonedVoices.length && !filteredDesignedVoices.length && !groupedVoices.length" class="voice-empty">
-              没有匹配的音色，换个关键词或切换语言分组试试。
-              <button v-if="voiceQuery || sceneFilter !== 'all' || genderFilter !== 'all'" class="link-btn" type="button" @click="resetVoiceFilters">清除筛选</button>
+              <p>没有匹配的音色，换个关键词或切换语言分组试试。</p>
+              <div class="voice-empty-actions">
+                <button
+                  v-if="voiceQuery || sceneFilter !== 'all' || genderFilter !== 'all'"
+                  class="link-btn"
+                  type="button"
+                  @click="resetVoiceFilters"
+                >
+                  清除筛选
+                </button>
+                <button class="link-btn" type="button" @click="openDesignFromPicker">
+                  用音色设计造一个
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1401,6 +1498,7 @@ import {
   VOICE_EMOTIONS,
   VOICE_MODELS,
   VOICE_PARAM_LIMITS,
+  clampVoiceParam,
   getCloneDemoModel,
 } from '@/features/voice/models'
 import { useVoiceRecorder } from '@/features/voice/recorder'
@@ -1419,6 +1517,7 @@ import {
 } from '@/features/voice/storage'
 import {
   clearVoiceLibrary,
+  deleteVoiceLibraryItems,
   loadVoiceLibrary,
   saveVoiceLibraryItem,
   VOICE_LIBRARY_LIMIT,
@@ -1624,6 +1723,39 @@ function handleTranslateKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') {
     event.preventDefault()
     closeTranslatePicker()
+    return
+  }
+  trapFocus(event, translateDialogRef.value)
+}
+
+/**
+ * 键盘焦点锁在弹层内：Tab / Shift+Tab 到首尾时循环，
+ * 避免焦点跑到被遮罩的页面上（读屏和纯键盘操作都会踩到）。
+ */
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+function trapFocus(event: KeyboardEvent, container: HTMLElement | null | undefined) {
+  if (event.key !== 'Tab' || !container) return
+
+  const nodes = Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+    (element) => element.getClientRects().length > 0,
+  )
+  if (!nodes.length) return
+
+  const first = nodes[0]
+  const last = nodes[nodes.length - 1]
+  const active = document.activeElement as HTMLElement | null
+  const inside = !!active && container.contains(active)
+
+  if (event.shiftKey) {
+    if (!inside || active === first) {
+      event.preventDefault()
+      last.focus()
+    }
+  } else if (!inside || active === last) {
+    event.preventDefault()
+    first.focus()
   }
 }
 
@@ -1769,8 +1901,19 @@ const visibleVoiceCount = computed(
     groupedVoices.value.reduce((sum, group) => sum + group.voices.length, 0),
 )
 
+/** 搜索框回车时选中的第一个结果：优先自己造的音色，其次系统音色。 */
+const firstVisibleVoiceId = computed(() => {
+  return (
+    filteredDesignedVoices.value[0]?.voiceId ||
+    filteredClonedVoices.value[0]?.voiceId ||
+    groupedVoices.value.find((group) => group.voices.length)?.voices[0]?.voiceId ||
+    ''
+  )
+})
+
 function resetVoiceFilters() {
   voiceQuery.value = ''
+  languageFilter.value = 'zh'
   sceneFilter.value = 'all'
   genderFilter.value = 'all'
 }
@@ -1822,8 +1965,26 @@ watch(voiceModalOpen, (open) => {
 function handleVoiceModalKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') {
     event.preventDefault()
+    // 有搜索词时先清空，第二次按 Esc 才关闭面板。
+    if (voiceQuery.value) {
+      clearVoiceQuery()
+      return
+    }
     closeVoicePicker()
+    return
   }
+  trapFocus(event, voiceModalRef.value)
+}
+
+function clearVoiceQuery() {
+  voiceQuery.value = ''
+  voiceSearchRef.value?.focus()
+}
+
+/** 搜索框回车：直接选中第一个匹配的音色，少点一次。 */
+function pickFirstVisibleVoice() {
+  const voiceId = firstVisibleVoiceId.value
+  if (voiceId) selectVoice(voiceId)
 }
 
 function openVoicePicker() {
@@ -1846,20 +2007,55 @@ function openDesignFromPicker() {
 /* ---------------- 试听 ---------------- */
 
 const previewing = ref(false)
+const previewingVoiceId = ref('')
+const voiceModalRef = ref<HTMLElement | null>(null)
 const preview = ref<VoicePreview | null>(null)
 const previewHint = ref('')
 
-async function handlePreviewVoice() {
+/**
+ * 试听按字符计费，同一个音色在一次会话里反复听没必要重复花钱。
+ * 这里按 voiceId 缓存已合成的试听，命中缓存直接回放。
+ */
+const previewCache = new Map<string, VoicePreview>()
+const PREVIEW_CACHE_LIMIT = 16
+
+function rememberPreview(voiceId: string, entry: VoicePreview) {
+  previewCache.set(voiceId, entry)
+  if (previewCache.size <= PREVIEW_CACHE_LIMIT) return
+
+  for (const [key, value] of previewCache) {
+    if (previewCache.size <= PREVIEW_CACHE_LIMIT) break
+    if (key === voiceId || value.url === preview.value?.url) continue
+    revokeUrl(value.url)
+    previewCache.delete(key)
+  }
+}
+
+/** 试听指定音色（不传则试听当前音色）；选择库卡片上的播放键也走这里。 */
+async function previewVoice(voiceId?: string) {
   if (previewing.value) return
 
-  previewing.value = true
+  const targetId = voiceId || selectedVoiceId.value
+  const voice = allVoices.value.find((item) => item.voiceId === targetId) || selectedVoice.value
+
+  if (voice.voiceId !== selectedVoiceId.value) selectVoice(voice.voiceId)
   previewHint.value = ''
+
+  const cached = previewCache.get(voice.voiceId)
+  if (cached) {
+    preview.value = cached
+    previewHint.value = '本次会话已缓存这条试听，回放不再计费。'
+    return
+  }
+
+  previewing.value = true
+  previewingVoiceId.value = voice.voiceId
   try {
     const result = await synthesizeSpeech({
       model: model.id,
-      text: buildPreviewText(selectedVoice.value.name),
+      text: buildPreviewText(voice.name),
       voice: {
-        voiceId: selectedVoice.value.voiceId,
+        voiceId: voice.voiceId,
         speed: 1,
         vol: 1,
         pitch: 0,
@@ -1869,21 +2065,27 @@ async function handlePreviewVoice() {
       textNormalization: true,
     })
 
-    revokeUrl(preview.value?.url)
-    preview.value = {
+    const entry: VoicePreview = {
       url: result.url,
       durationMs: result.durationMs,
       format: result.format,
       createdAt: Date.now(),
       waveform: await computeWaveform(result.blob, 160),
-      voiceId: selectedVoice.value.voiceId,
+      voiceId: voice.voiceId,
     }
-    previewHint.value = `试听按 ${result.usageCharacters} 个字符计费。`
+    rememberPreview(voice.voiceId, entry)
+    preview.value = entry
+    previewHint.value = `试听按 ${result.usageCharacters} 个字符计费，本次会话内重复回放不再收费。`
   } catch (error) {
     previewHint.value = error instanceof Error ? error.message : '试听失败，请稍后重试。'
   } finally {
     previewing.value = false
+    previewingVoiceId.value = ''
   }
+}
+
+function handlePreviewVoice() {
+  void previewVoice()
 }
 
 /* ---------------- 音色设计（Voice Design） ---------------- */
@@ -1903,6 +2105,7 @@ const designPreviewText = ref(DEFAULT_DESIGN_PREVIEW_TEXT)
 const designing = ref(false)
 const designError = ref('')
 const deletingDesignedId = ref('')
+const designResultRef = ref<HTMLElement | null>(null)
 const designResult = ref<{
   voiceId: string
   name: string
@@ -1914,6 +2117,20 @@ const designResult = ref<{
 const canDesign = computed(
   () => !designing.value && designPrompt.value.trim().length >= 6 && !!designPreviewText.value.trim(),
 )
+
+/** 上游按「描述 + 试听文本」的字符数计费，生成前先让用户看到大概花多少。 */
+const designEstimate = computed(
+  () => designPrompt.value.trim().length + designPreviewText.value.trim().length,
+)
+
+/** 名称重复时自动加序号，避免「我设计的音色」里出现两个同名条目。 */
+function uniqueDesignedName(base: string): string {
+  const names = new Set(designedVoices.value.map((item) => item.name))
+  if (!names.has(base)) return base
+  let index = 2
+  while (names.has(`${base} ${index}`)) index += 1
+  return `${base} ${index}`
+}
 
 function applyDesignPreset(preset: VoiceDesignPreset) {
   designPrompt.value = preset.prompt
@@ -1933,7 +2150,7 @@ async function handleDesignVoice() {
       previewText: designPreviewText.value.trim(),
     })
 
-    const name = designName.value.trim() || `设计音色 ${designedVoices.value.length + 1}`
+    const name = uniqueDesignedName(designName.value.trim() || `设计音色 ${designedVoices.value.length + 1}`)
     revokeUrl(designResult.value?.url)
     designResult.value = {
       voiceId: result.voiceId,
@@ -1954,6 +2171,9 @@ async function handleDesignVoice() {
       durationMs: result.durationMs,
       used: false,
     })
+
+    await nextTick()
+    designResultRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   } catch (error) {
     designError.value = error instanceof Error ? error.message : '音色设计失败，请稍后重试。'
   } finally {
@@ -2132,6 +2352,10 @@ async function pushHistory(generated: SpeechResult, voiceName: string, sourceTex
     audioUrl: URL.createObjectURL(generated.blob),
     format: generated.format,
     size: generated.size,
+    speed: speed.value,
+    pitch: pitch.value,
+    vol: vol.value,
+    emotion: emotion.value,
     blob: generated.blob,
   }
 
@@ -2185,6 +2409,54 @@ function downloadResult() {
 
 function downloadHistory(item: VoiceHistoryItem & { blob: Blob }) {
   downloadBlob(item.blob, item.format)
+}
+
+/** 单条删除：只从本地音频库移除，不影响账号与音色。 */
+async function removeHistory(item: VoiceHistoryItem & { blob: Blob }) {
+  revokeUrl(item.audioUrl)
+  history.value = history.value.filter((entry) => entry.id !== item.id)
+  if (historyPage.value > historyPageCount.value) historyPage.value = Math.max(1, historyPageCount.value)
+  await deleteVoiceLibraryItems([item.id])
+}
+
+/** 历史记录的演绎参数提示；全默认时不显示，避免每条都挂一串 1.0×。 */
+function historyParamHint(item: VoiceHistoryItem): string {
+  const parts: string[] = []
+  if (typeof item.speed === 'number' && Math.abs(item.speed - speedRange.defaultValue) > 0.001) {
+    parts.push(`${item.speed.toFixed(2)}×`)
+  }
+  if (typeof item.pitch === 'number' && item.pitch !== pitchRange.defaultValue) {
+    parts.push(`语调 ${item.pitch > 0 ? '+' : ''}${item.pitch}`)
+  }
+  if (typeof item.vol === 'number' && Math.abs(item.vol - volRange.defaultValue) > 0.001) {
+    parts.push(`音量 ${item.vol.toFixed(1)}`)
+  }
+  if (item.emotion) {
+    const emotionLabel = VOICE_EMOTIONS.find((entry) => entry.value === item.emotion)?.label
+    parts.push(emotionLabel ?? item.emotion)
+  }
+  return parts.join(' · ')
+}
+
+/** 复用一条生成记录：文案、音色、演绎参数一起恢复，方便反复调整。 */
+function reuseHistory(item: VoiceHistoryItem & { blob: Blob }) {
+  text.value = item.text
+  scriptSelection.value = { start: item.text.length, end: item.text.length }
+  selectedVoiceId.value = item.voiceId
+  preview.value = null
+  previewHint.value = ''
+
+  if (typeof item.speed === 'number') speed.value = clampVoiceParam('speed', item.speed)
+  if (typeof item.pitch === 'number') pitch.value = clampVoiceParam('pitch', item.pitch)
+  if (typeof item.vol === 'number') vol.value = clampVoiceParam('vol', item.vol)
+  if (item.emotion !== undefined) emotion.value = item.emotion
+
+  switchTab('speech')
+  void nextTick(() => {
+    scriptRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    scriptRef.value?.focus()
+    scriptRef.value?.setSelectionRange(item.text.length, item.text.length)
+  })
 }
 
 /* ---------------- 参数 ---------------- */
@@ -2456,6 +2728,8 @@ onBeforeUnmount(() => {
   document.body.classList.remove('voice-modal-open')
   revokeUrl(result.value?.url)
   revokeUrl(preview.value?.url)
+  previewCache.forEach((entry) => revokeUrl(entry.url))
+  previewCache.clear()
   revokeUrl(designResult.value?.url)
   history.value.forEach((item) => revokeUrl(item.audioUrl))
   revokeUrl(sample.value?.previewUrl)
@@ -3120,6 +3394,24 @@ onBeforeUnmount(() => {
   font-variant-numeric: tabular-nums;
 }
 
+.history-tags {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.history-param {
+  padding: 1px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 205, 164, 0.78);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .history-text {
   max-width: 100%;
   min-width: 0;
@@ -3614,6 +3906,32 @@ onBeforeUnmount(() => {
   text-align: center;
 }
 
+.voice-empty p {
+  margin: 0;
+}
+
+.voice-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.voice-empty-actions .link-btn {
+  padding: 5px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.voice-empty-actions .link-btn:hover {
+  border-color: rgba(251, 146, 60, 0.42);
+  background: rgba(251, 146, 60, 0.1);
+  color: #ffcda4;
+}
+
 /* ========================= 音色选择大面板 ========================= */
 
 :global(body.voice-modal-open) {
@@ -3957,6 +4275,7 @@ onBeforeUnmount(() => {
 }
 
 .voice-option {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -3975,6 +4294,11 @@ onBeforeUnmount(() => {
 .voice-option:hover {
   border-color: rgba(251, 146, 60, 0.32);
   background: rgba(251, 146, 60, 0.06);
+}
+
+.voice-option:focus-visible {
+  outline: 2px solid rgba(251, 146, 60, 0.62);
+  outline-offset: 2px;
 }
 
 .voice-option.active {
@@ -4023,11 +4347,66 @@ onBeforeUnmount(() => {
 
 .voice-option-desc {
   overflow: hidden;
+  padding-right: 24px;
   color: var(--studio-text-hint);
   font-size: 10.5px;
   line-height: 1.5;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* 卡片右下角的快捷试听键：悬停 / 聚焦时出现，点一下直接合成一句试听。 */
+.voice-option-play {
+  position: absolute;
+  right: 8px;
+  bottom: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(16, 16, 22, 0.86);
+  color: #ffcda4;
+  opacity: 0;
+  cursor: pointer;
+  transition:
+    opacity var(--transition-base),
+    border-color var(--transition-base),
+    transform var(--transition-base);
+}
+
+.voice-option:hover .voice-option-play,
+.voice-option:focus-within .voice-option-play,
+.voice-option.active .voice-option-play {
+  opacity: 1;
+}
+
+.voice-option-play:hover {
+  border-color: rgba(251, 146, 60, 0.55);
+  transform: scale(1.06);
+}
+
+.voice-option-play:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.voice-option-play svg {
+  width: 10px;
+  height: 10px;
+  margin-left: 1px;
+}
+
+.voice-option-spinner {
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid rgba(255, 205, 164, 0.28);
+  border-top-color: #ffcda4;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 .voice-group-label em {
@@ -4991,6 +5370,21 @@ onBeforeUnmount(() => {
   width: 100%;
 }
 
+.design-estimate {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 10px;
+  margin-top: -4px;
+  color: var(--studio-text-hint);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.design-estimate-warn {
+  color: rgba(255, 196, 140, 0.82);
+}
+
 .design-result {
   display: flex;
   flex-direction: column;
@@ -5063,6 +5457,67 @@ onBeforeUnmount(() => {
   .voice-tabs {
     width: 100%;
     overflow-x: auto;
+  }
+
+  /* 手机端音色选择库：单列卡片 + 收紧内边距，避免标签和描述挤在一起 */
+  .voice-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .voice-option {
+    padding: 11px 13px;
+  }
+
+  .voice-option-play {
+    opacity: 1;
+  }
+
+  .voice-modal-layer {
+    padding: 10px;
+  }
+
+  .voice-modal {
+    height: calc(100dvh - 20px);
+    border-radius: 18px;
+  }
+
+  .voice-modal-head {
+    gap: 10px;
+    padding: 16px 16px 12px;
+  }
+
+  .voice-modal-toolbar {
+    padding: 12px 16px 0;
+  }
+
+  .voice-modal-filters,
+  .voice-modal-meta {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .voice-modal-list {
+    padding: 0 16px 14px;
+  }
+
+  .voice-modal-preview {
+    padding: 0 16px 10px;
+  }
+
+  .voice-modal-foot {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .voice-modal-actions {
+    justify-content: flex-end;
+  }
+
+  .design-preset-body,
+  .design-form-body {
+    padding: 14px;
   }
 
   .tabs-meta {

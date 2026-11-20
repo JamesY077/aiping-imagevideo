@@ -247,6 +247,19 @@ export function matchesVoiceMeta(
   return true
 }
 
+/** 场景同义词：让「纪录片」「哄睡」「带货」这类口语搜索也能命中。 */
+const VOICE_SCENE_SEARCH_ALIASES: Record<VoiceSceneKey, string> = {
+  narration: '纪录片 解说 朗读 叙述 旁白 配音员',
+  commercial: '广告 口播 带货 促销 宣传片 电商',
+  news: '新闻 播报 播音 主持 记者',
+  character: '角色 台词 动漫 动画 游戏 影视 剧集',
+  companion: '陪伴 哄睡 治愈 深夜 晚安 闺蜜 温柔',
+  kids: '童声 儿童 宝宝 绘本 童话 小朋友',
+  podcast: '播客 电台 访谈 夜间 深夜',
+  audiobook: '有声书 小说 评书 故事 长文 朗读',
+  education: '讲解 课程 科普 教学 老师 知识 培训',
+}
+
 /** 搜索用的附加关键词（场景、性别、年龄、自定义标签）。 */
 export function getVoiceSearchKeywords(
   voice: Pick<SystemVoice, 'voiceId' | 'name' | 'description' | 'language'>,
@@ -257,6 +270,8 @@ export function getVoiceSearchKeywords(
     VOICE_GENDER_LABELS[meta.gender],
     meta.age,
     ...meta.scenes.map((scene) => VOICE_SCENE_LABELS[scene]),
+    // 「纪录片」「哄睡」这类口语说法不会出现在官方描述里，按场景补一组同义词。
+    ...meta.scenes.map((scene) => VOICE_SCENE_SEARCH_ALIASES[scene]),
     ...meta.tags,
   ].join(' ')
 }

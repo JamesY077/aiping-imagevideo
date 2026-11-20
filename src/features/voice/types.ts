@@ -158,6 +158,11 @@ export interface VoiceHistoryItem {
   audioUrl: string
   format: SpeechAudioFormat
   size: number
+  /** 生成时使用的演绎参数（旧记录没有，复用时不覆盖当前设置） */
+  speed?: number
+  pitch?: number
+  vol?: number
+  emotion?: VoiceEmotion | ''
 }
 
 /**
