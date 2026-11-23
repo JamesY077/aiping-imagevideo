@@ -33,6 +33,12 @@ const MINIMAX_H3_LONG_POLL_TIMEOUT_MS = 30 * 60_000
 /** MiniMax-H3 2K：15s 原生 2K + 音频是当前最重档位，实际耗时可能超过 15 分钟。 */
 const MINIMAX_H3_2K_POLL_TIMEOUT_MS = 30 * 60_000
 const MINIMAX_H3_2K_LONG_POLL_TIMEOUT_MS = 40 * 60_000
+/**
+ * 可灵 4.0 单任务轮询预算：短视频也至少给 10 分钟，
+ * 长视频按「每 1 秒视频给 70 秒轮询」线性放宽（30s → 35 分钟）。
+ */
+const KLING_V4_POLL_TIMEOUT_PER_SECOND_MS = 70_000
+const KLING_V4_POLL_TIMEOUT_MS = 10 * 60_000
 
 export interface VideoPollOptions {
   /** 轮询间隔，默认 3000ms。 */
@@ -87,6 +93,12 @@ export function resolveVideoPollTimeoutMs(options: VideoPollOptions = {}): numbe
     return options.hasReferenceMedia
       ? SEEDANCE_REFERENCE_POLL_TIMEOUT_MS
       : SEEDANCE_POLL_TIMEOUT_MS
+  }
+
+  if (provider === 'kling-v4') {
+    return duration > 0
+      ? Math.max(KLING_V4_POLL_TIMEOUT_MS, duration * KLING_V4_POLL_TIMEOUT_PER_SECOND_MS)
+      : KLING_V4_POLL_TIMEOUT_MS
   }
 
   return DEFAULT_POLL_TIMEOUT_MS

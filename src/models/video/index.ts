@@ -3,6 +3,7 @@ import { klingVideoO1Model } from './klingVideoO1'
 import { klingV26Model } from './klingV26'
 import { klingV3Model } from './klingV3'
 import { klingV3OmniModel } from './klingV3Omni'
+import { klingV4Model, klingV4FlashModel } from './klingV4'
 import { minimaxHailuo23Model } from './minimaxHailuo23'
 import { minimaxH3Model } from './minimaxH3'
 import { viduQ3ProModel } from './viduQ3Pro'
@@ -16,6 +17,7 @@ export { klingVideoO1Model } from './klingVideoO1'
 export { klingV26Model } from './klingV26'
 export { klingV3Model } from './klingV3'
 export { klingV3OmniModel } from './klingV3Omni'
+export { klingV4Model, klingV4FlashModel } from './klingV4'
 export { minimaxHailuo23Aliases, minimaxHailuoStartEndAliases, minimaxHailuo23Model } from './minimaxHailuo23'
 export { minimaxH3Model } from './minimaxH3'
 export { viduQ3ProAliases, viduQ3ProModel } from './viduQ3Pro'
@@ -38,4 +40,6 @@ export const videoModelModules: VideoModelModule[] = [
   klingV3OmniModel,
   klingV3Model,
   klingV26Model,
+  klingV4Model,
+  klingV4FlashModel,
 ]

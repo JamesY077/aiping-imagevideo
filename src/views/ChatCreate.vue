@@ -202,7 +202,7 @@
               <span class="pchip">{{ activeGenerateModeLabel }}</span>
               <span class="pchip">{{ settingsStore.aspectRatio }}</span>
               <span class="pchip">{{ selectedVideoDurationLabel }}</span>
-              <span v-if="isMinimaxH3VideoModel" class="pchip">{{ settingsStore.videoResolution }}</span>
+              <span v-if="showsVideoResolution" class="pchip">{{ formattedVideoResolution }}</span>
               <span class="pchip">{{ settingsStore.batchSize }} 个</span>
               <span v-if="materialSummaryLabel" class="pchip" :class="{ 'pchip-warn': needsMaterialAttention }">
                 {{ materialSummaryLabel }}
@@ -268,26 +268,24 @@
               <p v-if="isReferenceVideoRatioLocked" class="rail-hint">带参考视频时，输出比例跟随参考视频。</p>
             </section>
 
-            <section v-if="isMinimaxH3VideoModel" class="rail-card">
+            <section v-if="videoResolutionOptions.length" class="rail-card">
               <span class="rail-label">分辨率</span>
               <div class="chip-row">
                 <button
+                  v-for="option in videoResolutionOptions"
+                  :key="option"
                   class="chip"
-                  :class="{ active: settingsStore.videoResolution === '768P' }"
+                  :class="{ active: settingsStore.videoResolution === option }"
                   type="button"
-                  @click="selectVideoResolution('768P')"
+                  :disabled="videoResolutionOptions.length === 1"
+                  @click="selectVideoResolution(option)"
                 >
-                  768P
-                </button>
-                <button
-                  class="chip"
-                  :class="{ active: settingsStore.videoResolution === '2K' }"
-                  type="button"
-                  @click="selectVideoResolution('2K')"
-                >
-                  2K
+                  {{ formatVideoResolution(option) }}
                 </button>
               </div>
+              <p v-if="videoResolutionOptions.length === 1" class="rail-hint">
+                当前模型固定使用 {{ formatVideoResolution(videoResolutionOptions[0]) }} 输出。
+              </p>
             </section>
 
             <section class="rail-card">
@@ -458,12 +456,12 @@
                 <div v-else-if="videoMode === 'referenceImage2video'" class="multimodal-panel">
                   <p class="multimodal-note">
                     参考生视频
-                    <small>上传参考图片（多图主体，最多 {{ KLING_REFERENCE_IMAGE_LIMIT }} 张），模型会参考图中的主体生成视频。上传后可在文本中输入 <b>@</b> 精确指定素材位置，例如「让 @图片1 中的角色走进 @图片2 的场景」。支持常见格式：图片 PNG / JPG / WebP，视频 MP4 / MOV / WebM。</small>
+                    <small>上传参考图片（多图主体，最多 {{ klingReferenceImageLimit }} 张），模型会参考图中的主体生成视频。上传后可在文本中输入 <b>@</b> 精确指定素材位置，例如「让 @图片1 中的角色走进 @图片2 的场景」。支持常见格式：图片 PNG / JPG / WebP。</small>
                   </p>
                   <div class="multimodal-group">
                     <div class="multimodal-group-head">
                       <span class="multimodal-group-title">参考图片</span>
-                      <span class="multimodal-group-count">{{ multimodalImages.length }}/{{ KLING_REFERENCE_IMAGE_LIMIT }}</span>
+                      <span class="multimodal-group-count">{{ multimodalImages.length }}/{{ klingReferenceImageLimit }}</span>
                     </div>
                     <div class="multimodal-thumb-row">
                       <div v-for="item in multimodalImages" :key="item.url" class="multimodal-thumb">
@@ -472,7 +470,7 @@
                         <button class="multimodal-thumb-remove" type="button" aria-label="移除" @click="removeMultimodalAsset('image', item)">×</button>
                       </div>
                       <button
-                        v-if="multimodalImages.length < KLING_REFERENCE_IMAGE_LIMIT"
+                        v-if="multimodalImages.length < klingReferenceImageLimit"
                         class="multimodal-add-btn"
                         type="button"
                         aria-label="添加参考图"
@@ -930,8 +928,10 @@ import {
   getLocalUploadAccept,
   getModelCapability,
   getDefaultVideoDuration,
+  getDefaultVideoResolution,
   getSupportedAspectRatios,
   getSupportedVideoDurations,
+  getSupportedVideoResolutions,
   modelRequiresReference,
   modelSupportsLocalUpload,
   type AspectRatioOption,
@@ -1193,7 +1193,8 @@ function selectVideoDuration(value: number) {
   settingsStore.saveToStorage()
 }
 
-function selectVideoResolution(value: '768P' | '2K') {
+function selectVideoResolution(value: string) {
+  if (!videoResolutionOptions.value.includes(value)) return
   settingsStore.videoResolution = value
   settingsStore.saveToStorage()
 }
@@ -1279,6 +1280,19 @@ const klingOmniVideoModeOptions: Array<{ value: VideoMode; label: string }> = [
   { value: 'text2video', label: '文生视频' },
   { value: 'referenceImage2video', label: '参考生视频' },
   { value: 'startEnd2video', label: '首尾帧生视频' },
+]
+
+// 可灵 4.0：文生 / 图生（首帧）/ 首尾帧（4.0）/ 参考生视频（4.0）。
+// Flash 仅支持文生与首帧图生。
+const klingV4VideoModeOptions: Array<{ value: VideoMode; label: string }> = [
+  { value: 'text2video', label: '文生视频' },
+  { value: 'image2video', label: '图生视频' },
+  { value: 'startEnd2video', label: '首尾帧生视频' },
+  { value: 'referenceImage2video', label: '参考生视频' },
+]
+const klingV4FlashVideoModeOptions: Array<{ value: VideoMode; label: string }> = [
+  { value: 'text2video', label: '文生视频' },
+  { value: 'image2video', label: '图生视频' },
 ]
 
 
@@ -1367,15 +1381,21 @@ const showCameraGuide = computed(() => {
 })
 
 const isKlingOmniVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'kling-omni')
+const isKlingV4VideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'kling-v4')
+const isKlingV4FlashModel = computed(() => isKlingV4VideoModel.value && settingsStore.selectedModel?.toLowerCase().includes('flash'))
 // Kling 参考生视频：复用多模态图片素材面板 + @ 引用
-const isKlingReferenceMode = computed(() => isKlingOmniVideoModel.value && videoMode.value === 'referenceImage2video')
+const isKlingReferenceMode = computed(
+  () => (isKlingOmniVideoModel.value || isKlingV4VideoModel.value) && videoMode.value === 'referenceImage2video',
+)
 
 
 const isSeedanceVideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'seedance-2')
 const isMinimaxH3VideoModel = computed(() => settingsStore.mediaType === 'video' && modelCapability.value?.videoRequestMode === 'minimax-h3')
 // MiniMax-H3 帧图模式（图生 / 尾帧 / 首尾帧）：比例由上传图片决定，不支持手动调整。
 const isFrameRatioLocked = computed(
-  () => isMinimaxH3VideoModel.value && ['image2video', 'endFrame2video', 'startEnd2video'].includes(videoMode.value),
+  () =>
+    (isMinimaxH3VideoModel.value && ['image2video', 'endFrame2video', 'startEnd2video'].includes(videoMode.value)) ||
+    (isKlingV4VideoModel.value && ['image2video', 'startEnd2video'].includes(videoMode.value)),
 )
 // 多模态参考：Seedance 2.0 与 MiniMax-H3 共用「素材 + @ 引用」面板。
 const isMultimodalReferenceMode = computed(() => (isSeedanceVideoModel.value || isMinimaxH3VideoModel.value) && videoMode.value === 'multimodalReference2video')
@@ -1388,7 +1408,7 @@ const isEditVideoMode = computed(() => isSeedanceVideoModel.value && videoMode.v
 const isSeedanceMentionMode = computed(() => isMultimodalReferenceMode.value || isEditVideoMode.value || isKlingReferenceMode.value)
 
 
-const usesViduLikeVideoMode = computed(() => isViduVideoModel.value || isMinimaxHailuoVideoModel.value || isMinimaxH3VideoModel.value || isKlingMultimodalVideoModel.value || isSeedanceVideoModel.value)
+const usesViduLikeVideoMode = computed(() => isViduVideoModel.value || isMinimaxHailuoVideoModel.value || isMinimaxH3VideoModel.value || isKlingMultimodalVideoModel.value || isKlingV4VideoModel.value || isSeedanceVideoModel.value)
 // 统一引用开关：MiniMax-H3 等视频模型只要处于「多模态参考」模式，就复用 seedance2 的 @ 引用面板。
 const isMentionReferenceMode = computed(
   () =>
@@ -1399,6 +1419,7 @@ const isMentionReferenceMode = computed(
 const activeVideoModeOptions = computed(() => {
   if (isMinimaxHailuoVideoModel.value) return minimaxHailuoVideoModeOptions
   if (isMinimaxH3VideoModel.value) return minimaxH3VideoModeOptions
+  if (isKlingV4VideoModel.value) return isKlingV4FlashModel.value ? klingV4FlashVideoModeOptions : klingV4VideoModeOptions
   if (isKlingMotionControlVideoModel.value) return klingMotionControlVideoModeOptions
   if (isKlingOmniVideoModel.value) return klingOmniVideoModeOptions
   if (isSeedanceVideoModel.value) return seedanceVideoModeOptions
@@ -1528,6 +1549,13 @@ const aspectRatioOptions = computed(() => {
 })
 
 const videoDurationOptions = computed(() => getSupportedVideoDurations(settingsStore.selectedModel) ?? [{ value: 6, label: '6s' }])
+const klingReferenceImageLimit = computed(() => (isKlingV4VideoModel.value ? 10 : KLING_REFERENCE_IMAGE_LIMIT))
+const videoResolutionOptions = computed(() => getSupportedVideoResolutions(settingsStore.selectedModel) ?? [])
+const showsVideoResolution = computed(() => videoResolutionOptions.value.length > 0)
+function formatVideoResolution(value: string) {
+  return value.toUpperCase()
+}
+const formattedVideoResolution = computed(() => formatVideoResolution(settingsStore.videoResolution))
 
 const selectedModelLabel = computed(() => settingsStore.selectedModel || '未选择模型')
 const selectedVideoDurationLabel = computed(() => {
@@ -1599,7 +1627,7 @@ const materialSummaryLabel = computed(() => {
       if (viduStartFrame.value) return '首帧已添加'
       return '首帧待上传'
     }
-    if (videoMode.value === 'referenceImage2video') return multimodalImages.value.length ? `参考图 ${multimodalImages.value.length}/${KLING_REFERENCE_IMAGE_LIMIT}` : '参考图待上传'
+    if (videoMode.value === 'referenceImage2video') return multimodalImages.value.length ? `参考图 ${multimodalImages.value.length}/${klingReferenceImageLimit.value}` : '参考图待上传'
     if (videoMode.value === 'multimodalReference2video') {
       const count = multimodalImages.value.length + multimodalVideos.value.length + multimodalAudios.value.length
       return count ? `多模态素材 ${count}` : '多模态素材可选'
@@ -1726,6 +1754,16 @@ function ensureSupportedVideoDuration() {
   if (settingsStore.mediaType !== 'video') return
   if (videoDurationOptions.value.some((option) => option.value === settingsStore.videoDuration)) return
   settingsStore.videoDuration = getDefaultVideoDuration(settingsStore.selectedModel)
+  settingsStore.saveToStorage()
+}
+
+/** 切换模型后校正分辨率档位（MiniMax-H3：768P/2K；Kling 4.0：720p/1080p；Flash：仅 720p）。 */
+function ensureSupportedVideoResolution() {
+  if (settingsStore.mediaType !== 'video') return
+  const options = videoResolutionOptions.value
+  if (!options.length) return
+  if (options.includes(settingsStore.videoResolution)) return
+  settingsStore.videoResolution = getDefaultVideoResolution(settingsStore.selectedModel) || options[0]
   settingsStore.saveToStorage()
 }
 
@@ -2129,8 +2167,12 @@ function handleMultimodalFileChange(e: Event, type: 'image' | 'video' | 'audio')
   if (!files.length) return
 
   const listRef = multimodalRefFromType(type)
-  const limit = type === 'image' && isImageMultiReferenceMode.value
-    ? imageReferenceLimit.value
+  const limit = type === 'image'
+    ? isImageMultiReferenceMode.value
+      ? imageReferenceLimit.value
+      : isKlingReferenceMode.value
+        ? klingReferenceImageLimit.value
+        : MULTIMODAL_LIMITS.image
     : MULTIMODAL_LIMITS[type]
 
   for (const file of files) {
@@ -2374,6 +2416,7 @@ onMounted(async () => {
   }
   ensureSupportedAspectRatio()
   ensureSupportedVideoDuration()
+  ensureSupportedVideoResolution()
   restoreLandingReferenceImage()
   const initialPrompt = typeof route.query.prompt === 'string' ? route.query.prompt.trim() : ''
   if (initialPrompt) {
@@ -2412,7 +2455,7 @@ watch(
     if (settingsStore.mediaType === 'image' && capability?.imageReferenceMode !== 'multi') {
       clearMultimodalAssets()
     }
-    const usesModeSwitcher = settingsStore.mediaType === 'video' && ['viduq3-fast', 'minimax-hailuo', 'minimax-h3', 'kling-v26', 'kling-v3', 'kling-omni', 'seedance-2'].includes(capability?.videoRequestMode || '')
+    const usesModeSwitcher = settingsStore.mediaType === 'video' && ['viduq3-fast', 'minimax-hailuo', 'minimax-h3', 'kling-v26', 'kling-v3', 'kling-omni', 'kling-v4', 'seedance-2'].includes(capability?.videoRequestMode || '')
     if (!usesModeSwitcher) {
       videoMode.value = 'text2video'
       removeViduFrames()
@@ -2437,6 +2480,7 @@ watch(
     }
     ensureSupportedAspectRatio()
     ensureSupportedVideoDuration()
+    ensureSupportedVideoResolution()
   }
 )
 

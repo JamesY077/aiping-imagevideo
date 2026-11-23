@@ -198,6 +198,68 @@ export async function buildVideoParams(
         setVideoRatio(videoParams, getKlingAspectRatio(aspectRatio))
       }
       break
+    case 'kling-v4': {
+      // 可灵 4.0 新版接口：
+      // - 文生视频：prompt + settings.aspect_ratio；
+      // - 图生视频：首帧 / 首尾帧（Kling-4.0 支持尾帧，Flash 仅首帧）；
+      // - 全能参考：reference_images 交给 omni-video。
+      const isFlash = (model || '').toLowerCase() === 'kling-4.0-flash'
+      const maxDuration = isFlash ? 20 : 30
+      videoParams.model_name = model || undefined
+      videoParams.duration = Math.min(maxDuration, Math.max(3, Math.round(duration || 5)))
+      videoParams.resolution = isFlash
+        ? '720p'
+        : videoResolution === '720p'
+          ? '720p'
+          : '1080p'
+
+      if (videoGenerationMode === 'referenceImage2video') {
+        const referenceImages = uploadValues.filter((value): value is string => !!value).slice(0, 10)
+        if (referenceImages.length) videoParams.reference_images = referenceImages
+        videoParams.aspect_ratio = aspectRatio || '16:9'
+        delete videoParams.ratio
+      } else if (videoGenerationMode === 'startEnd2video') {
+        // 首尾帧：比例由首帧决定，不传 aspect_ratio / ratio。
+        if (uploadValues[0]) videoParams.image = uploadValues[0]
+        if (uploadValues[1] && !isFlash) videoParams.image_tail = uploadValues[1]
+        deleteVideoRatio(videoParams)
+      } else if (uploadValue) {
+        // 图生视频：比例由首帧决定。
+        videoParams.image = uploadValue
+        deleteVideoRatio(videoParams)
+      } else {
+        videoParams.aspect_ratio = aspectRatio || '16:9'
+        delete videoParams.ratio
+      }
+
+      delete videoParams.seconds
+      delete videoParams.mode
+      delete videoParams.sound
+      delete videoParams.keep_original_sound
+      delete videoParams.character_orientation
+      delete videoParams.motion_control
+      delete videoParams.image_url
+      delete videoParams.image_list
+      delete videoParams.images
+      delete videoParams.img_url
+      delete videoParams.first_frame_image
+      delete videoParams.last_frame_image
+      delete videoParams.first_frame_url
+      delete videoParams.last_frame_url
+      delete videoParams.start_image
+      delete videoParams.end_image
+      delete videoParams.subject_reference
+      delete videoParams.video_url
+      delete videoParams.video_list
+      delete videoParams.audio
+      delete videoParams.movement_amplitude
+      delete videoParams.off_peak
+      delete videoParams.seed
+      delete videoParams.style
+      delete videoParams.payload
+      delete videoParams.extra_body
+      break
+    }
     case 'viduq3-fast':
       if (uploadValues.length) {
         videoParams.images = uploadValues.slice(0, 2)

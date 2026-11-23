@@ -33,6 +33,13 @@ import {
   collectMinimaxH3LastFrame,
   normalizeMinimaxH3Response,
 } from '@/api/providers/video/minimaxH3Shared'
+import {
+  buildKlingV4RequestBody,
+  getKlingV4Endpoint,
+  normalizeKlingV4VideoGenerateResponse,
+  normalizeKlingV4VideoStatus,
+  stripKlingV4InternalFields,
+} from '@/api/providers/video/klingV4Shared'
 
 import { AppError } from '@/utils/errors'
 import {
@@ -729,6 +736,52 @@ async function generateMinimaxH3Video(params: VideoGenerateRequest, canonicalMod
   }
 }
 
+/**
+ * 可灵 4.0 / 4.0-Flash 专用生成流程：
+ * 1. 参考图 / 首尾帧已由通用上传流程处理为公网 URL（或压缩后的 dataURI）；
+ * 2. 按能力组装新版 contents 请求体，端点由 URL 中的 {model} 指定；
+ * 3. 创建任务返回 { data: { id, status } }，统一归一化为前端任务结构。
+ */
+async function generateKlingV4Video(params: VideoGenerateRequest, canonicalModel: string): Promise<VideoGenerateResponse> {
+  const body = buildKlingV4RequestBody(params, canonicalModel)
+  const endpoint = getKlingV4Endpoint(body, canonicalModel)
+  const requestBody = stripKlingV4InternalFields(body)
+
+  debugLog(`generateVideo provider=kling-v4 endpoint=${endpoint} body:`, sanitizeDebugBody(requestBody))
+  try {
+    const response = await postVideoCreateWithRetry(endpoint, requestBody)
+    return normalizeKlingV4VideoGenerateResponse(response.data, endpoint, String(body.model || canonicalModel))
+  } catch (error: any) {
+    debugLog('generateKlingV4Video error:', {
+      endpoint,
+      status: error.response?.status,
+      data: error.response?.data,
+    })
+
+    const status = error?.response?.status
+    const message = readUpstreamMessage(error)
+
+    if (status === 400 || status === 422) {
+      if (/duration/i.test(message)) {
+        const durationRange = canonicalModel.toLowerCase().includes('flash') ? '3-20 秒' : '3-30 秒'
+        throw new AppError(
+          `Kling 4.0 的时长参数未被接受：${canonicalModel} 支持 ${durationRange}，请调整时长后重试。`,
+        )
+      }
+      if (/image|url|frame|resolution/i.test(message)) {
+        throw new AppError(
+          'Kling 4.0 的参考图或清晰度参数未被接受：请确认图片为公网可访问的 PNG / JPG（单张不超过 30 MB、宽高不少于 300 px），并检查分辨率是否受当前模型支持。',
+        )
+      }
+      throw new AppError(
+        getApiErrorMessage(error, 'Kling 4.0 的参数未被接受，请调整提示词、时长、分辨率或参考图后重试。'),
+      )
+    }
+
+    throw new AppError(getApiErrorMessage(error, 'Kling 4.0 视频生成失败，请稍后重试或切换其他模型。'))
+  }
+}
+
 export async function generateVideo(params: VideoGenerateRequest): Promise<VideoGenerateResponse> {
   const provider = getVideoProvider(params)
   const preparedParams = provider.provider === 'seedance'
@@ -745,6 +798,11 @@ export async function generateVideo(params: VideoGenerateRequest): Promise<Video
   // MiniMax-H3 走独立的 content 数组协议端点。
   if (provider.provider === 'minimax-h3') {
     return generateMinimaxH3Video(preparedParams, provider.models[0])
+  }
+
+  // 可灵 4.0 走新版「contents + settings」协议，需要按能力选择 text/image/omni 端点。
+  if (provider.provider === 'kling-v4') {
+    return generateKlingV4Video(preparedParams, provider.models[0])
   }
 
   const fullBody = provider.buildRequestBody(preparedParams)
@@ -987,6 +1045,25 @@ export async function getVideoStatusWithProvider(
         data: error.response?.data,
       })
       throw new AppError(getApiErrorMessage(error, `Seedance 视频状态查询失败 (task: ${taskId})`), {
+        code: error?.response?.status ? `http_${error.response.status}` : 'network',
+      })
+    }
+  }
+
+  // 可灵 4.0 新版任务查询：/multimodal/kling/tasks?task_ids={taskId}
+  if (normalizedProvider === 'kling-v4') {
+    try {
+      debugLog(`getVideoStatus provider=kling-v4 endpoint=/multimodal/kling/tasks task=${taskId}`)
+      const response = await client.get('/multimodal/kling/tasks', {
+        params: { task_ids: taskId },
+      })
+      return normalizeKlingV4VideoStatus(response.data, taskId)
+    } catch (error: any) {
+      debugLog('getVideoStatus kling-v4 error:', {
+        status: error.response?.status,
+        data: error.response?.data,
+      })
+      throw new AppError(getApiErrorMessage(error, `Kling 4.0 视频状态查询失败 (task: ${taskId})`), {
         code: error?.response?.status ? `http_${error.response.status}` : 'network',
       })
     }

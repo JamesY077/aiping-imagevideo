@@ -36,12 +36,17 @@ export interface ModelCapability {
   imageReferenceMode?: 'multi'
   /** 多图参考的最大张数（默认 10，与 Seedream 5.0 Lite 上限一致）。 */
   imageReferenceLimit?: number
-  videoRequestMode?: 'kling-v26' | 'kling-v3' | 'kling-omni' | 'kling-o1' | 'viduq3-fast' | 'minimax-hailuo' | 'minimax-h3' | 'seedance-2'
+  videoRequestMode?: 'kling-v26' | 'kling-v3' | 'kling-omni' | 'kling-o1' | 'kling-v4' | 'viduq3-fast' | 'minimax-hailuo' | 'minimax-h3' | 'seedance-2'
   /**
    * 视频时长可选项（秒）。不同模型上限不同，未配置时由 videoRequestMode 的默认档位决定。
    * 例：Seedance 2.0 系列 4-15s，Seedance 2.5 4-30s。
    */
   videoDurations?: number[]
+  /**
+   * 视频分辨率可选项。未配置时不展示分辨率选择。
+   * 例：MiniMax-H3 为 768P / 2K；Kling 4.0 为 720p / 1080p，Kling 4.0 Flash 仅 720p。
+   */
+  videoResolutions?: string[]
 
 }
 
@@ -197,6 +202,10 @@ export function getSupportedAspectRatios(
   if (mode === 'kling-v26' || mode === 'kling-v3' || mode === 'kling-omni' || mode === 'kling-o1') {
     return ['16:9', '9:16', '1:1']
   }
+  // Kling 4.0 文生视频 / 参考生视频支持 6 种画幅；图生 / 首尾帧模式由首帧决定。
+  if (mode === 'kling-v4') {
+    return ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']
+  }
   return null
 }
 
@@ -258,6 +267,25 @@ export function getSupportedVideoDurations(modelId: string | null | undefined): 
   }
 }
 
+/**
+ * 返回指定视频模型可选的清晰度档位。
+ * 未显式声明 videoResolutions 的模型（目前仅 MiniMax-H3）沿用旧版 768P / 2K。
+ */
+export function getSupportedVideoResolutions(modelId: string | null | undefined): string[] | null {
+  const capability = getModelCapability(modelId)
+  if (capability?.videoResolutions?.length) return capability.videoResolutions
+  if (capability?.videoRequestMode === 'minimax-h3') return ['768P', '2K']
+  return null
+}
+
+/** 返回指定视频模型的默认清晰度档位；不支持的模型返回 null。 */
+export function getDefaultVideoResolution(modelId: string | null | undefined): string | null {
+  const options = getSupportedVideoResolutions(modelId)
+  if (!options?.length) return null
+  // 优先 1080P / 768P 这类常规档位，避免默认落到 720P 或 2K。
+  return options.find((option) => option === '1080p' || option === '768P') ?? options[0]
+}
+
 export function getDefaultVideoDuration(modelId: string | null | undefined): number {
   const options = getSupportedVideoDurations(modelId)
   if (!options?.length) return 6
@@ -312,6 +340,13 @@ export function getSupportedVideoModes(modelId: string | null | undefined): Vide
     case 'kling-v26':
     case 'kling-v3':
       return buildVideoModeOptions(['text2video', 'startEnd2video', 'motionControl2video'])
+
+    case 'kling-v4':
+      // Kling 4.0 Flash 仅支持文生 / 首帧图生；4.0 额外支持首尾帧与多图参考。
+      if (modelId?.toLowerCase().includes('flash')) {
+        return buildVideoModeOptions(['text2video', 'image2video'])
+      }
+      return buildVideoModeOptions(['text2video', 'image2video', 'startEnd2video', 'referenceImage2video'])
 
 
     case 'seedance-2':
