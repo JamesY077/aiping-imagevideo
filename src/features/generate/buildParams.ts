@@ -4,6 +4,7 @@ import type { ImageGenerateRequest, VideoGenerateRequest } from '@/types/api'
 import { aspectRatioToDimensions, aspectRatioToImageSize } from '@/features/generate/aspectRatio'
 import { fileToBase64, toRawBase64 } from '@/features/generate/files'
 import { setVideoRatio, deleteVideoRatio } from '@/features/generate/video'
+import { normalizeSeedanceResolution } from '@/api/providers/video/seedanceShared'
 
 export type ImageRequestMode = NonNullable<ModelCapability['imageRequestMode']>
 export type UploadInput = UploadedFile | UploadedFile[] | null | undefined
@@ -429,6 +430,9 @@ export async function buildVideoParams(
       if (referenceAudios.length) videoParams.reference_audios = referenceAudios
 
       videoParams.duration = duration || 5
+      // Seedance 2 系列支持 480p / 720p / 1080p / 4k（fast / mini 仅前两档）。
+      // 上游要求小写，不传时默认 720p；这里按模型能力归一化后再下发。
+      videoParams.resolution = normalizeSeedanceResolution(model, videoResolution)
       videoParams.audio = true
       videoParams.watermark = false
       deleteVideoRatio(videoParams)
@@ -449,7 +453,6 @@ export async function buildVideoParams(
       delete videoParams.images
       delete videoParams.first_frame_url
       delete videoParams.last_frame_url
-      delete videoParams.resolution
       delete videoParams.movement_amplitude
       delete videoParams.off_peak
       delete videoParams.seed

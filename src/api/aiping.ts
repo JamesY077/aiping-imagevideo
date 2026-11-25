@@ -20,6 +20,7 @@ import {
   collectSeedanceReferenceImages,
   collectSeedanceReferenceVideos,
   collectSeedanceReferenceAudios,
+  normalizeSeedanceResolution,
   normalizeSeedanceResponse,
 } from '@/api/providers/video/seedanceShared'
 import {
@@ -660,6 +661,7 @@ async function generateSeedanceVideo(params: VideoGenerateRequest, canonicalMode
     generate_audio: typeof params.audio === 'boolean' ? params.audio : true,
     ratio,
     duration: params.duration || params.seconds || 5,
+    resolution: normalizeSeedanceResolution(params.model || canonicalModel, params.resolution),
     watermark: typeof params.watermark === 'boolean' ? params.watermark : false,
   })
 

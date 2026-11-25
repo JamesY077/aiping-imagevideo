@@ -31,6 +31,34 @@ export function isSeedance2ModelId(modelId: string | null | undefined): boolean 
 }
 
 /**
+ * Seedance 2 系列的分辨率档位（上游要求小写，4K 写作 `4k`）。
+ * 官方规格：
+ * - Seedance 2.0 / 2.5：480p / 720p / 1080p / 4k；
+ * - Seedance 2.0-fast / 2.0-mini：仅 480p / 720p。
+ */
+export const SEEDANCE_RESOLUTIONS = ['480p', '720p', '1080p', '4k'] as const
+export const SEEDANCE_LIMITED_RESOLUTIONS = ['480p', '720p'] as const
+
+/** 返回指定 Seedance 模型支持的分辨率档位。 */
+export function getSeedanceResolutions(modelId: string | null | undefined): string[] {
+  const normalized = (modelId || '').toLowerCase()
+  if (normalized.includes('fast') || normalized.includes('mini')) {
+    return [...SEEDANCE_LIMITED_RESOLUTIONS]
+  }
+  return [...SEEDANCE_RESOLUTIONS]
+}
+
+/** 校正分辨率档位；不属于该模型支持范围时回落到上游默认 720p。 */
+export function normalizeSeedanceResolution(
+  modelId: string | null | undefined,
+  value: string | null | undefined
+): string {
+  const allowed = getSeedanceResolutions(modelId)
+  const normalized = String(value || '').trim().toLowerCase()
+  return allowed.includes(normalized) ? normalized : '720p'
+}
+
+/**
  * 从视频请求参数中收集所有可作为「参考图」的图片地址（URL 或 base64 dataURI）。
  * Seedance 2.0 支持传入多张参考图，这里做去重后按顺序返回。
  */
@@ -127,6 +155,7 @@ export function buildSeedanceRequestBody(params: VideoGenerateRequest, canonical
     generate_audio: typeof params.audio === 'boolean' ? params.audio : true,
     ratio: params.aspect_ratio || params.ratio || '16:9',
     duration: params.duration || params.seconds || 5,
+    resolution: normalizeSeedanceResolution(params.model || canonicalModel, params.resolution),
     watermark: typeof params.watermark === 'boolean' ? params.watermark : false,
   }
 }

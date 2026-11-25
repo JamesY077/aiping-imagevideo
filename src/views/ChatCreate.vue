@@ -303,6 +303,9 @@
               <p v-if="videoResolutionOptions.length === 1" class="rail-hint">
                 当前模型固定使用 {{ formatVideoResolution(videoResolutionOptions[0]) }} 输出。
               </p>
+              <p v-else-if="videoResolutionOptions.includes('4k')" class="rail-hint">
+                4K（16:9 为 3840 × 2160，H.265 10bit）画面最清晰，耗时与费用也更高。
+              </p>
             </section>
 
             <section class="rail-card">

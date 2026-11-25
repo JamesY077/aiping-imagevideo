@@ -17,6 +17,9 @@ export const doubaoSeedance20Model: VideoModelModule = {
     videoRequestMode: 'seedance-2',
     // 实测上限：4-15s
     videoDurations: [4, 5, 6, 8, 10, 12, 15],
+    // 官方规格：480p / 720p / 1080p / 4k；上游默认 720p。
+    videoResolutions: ['480p', '720p', '1080p', '4k'],
+    videoResolutionDefault: '720p',
   },
   adapter: createSeedanceProvider('Doubao-Seedance-2.0'),
   example: createModelExample({

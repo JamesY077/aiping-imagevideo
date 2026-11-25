@@ -52,6 +52,12 @@ export interface ModelCapability {
    * 例：MiniMax-H3 为 768P / 2K；Kling 4.0 为 720p / 1080p，Kling 4.0 Flash 仅 720p。
    */
   videoResolutions?: string[]
+  /**
+   * 视频分辨率默认档位。未配置时沿用 getDefaultVideoResolution 的通用规则
+   * （优先 1080p / 768P，否则取首项）。
+   * 例：Seedance 系列上游默认 720p，避免默认档位抬高费用。
+   */
+  videoResolutionDefault?: string
 
 }
 
@@ -299,6 +305,9 @@ export function getSupportedVideoResolutions(modelId: string | null | undefined)
 export function getDefaultVideoResolution(modelId: string | null | undefined): string | null {
   const options = getSupportedVideoResolutions(modelId)
   if (!options?.length) return null
+  // 模型显式声明默认档位时优先使用（如 Seedance 系列保持上游默认 720p）。
+  const declared = getModelCapability(modelId)?.videoResolutionDefault
+  if (declared && options.includes(declared)) return declared
   // 优先 1080P / 768P 这类常规档位，避免默认落到 720P 或 2K。
   return options.find((option) => option === '1080p' || option === '768P') ?? options[0]
 }
