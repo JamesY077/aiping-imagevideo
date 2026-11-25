@@ -58,6 +58,9 @@ export const useSettingsStore = defineStore('settings', () => {
   // 视频分辨率档位：MiniMax-H3 为 768P / 2K，Kling 4.0 为 720p / 1080p。
   // 统一存字符串，切换模型时由页面按模型能力校正。
   const videoResolution = ref('1080p')
+  // 图片分辨率档位：MiniMax-H3-Image 支持 2K / 4K，其余模型忽略。
+  // 默认 2K，兼顾速度与成本；4K 为官方最佳画质档位。
+  const imageResolution = ref('2K')
   // 提示词增强 / AI 润色默认开启，模型默认 DeepSeek-V4.1-Flash-1017。
   const promptPolishEnabled = ref(true)
   const promptPolishModel = ref(DEFAULT_PROMPT_POLISH_MODEL)
@@ -80,6 +83,9 @@ export const useSettingsStore = defineStore('settings', () => {
       videoResolution.value = typeof settings.videoResolution === 'string' && settings.videoResolution
         ? settings.videoResolution
         : '1080p'
+      imageResolution.value = typeof settings.imageResolution === 'string' && settings.imageResolution
+        ? settings.imageResolution
+        : '2K'
       promptPolishEnabled.value = settings.promptPolishEnabled !== false
       promptPolishModel.value = settings.promptPolishModel || DEFAULT_PROMPT_POLISH_MODEL
       promptPolishSystemPrompt.value = settings.promptPolishSystemPrompt || ''
@@ -98,6 +104,7 @@ export const useSettingsStore = defineStore('settings', () => {
         videoDuration: videoDuration.value,
         batchSize: batchSize.value,
         videoResolution: videoResolution.value,
+        imageResolution: imageResolution.value,
         promptPolishEnabled: promptPolishEnabled.value,
         promptPolishModel: promptPolishModel.value,
         promptPolishSystemPrompt: promptPolishSystemPrompt.value,
@@ -134,6 +141,7 @@ export const useSettingsStore = defineStore('settings', () => {
     videoDuration,
     batchSize,
     videoResolution,
+    imageResolution,
     promptPolishEnabled,
     promptPolishModel,
     promptPolishSystemPrompt,

@@ -27,6 +27,8 @@ export interface GenerateOptions {
   generationFile?: UploadInput
   /** 覆盖图片请求的 size（扩图使用 2K 目标尺寸）。 */
   imageSize?: string
+  /** 图片分辨率档位（MiniMax-H3-Image：2K / 4K，其余图片模型忽略）。 */
+  imageResolution?: string | null
   /** 视频生成方式；部分模型（如 Seedance 编辑视频）需要据此改写比例与时长。 */
   videoGenerationMode?: VideoGenerationMode | null
   /** 直接使用指定布局生成（Moss 图层编辑后重新生成）。 */
@@ -188,7 +190,9 @@ export function useGenerate() {
         ? [EXPAND_IMAGE_INSTRUCTION, prompt.trim()].filter(Boolean).join('\n\n')
         : await buildEffectivePrompt(prompt, skillContent)
       const capability = getModelCapability(model)
-      const outputSize = parseImageSize(options.imageSize)
+      const outputSize =
+        parseImageSize(options.imageSize)
+        || aspectRatioToDimensions(aspectRatio, capability?.imageRequestMode, options.imageResolution)
 
       if (generateType === 'image') {
         // Moss 分层：可直接沿用编辑后的布局，或先让文本模型把自然语言拆成布局。
@@ -263,6 +267,7 @@ export function useGenerate() {
           capability?.imageRequestMode,
           options.imageSize,
           capability?.imageReferenceMode,
+          options.imageResolution,
         )
 
         if (requestedBatchSize === 1) {

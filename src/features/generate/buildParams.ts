@@ -21,7 +21,9 @@ export async function buildImageParams(
   mode: ImageRequestMode | undefined,
   sizeOverride?: string,
   /** 'multi' 时把多张参考图作为 image 数组下发（Seedream 5.0 Lite 支持）。 */
-  imageReferenceMode?: ModelCapability['imageReferenceMode']
+  imageReferenceMode?: ModelCapability['imageReferenceMode'],
+  /** 图片分辨率档位（MiniMax-H3-Image：2K / 4K，其余模型忽略）。 */
+  imageResolution?: string | null
 ): Promise<ImageGenerateRequest> {
   const uploadedFiles = Array.isArray(uploadedFile) ? uploadedFile : uploadedFile ? [uploadedFile] : []
   const uploadValues = (await Promise.all(
@@ -49,7 +51,7 @@ export async function buildImageParams(
   } else if (mode === 'minimax-h3-image') {
     // MiniMax-H3-Image：显式 WxH，宽高比与尺寸二选一，不能同时传 width/height。
     // 有参考图时由 provider 改走 /images/edits 的 images[] 协议。
-    imageParams.size = aspectRatioToImageSize(aspectRatio, mode, 'x')
+    imageParams.size = aspectRatioToImageSize(aspectRatio, mode, 'x', imageResolution || '2K')
     imageParams.output_format = 'png'
     imageParams.watermark = false
     delete imageParams.width

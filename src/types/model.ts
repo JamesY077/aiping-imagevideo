@@ -36,6 +36,11 @@ export interface ModelCapability {
   imageReferenceMode?: 'multi'
   /** 多图参考的最大张数（默认 10，与 Seedream 5.0 Lite 上限一致）。 */
   imageReferenceLimit?: number
+  /**
+   * 图片分辨率档位（如 MiniMax-H3-Image 的 2K / 4K）。未配置时不展示分辨率选择。
+   * 首项为默认档位。
+   */
+  imageResolutions?: string[]
   videoRequestMode?: 'kling-v26' | 'kling-v3' | 'kling-omni' | 'kling-o1' | 'kling-v4' | 'viduq3-fast' | 'minimax-hailuo' | 'minimax-h3' | 'seedance-2'
   /**
    * 视频时长可选项（秒）。不同模型上限不同，未配置时由 videoRequestMode 的默认档位决定。
@@ -265,6 +270,18 @@ export function getSupportedVideoDurations(modelId: string | null | undefined): 
         { value: 6, label: '6s' },
       ]
   }
+}
+
+/** 返回指定图片模型可选的分辨率档位；不支持的模型返回 null。 */
+export function getSupportedImageResolutions(modelId: string | null | undefined): string[] | null {
+  const options = getModelCapability(modelId)?.imageResolutions
+  return options?.length ? options : null
+}
+
+/** 返回指定图片模型的默认分辨率档位；不支持的模型返回 null。 */
+export function getDefaultImageResolution(modelId: string | null | undefined): string | null {
+  const options = getSupportedImageResolutions(modelId)
+  return options?.[0] ?? null
 }
 
 /**

@@ -233,6 +233,23 @@
               </div>
             </section>
 
+            <section v-if="imageResolutionOptions.length" class="rail-card">
+              <span class="rail-label">分辨率</span>
+              <div class="chip-row">
+                <button
+                  v-for="option in imageResolutionOptions"
+                  :key="option"
+                  class="chip"
+                  :class="{ active: settingsStore.imageResolution === option }"
+                  type="button"
+                  @click="selectImageResolution(option)"
+                >
+                  {{ option }}
+                </button>
+              </div>
+              <p class="rail-hint">当前输出 {{ imageResolutionSizeHint }}；4K 为官方最佳画质档位，耗时与费用更高。</p>
+            </section>
+
             <section class="rail-card">
               <span class="rail-label">数量</span>
               <div class="chip-row">
@@ -431,12 +448,15 @@ import { useGenerate } from '@/composables/useGenerate'
 import { polishPromptWithSkills } from '@/features/skill/polish'
 import {
   ASPECT_RATIO_OPTIONS,
+  getDefaultImageResolution,
   getLocalUploadAccept,
   getModelCapability,
   getSupportedAspectRatios,
+  getSupportedImageResolutions,
   type AspectRatioOption,
 } from '@/types/model'
 import { createExpandedUploadedFile, getExpandTargetSize } from '@/features/generate/expand'
+import { getMinimaxImageDimensions } from '@/features/generate/aspectRatio'
 import {
   createUploadedFile,
   dataUrlToFile,
@@ -591,6 +611,18 @@ const modeLabel = computed(
 )
 
 const batchOptions = Array.from({ length: MAX_BATCH }, (_, index) => index + 1)
+
+/** 图片分辨率档位：目前仅 MiniMax-H3-Image 支持 2K / 4K。 */
+const imageResolutionOptions = computed(
+  () => getSupportedImageResolutions(settingsStore.selectedModel) ?? [],
+)
+const imageResolutionSizeHint = computed(() => {
+  const { width, height } = getMinimaxImageDimensions(
+    settingsStore.aspectRatio,
+    settingsStore.imageResolution,
+  )
+  return `${width} × ${height}`
+})
 
 const ratioOptions = computed<AspectRatioOption[]>(() => {
   const supported = getSupportedAspectRatios(settingsStore.selectedModel, null)
@@ -762,6 +794,12 @@ function selectRatio(value: string) {
   settingsStore.saveToStorage()
 }
 
+function selectImageResolution(value: string) {
+  if (!imageResolutionOptions.value.includes(value)) return
+  settingsStore.imageResolution = value
+  settingsStore.saveToStorage()
+}
+
 function selectBatchSize(count: number) {
   if (isExpandMode.value) return
   settingsStore.batchSize = count
@@ -773,6 +811,15 @@ function ensureSupportedAspectRatio() {
   if (!options.length) return
   if (options.some((option) => option.value === settingsStore.aspectRatio)) return
   settingsStore.aspectRatio = options[0].value
+  settingsStore.saveToStorage()
+}
+
+function ensureSupportedImageResolution() {
+  const options = imageResolutionOptions.value
+  if (!options.length) return
+  if (options.includes(settingsStore.imageResolution)) return
+  settingsStore.imageResolution =
+    getDefaultImageResolution(settingsStore.selectedModel) || options[0]
   settingsStore.saveToStorage()
 }
 
@@ -1211,7 +1258,10 @@ async function handleSend() {
     skillStore.effectiveSkillContents,
     settingsStore.videoResolution,
     batchSize,
-    { mossLayoutMode: isMossImageModel.value && mossLayoutEnabled.value },
+    {
+      mossLayoutMode: isMossImageModel.value && mossLayoutEnabled.value,
+      imageResolution: settingsStore.imageResolution,
+    },
   )
 
   settingsStore.saveToStorage()
@@ -1255,7 +1305,7 @@ async function regenerate(batch: ImageBatch) {
     skillStore.effectiveSkillContents,
     settingsStore.videoResolution,
     batch.batchSize || effectiveBatchSize.value,
-    { mossLayout: savedLayout },
+    { mossLayout: savedLayout, imageResolution: settingsStore.imageResolution },
   )
 
   settingsStore.saveToStorage()
@@ -1265,6 +1315,7 @@ watch(
   () => settingsStore.selectedModel,
   () => {
     ensureSupportedAspectRatio()
+    ensureSupportedImageResolution()
     enforceReferenceLimit()
   },
 )
@@ -1280,6 +1331,7 @@ onMounted(async () => {
     imageMode.value = 'text2image'
   }
   ensureSupportedAspectRatio()
+  ensureSupportedImageResolution()
   restoreLandingReference()
 
   const initialPrompt = typeof route.query.prompt === 'string' ? route.query.prompt.trim() : ''

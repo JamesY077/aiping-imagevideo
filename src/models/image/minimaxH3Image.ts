@@ -9,7 +9,7 @@ import { createModelExample } from '../types'
  * MiniMax-H3-Image：开源 SOTA 图像生成与编辑模型。
  * - 文生图 / 图片编辑共用同一套模型能力；
  * - 支持最多 16 张参考图；
- * - 输出尺寸使用 2K 面积档位（约 4.2MP），兼顾画质、耗时与成本。
+ * - 输出尺寸支持 2K（约 4MP）/ 4K（约 16MP）两档，4K 为官方推荐的最佳画质档位。
  */
 export const minimaxH3ImageModel: ImageModelModule = {
   id: 'MiniMax-H3-Image',
@@ -22,6 +22,8 @@ export const minimaxH3ImageModel: ImageModelModule = {
     imageRequestMode: 'minimax-h3-image',
     imageReferenceMode: 'multi',
     imageReferenceLimit: 16,
+    // 2K 约 400 万像素；4K 为官方推荐的约 1600 万像素最佳画质档位。
+    imageResolutions: ['2K', '4K'],
   },
   adapter: {
     provider: 'minimax-image',
@@ -32,7 +34,7 @@ export const minimaxH3ImageModel: ImageModelModule = {
   },
   example: createModelExample({
     title: 'MiniMax-H3-Image 文生图示例',
-    description: '使用 MiniMax-H3-Image 生成 2K 面积档位的 16:9 图片，支持多参考图编辑。',
+    description: '使用 MiniMax-H3-Image 生成 16:9 图片（2K / 4K 可选），支持多参考图编辑。',
     request: {
       model: 'MiniMax-H3-Image',
       prompt: '一只橘猫趴在窗台上晒太阳，午后暖光，胶片质感',
@@ -66,6 +68,8 @@ export const minimaxH3ImageHighspeedModel: ImageModelModule = {
     imageRequestMode: 'minimax-h3-image',
     imageReferenceMode: 'multi',
     imageReferenceLimit: 16,
+    // 2K 约 400 万像素；4K 为官方推荐的约 1600 万像素最佳画质档位。
+    imageResolutions: ['2K', '4K'],
   },
   adapter: {
     provider: 'minimax-image',
@@ -78,7 +82,7 @@ export const minimaxH3ImageHighspeedModel: ImageModelModule = {
   },
   example: createModelExample({
     title: 'MiniMax-H3-Image-Highspeed 文生图示例',
-    description: '使用 MiniMax-H3-Image-Highspeed 快速生成 2K 图片，参数与标准版一致。',
+    description: '使用 MiniMax-H3-Image-Highspeed 快速生成图片（2K / 4K 可选），参数与标准版一致。',
     request: {
       model: 'MiniMax-H3-Image-Highspeed',
       prompt: '一只橘猫趴在窗台上晒太阳，午后暖光，胶片质感',

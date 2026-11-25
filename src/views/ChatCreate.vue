@@ -268,6 +268,23 @@
               <p v-if="isReferenceVideoRatioLocked" class="rail-hint">带参考视频时，输出比例跟随参考视频。</p>
             </section>
 
+            <section v-if="imageResolutionOptions.length" class="rail-card">
+              <span class="rail-label">分辨率</span>
+              <div class="chip-row">
+                <button
+                  v-for="option in imageResolutionOptions"
+                  :key="option"
+                  class="chip"
+                  :class="{ active: settingsStore.imageResolution === option }"
+                  type="button"
+                  @click="selectImageResolution(option)"
+                >
+                  {{ option }}
+                </button>
+              </div>
+              <p class="rail-hint">当前输出 {{ imageResolutionSizeHint }}；4K 为官方最佳画质档位，耗时与费用更高。</p>
+            </section>
+
             <section v-if="videoResolutionOptions.length" class="rail-card">
               <span class="rail-label">分辨率</span>
               <div class="chip-row">
@@ -927,9 +944,11 @@ import {
   ASPECT_RATIO_OPTIONS,
   getLocalUploadAccept,
   getModelCapability,
+  getDefaultImageResolution,
   getDefaultVideoDuration,
   getDefaultVideoResolution,
   getSupportedAspectRatios,
+  getSupportedImageResolutions,
   getSupportedVideoDurations,
   getSupportedVideoResolutions,
   modelRequiresReference,
@@ -937,6 +956,7 @@ import {
   type AspectRatioOption,
   type VideoGenerationMode,
 } from '@/types/model'
+import { getMinimaxImageDimensions } from '@/features/generate/aspectRatio'
 import { showErrorMessage } from '@/utils/errors'
 import { getReadableErrorMessage, validatePromptOrThrow } from '@/utils/errorHandling'
 import type { GenerateResult, GenerateStatus, ImageGenerationMode, Message, UploadedFile } from '@/types/chat'
@@ -1550,6 +1570,18 @@ const aspectRatioOptions = computed(() => {
 
 const videoDurationOptions = computed(() => getSupportedVideoDurations(settingsStore.selectedModel) ?? [{ value: 6, label: '6s' }])
 const klingReferenceImageLimit = computed(() => (isKlingV4VideoModel.value ? 10 : KLING_REFERENCE_IMAGE_LIMIT))
+const imageResolutionOptions = computed(() => (
+  settingsStore.mediaType === 'image'
+    ? getSupportedImageResolutions(settingsStore.selectedModel) ?? []
+    : []
+))
+const imageResolutionSizeHint = computed(() => {
+  const { width, height } = getMinimaxImageDimensions(
+    settingsStore.aspectRatio,
+    settingsStore.imageResolution,
+  )
+  return `${width} × ${height}`
+})
 const videoResolutionOptions = computed(() => getSupportedVideoResolutions(settingsStore.selectedModel) ?? [])
 const showsVideoResolution = computed(() => videoResolutionOptions.value.length > 0)
 function formatVideoResolution(value: string) {
@@ -1754,6 +1786,23 @@ function ensureSupportedVideoDuration() {
   if (settingsStore.mediaType !== 'video') return
   if (videoDurationOptions.value.some((option) => option.value === settingsStore.videoDuration)) return
   settingsStore.videoDuration = getDefaultVideoDuration(settingsStore.selectedModel)
+  settingsStore.saveToStorage()
+}
+
+function selectImageResolution(value: string) {
+  if (!imageResolutionOptions.value.includes(value)) return
+  settingsStore.imageResolution = value
+  settingsStore.saveToStorage()
+}
+
+/** 切换图片模型后校正分辨率档位（目前仅 MiniMax-H3-Image：2K / 4K）。 */
+function ensureSupportedImageResolution() {
+  if (settingsStore.mediaType !== 'image') return
+  const options = imageResolutionOptions.value
+  if (!options.length) return
+  if (options.includes(settingsStore.imageResolution)) return
+  settingsStore.imageResolution =
+    getDefaultImageResolution(settingsStore.selectedModel) || options[0]
   settingsStore.saveToStorage()
 }
 
@@ -2479,6 +2528,7 @@ watch(
       referenceUrl.value = ''
     }
     ensureSupportedAspectRatio()
+    ensureSupportedImageResolution()
     ensureSupportedVideoDuration()
     ensureSupportedVideoResolution()
   }
@@ -2562,7 +2612,7 @@ async function handleLayerRegenerate(layout: MossLayout) {
       null,
       settingsStore.videoResolution,
       1,
-      { mossLayout: layout },
+      { mossLayout: layout, imageResolution: settingsStore.imageResolution },
     )
 
     await nextTick()
@@ -2725,6 +2775,7 @@ async function handleSend() {
 
   await generate(prompt, ioType, settingsStore.selectedModel, file, settingsStore.aspectRatio, settingsStore.videoDuration, false, imageSkillContents, settingsStore.videoResolution, settingsStore.batchSize, {
     videoGenerationMode: videoMode.value,
+    imageResolution: settingsStore.imageResolution,
     // Moss 开启分层时，先把自然语言拆成布局再出图；生成后可在结果卡片进入图层编辑。
     mossLayoutMode: isMossImageModel.value && mossLayoutEnabled.value && !isExpandMode.value,
   })
@@ -2772,6 +2823,7 @@ async function handleRegenerate(message: Message) {
         // 沿用发起时的视频方式，避免编辑视频重新生成时被当成普通生成。
         videoGenerationMode: userMsg.videoMode ?? null,
         mossLayout: savedLayout,
+        imageResolution: settingsStore.imageResolution,
       },
     )
     await nextTick()

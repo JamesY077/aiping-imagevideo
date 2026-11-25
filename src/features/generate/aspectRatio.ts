@@ -23,11 +23,17 @@ const SEEDREAM_5_LITE_SIZE_MAP: Record<string, { width: number; height: number }
 }
 
 /**
- * MiniMax-H3-Image 的 2K 面积档位尺寸（约 4.2MP）。
- * 官方推荐 4K（约 16MP）画质最佳，但耗时与成本更高；这里沿用示例中的 2K，
- * 与项目内其它图片模型的输出面积保持同一量级。尺寸均落在官方 65.5 万–2000 万像素范围内。
+ * MiniMax-H3-Image 输出尺寸档位。
+ * - 2K：约 400 万像素，耗时与成本更友好；
+ * - 4K：原生约 1600 万像素，官方推荐的最佳画质档位。
+ * 尺寸取自官方 2K / 4K 面积档位表，均落在 65.5 万–2000 万像素、比例 1:3–3:1 的合法范围内。
  */
-const MINIMAX_H3_IMAGE_SIZE_MAP: Record<string, { width: number; height: number }> = {
+export type ImageResolutionTier = '2K' | '4K'
+
+/** 可选分辨率档位（顺序即 UI 展示顺序，首项为默认值）。 */
+export const MINIMAX_IMAGE_RESOLUTIONS: ImageResolutionTier[] = ['2K', '4K']
+
+const MINIMAX_H3_IMAGE_SIZE_MAP_2K: Record<string, { width: number; height: number }> = {
   '21:9': { width: 3136, height: 1344 },
   '16:9': { width: 2720, height: 1536 },
   '3:2': { width: 2496, height: 1664 },
@@ -38,15 +44,38 @@ const MINIMAX_H3_IMAGE_SIZE_MAP: Record<string, { width: number; height: number 
   '9:16': { width: 1536, height: 2720 },
 }
 
+const MINIMAX_H3_IMAGE_SIZE_MAP_4K: Record<string, { width: number; height: number }> = {
+  '21:9': { width: 6272, height: 2688 },
+  '16:9': { width: 5472, height: 3072 },
+  '3:2': { width: 5024, height: 3360 },
+  '4:3': { width: 4736, height: 3552 },
+  '1:1': { width: 4096, height: 4096 },
+  '3:4': { width: 3552, height: 4736 },
+  '2:3': { width: 3360, height: 5024 },
+  '9:16': { width: 3072, height: 5472 },
+}
+
+/** 按比例 + 分辨率档位取 MiniMax-H3-Image 的输出宽高。 */
+export function getMinimaxImageDimensions(
+  aspectRatio: string,
+  resolution: string = '2K'
+): { width: number; height: number } {
+  const map = resolution.toUpperCase() === '4K'
+    ? MINIMAX_H3_IMAGE_SIZE_MAP_4K
+    : MINIMAX_H3_IMAGE_SIZE_MAP_2K
+  return map[aspectRatio] || map['1:1']
+}
+
 export function aspectRatioToDimensions(
   aspectRatio: string,
-  mode: ImageRequestMode = 'default'
+  mode: ImageRequestMode = 'default',
+  resolution?: string | null
 ): { width: number; height: number } {
   if (mode === 'seedream-5-lite') {
     return SEEDREAM_5_LITE_SIZE_MAP[aspectRatio] || SEEDREAM_5_LITE_SIZE_MAP['1:1']
   }
   if (mode === 'minimax-h3-image') {
-    return MINIMAX_H3_IMAGE_SIZE_MAP[aspectRatio] || MINIMAX_H3_IMAGE_SIZE_MAP['1:1']
+    return getMinimaxImageDimensions(aspectRatio, resolution || '2K')
   }
   return ASPECT_RATIO_SIZE_MAP[aspectRatio] || ASPECT_RATIO_SIZE_MAP['1:1']
 }
@@ -54,9 +83,10 @@ export function aspectRatioToDimensions(
 export function aspectRatioToImageSize(
   aspectRatio: string,
   mode: ImageRequestMode = 'default',
-  separator: '*' | 'x' = mode === 'moss' ? 'x' : '*'
+  separator: '*' | 'x' = mode === 'moss' ? 'x' : '*',
+  resolution?: string | null
 ): string {
-  const { width, height } = aspectRatioToDimensions(aspectRatio, mode)
+  const { width, height } = aspectRatioToDimensions(aspectRatio, mode, resolution)
   return `${width}${separator}${height}`
 }
 
