@@ -2,8 +2,8 @@
  * 配音创作（TTS）模型与参数注册表。
  *
  * 当前只接入 AIPing 已开放的 MiniMax-Speech-2.8-hd：
- * - 语音合成模型名：`MiniMax-Speech-2.8-hd`
- * - 声音复刻试听必须传官方小写模型名：`speech-2.8-hd`（传前者会被上游拒绝）
+ * - 语音合成、声音复刻试听统一传平台标准名：`MiniMax-Speech-2.8-hd`
+ * - 传 MiniMax 官方小写名 `speech-2.8-hd` 会被平台拒绝
  *
  * 参数区间来自官方文档：
  *   speed [0.5, 2] · vol (0, 10] · pitch [-12, 12]
@@ -39,8 +39,6 @@ export interface VoiceModelOption {
   displayName: string
   provider: VoiceModelProvider
   description: string
-  /** 复刻试听使用的官方模型名 */
-  cloneDemoModel: string
   capability: VoiceModelCapability
 }
 
@@ -85,7 +83,6 @@ export const VOICE_MODELS: VoiceModelOption[] = [
     displayName: 'MiniMax Speech 2.8 HD',
     provider: 'minimax',
     description: '高保真语音合成，支持情绪、语速、音量与语调细调，适合成片配音。',
-    cloneDemoModel: 'speech-2.8-hd',
     capability: {
       voiceSources: ['preset', 'clone'],
       expressive: true,
@@ -101,11 +98,6 @@ export const DEFAULT_VOICE_MODEL_ID = VOICE_MODELS[0].id
 export function getVoiceModel(modelId: string | null | undefined): VoiceModelOption | undefined {
   if (!modelId) return undefined
   return VOICE_MODELS.find((item) => item.id === modelId)
-}
-
-/** 把当前模型 id 映射为复刻试听用的官方模型名。 */
-export function getCloneDemoModel(modelId: string): string {
-  return getVoiceModel(modelId)?.cloneDemoModel || 'speech-2.8-hd'
 }
 
 export function clampVoiceParam(key: keyof typeof VOICE_PARAM_LIMITS, value: number): number {

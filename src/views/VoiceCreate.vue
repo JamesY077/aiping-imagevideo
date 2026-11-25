@@ -1508,7 +1508,6 @@ import {
   VOICE_MODELS,
   VOICE_PARAM_LIMITS,
   clampVoiceParam,
-  getCloneDemoModel,
 } from '@/features/voice/models'
 import { useVoiceRecorder } from '@/features/voice/recorder'
 import {
@@ -2633,7 +2632,7 @@ async function handleClone() {
     const cloned = await cloneVoice({
       fileId,
       demoText: demoText || undefined,
-      demoModel: demoText ? getCloneDemoModel(model.id) : undefined,
+      demoModel: demoText ? model.id : undefined,
       needNoiseReduction: noiseReduction.value,
       needVolumeNormalization: volumeNormalization.value,
     })

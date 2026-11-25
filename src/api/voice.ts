@@ -160,7 +160,7 @@ export interface CloneVoiceParams {
   voiceId?: string
   /** 试听文本，不传则上游不返回试听音频 */
   demoText?: string
-  /** 复刻试听使用的官方模型名，如 speech-2.8-hd */
+  /** 复刻试听使用的平台模型名，如 MiniMax-Speech-2.8-hd（不能用官方小写名 speech-2.8-hd） */
   demoModel?: string
   needNoiseReduction?: boolean
   needVolumeNormalization?: boolean
