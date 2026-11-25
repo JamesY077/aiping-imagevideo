@@ -1,4 +1,4 @@
-export type ImageRequestMode = 'default' | 'seedream-5-lite' | 'moss'
+export type ImageRequestMode = 'default' | 'seedream-5-lite' | 'moss' | 'minimax-h3-image'
 
 const ASPECT_RATIO_SIZE_MAP: Record<string, { width: number; height: number }> = {
   '21:9': { width: 1680, height: 720 },
@@ -22,12 +22,31 @@ const SEEDREAM_5_LITE_SIZE_MAP: Record<string, { width: number; height: number }
   '9:16': { width: 1600, height: 2848 },
 }
 
+/**
+ * MiniMax-H3-Image 的 2K 面积档位尺寸（约 4.2MP）。
+ * 官方推荐 4K（约 16MP）画质最佳，但耗时与成本更高；这里沿用示例中的 2K，
+ * 与项目内其它图片模型的输出面积保持同一量级。尺寸均落在官方 65.5 万–2000 万像素范围内。
+ */
+const MINIMAX_H3_IMAGE_SIZE_MAP: Record<string, { width: number; height: number }> = {
+  '21:9': { width: 3136, height: 1344 },
+  '16:9': { width: 2720, height: 1536 },
+  '3:2': { width: 2496, height: 1664 },
+  '4:3': { width: 2368, height: 1760 },
+  '1:1': { width: 2048, height: 2048 },
+  '3:4': { width: 1760, height: 2368 },
+  '2:3': { width: 1664, height: 2496 },
+  '9:16': { width: 1536, height: 2720 },
+}
+
 export function aspectRatioToDimensions(
   aspectRatio: string,
   mode: ImageRequestMode = 'default'
 ): { width: number; height: number } {
   if (mode === 'seedream-5-lite') {
     return SEEDREAM_5_LITE_SIZE_MAP[aspectRatio] || SEEDREAM_5_LITE_SIZE_MAP['1:1']
+  }
+  if (mode === 'minimax-h3-image') {
+    return MINIMAX_H3_IMAGE_SIZE_MAP[aspectRatio] || MINIMAX_H3_IMAGE_SIZE_MAP['1:1']
   }
   return ASPECT_RATIO_SIZE_MAP[aspectRatio] || ASPECT_RATIO_SIZE_MAP['1:1']
 }

@@ -72,8 +72,14 @@ export interface ChatCompletionResponse {
 export interface ImageGenerateRequest {
   model?: string
   prompt: string
-  /** 参考图：单图传字符串；支持多图参考的模型（Seedream 5.0 Lite）可传数组，最多 10 张。 */
+  /** 参考图：单图传字符串；支持多图参考的模型（Seedream 5.0 Lite / MiniMax-H3-Image）可传数组。 */
   image?: string | string[]
+  /** 图片编辑参考图（MiniMax-H3 走 /images/edits 时需要 images[].image_url）。 */
+  images?: Array<{ image_url: string }>
+  /** 是否关闭 MiniMax-H3 的提示词增强。 */
+  disable_prompt_enhanced?: boolean
+  /** 是否添加可见 AIGC 水印（MiniMax-H3）。 */
+  aigc_watermark?: boolean
   /** 组图输出开关（Seedream 5.0 Lite）：'disabled' 表示每次只返回一张图。 */
   sequential_image_generation?: 'auto' | 'disabled'
   size?: string

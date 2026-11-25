@@ -46,6 +46,14 @@ export async function buildImageParams(
     delete imageParams.image
     delete imageParams.width
     delete imageParams.height
+  } else if (mode === 'minimax-h3-image') {
+    // MiniMax-H3-Image：显式 WxH，宽高比与尺寸二选一，不能同时传 width/height。
+    // 有参考图时由 provider 改走 /images/edits 的 images[] 协议。
+    imageParams.size = aspectRatioToImageSize(aspectRatio, mode, 'x')
+    imageParams.output_format = 'png'
+    imageParams.watermark = false
+    delete imageParams.width
+    delete imageParams.height
   } else if (mode && mode !== 'default') {
     const { width, height } = aspectRatioToDimensions(aspectRatio, mode)
     imageParams.output_format = 'png'

@@ -378,11 +378,30 @@ async function postImageWithRetry(endpoint: string, body: Record<string, unknown
 export async function generateImage(params: ImageGenerateRequest): Promise<ImageGenerateResponse> {
   const provider = getImageProvider(params)
   const preparedParams = await prepareImageGenerationParams(params, provider)
-  const fullBody = provider.buildRequestBody(preparedParams)
 
-  debugLog(`generateImage provider=${provider.provider} trying full body:`, sanitizeDebugBody(fullBody))
+  // MiniMax-H3-Image 的图片编辑接口要求参考图是服务端可访问的 HTTPS URL，
+  // 本地上传图会先经过上传服务；若上传服务不可用会降级为 dataURI，这里提前拦截并给出可读提示。
+  if (provider.provider === 'minimax-image') {
+    const references = Array.isArray(preparedParams.image)
+      ? preparedParams.image
+      : preparedParams.image
+        ? [preparedParams.image]
+        : []
+    if (references.length && references.some((url) => !/^https:\/\//i.test(url))) {
+      throw new AppError(
+        'MiniMax-H3 图片编辑需要公网可访问的 HTTPS 参考图：本地上传服务暂不可用，请稍后重试，或先使用文生图。',
+        { code: 'UPLOAD_SERVICE_UNAVAILABLE' },
+      )
+    }
+  }
+
+  const resolvedRequest = provider.buildRequest?.(preparedParams)
+  const requestEndpoint = resolvedRequest?.endpoint || provider.endpoint
+  const fullBody = resolvedRequest?.body || provider.buildRequestBody(preparedParams)
+
+  debugLog(`generateImage provider=${provider.provider} endpoint=${requestEndpoint} trying full body:`, sanitizeDebugBody(fullBody))
   try {
-    const response = await postImageWithRetry(provider.endpoint, fullBody)
+    const response = await postImageWithRetry(requestEndpoint, fullBody)
     return response.data
   } catch (error: any) {
     const detail = JSON.stringify(error.response?.data)
@@ -390,8 +409,14 @@ export async function generateImage(params: ImageGenerateRequest): Promise<Image
     if (error.response?.status === 400) {
       const alternateBody: Record<string, unknown> = { ...fullBody }
 
-      // Moss 只接受 size（WxH），width / height 会被判为非法参数，跳过尺寸改写重试。
-      if (provider.provider !== 'moss' && typeof fullBody.size === 'string' && !fullBody.width && !fullBody.height) {
+      // Moss / MiniMax-H3-Image 只接受 size（WxH），width / height 会被判为非法参数，跳过尺寸改写重试。
+      if (
+        provider.provider !== 'moss' &&
+        provider.provider !== 'minimax-image' &&
+        typeof fullBody.size === 'string' &&
+        !fullBody.width &&
+        !fullBody.height
+      ) {
         const size = parseImageSize(fullBody.size)
         if (size) {
           delete alternateBody.size
@@ -399,7 +424,7 @@ export async function generateImage(params: ImageGenerateRequest): Promise<Image
           alternateBody.height = size.height
           debugLog('generateImage retry with width/height:', sanitizeDebugBody(alternateBody))
           try {
-            const response = await postImageWithRetry(provider.endpoint, alternateBody)
+            const response = await postImageWithRetry(requestEndpoint, alternateBody)
             return response.data
           } catch (retryError: any) {
             throw new AppError(getApiErrorMessage(retryError, '图片尺寸参数未被当前模型接受，请切换模型或比例后重试。'))
@@ -413,7 +438,7 @@ export async function generateImage(params: ImageGenerateRequest): Promise<Image
         delete alternateBody.height
         debugLog('generateImage retry with size:', sanitizeDebugBody(alternateBody))
         try {
-          const response = await postImageWithRetry(provider.endpoint, alternateBody)
+          const response = await postImageWithRetry(requestEndpoint, alternateBody)
           return response.data
         } catch (retryError: any) {
           throw new AppError(getApiErrorMessage(retryError, '图片尺寸参数未被当前模型接受，请切换模型或比例后重试。'))
